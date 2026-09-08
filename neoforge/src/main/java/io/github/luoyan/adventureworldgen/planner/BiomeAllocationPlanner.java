@@ -325,15 +325,31 @@ public final class BiomeAllocationPlanner {
         int x=CellMask.x(cell),z=CellMask.z(cell);
         for(int[] d:DIR) {
             int nx=x+d[0],nz=z+d[1];long n=CellMask.key(nx,nz);
-            if(owner.containsKey(n)||r.queued.contains(n)||!legal(r,nx,nz))continue;
-            r.queued.add(n);var sample=index.sample(nx,nz);
-            double environment=climate.cost(r.biome,nx+2,nz+2,sample);
-            int band=climate.temperatureDistance(r.biome,nx+2,nz+2,sample);
-            double next=path+4;
-            int support=0;for(int[] side:DIR)if(owner.get(CellMask.key(nx+side[0],nz+side[1]))==i)support++;
-            double cost=next*.65+environment*128+r.noise.sample(nx,nz)*24-support*9;
-            r.frontier.add(new Edge(n,next,band,cost));
+            if(!owner.containsKey(n)&&!r.queued.contains(n)&&legal(r,nx,nz))queue(r,i,nx,nz,path+4);
+            else if(index.sample(nx,nz).waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.RIVER) {
+                // A river is an overlay, not a climate frontier. Let ownership reach the
+                // opposite dry bank without counting submerged cells toward biome area.
+                for(int step=2;step<=24;step++) {
+                    int bx=x+d[0]*step,bz=z+d[1]*step;
+                    var water=index.sample(bx,bz).waterKind();
+                    if(water==io.github.luoyan.adventureworldgen.api.WaterKind.RIVER)continue;
+                    if(water==io.github.luoyan.adventureworldgen.api.WaterKind.NONE) {
+                        long bridge=CellMask.key(bx,bz);
+                        if(!owner.containsKey(bridge)&&!r.queued.contains(bridge)&&legal(r,bx,bz))
+                            queue(r,i,bx,bz,path+4*step);
+                    }
+                    break;
+                }
+            }
         }
+    }
+    private void queue(Region r,int ownerIndex,int x,int z,double next) {
+        long cell=CellMask.key(x,z);r.queued.add(cell);var sample=index.sample(x,z);
+        double environment=climate.cost(r.biome,x+2,z+2,sample);
+        int band=climate.temperatureDistance(r.biome,x+2,z+2,sample);
+        int support=0;for(int[] side:DIR)if(owner.get(CellMask.key(x+side[0],z+side[1]))==ownerIndex)support++;
+        double cost=next*.65+environment*128+r.noise.sample(x,z)*24-support*9;
+        r.frontier.add(new Edge(cell,next,band,cost));
     }
     private boolean legal(Region r,int x,int z) {
         // Terrain, configuration, climate and reservations are immutable for this allocation.

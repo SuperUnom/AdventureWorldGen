@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 public final class RuntimePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RuntimePlanner.class);
     /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-natural-biome-joins-r30";
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-coast-climate-headwaters-r31";
     private RuntimePlanner() {}
 
     public static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,

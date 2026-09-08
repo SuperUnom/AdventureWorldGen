@@ -11,8 +11,6 @@ import java.util.function.DoubleConsumer;
 public final class HumidityPlan {
     public static final int STEP=32;
     private static final double REACH=512;
-    private static final double FRESHWATER_DECAY=24;
-    private static final double RIPARIAN_MINIMUM_REACH=48;
     private final AdventureWorldConfig config;
     private final ClimatePlan temperature;
     private final ValueNoise regional,detail,shore;
@@ -131,17 +129,14 @@ public final class HumidityPlan {
         return frozenValues.get(x,z,()->computeValue(x,z,s));
     }
     private double computeValue(double x,double z,MacroSample s) {
-        double fresh=freshDistanceAt(x,z),ocean=oceanDistanceAt(x,z);
-        double freshwater=s.waterKind()==WaterKind.RIVER||s.waterKind()==WaterKind.LAKE||s.waterKind()==WaterKind.WETLAND?1:
-                Math.exp(-fresh/FRESHWATER_DECAY)*Math.exp(-Math.max(0,s.groundSurface()-sample(freshLevel,x,z)-8)/60);
+        double ocean=oceanDistanceAt(x,z);
         double maritime=s.waterKind()==WaterKind.OCEAN?1:Math.exp(-ocean/200);
         double value=.44+weather(x,z)-weatherOffset
                 -.20*(temperature.valueAt(x,z,s)/10-.5)-.12*Math.clamp((s.groundSurface()-80)/200,0,1)
-                +.40*freshwater+.24*maritime;
-        // Even an arid weather region has a moist riparian corridor, never a desert river bed.
-        value=Math.max(value,.76*Math.clamp(1-fresh/RIPARIAN_MINIMUM_REACH,0,1));
+                +.24*maritime;
+        // Rivers overlay the land biome and do not redraw its climate boundary. This lets a
+        // channel pass through an otherwise legal dry biome instead of becoming a wet stripe.
         value=Math.max(value,.64*Math.clamp(1-ocean/96,0,1));
-        if(s.wet()&&s.waterKind()!=WaterKind.LAVA)value=Math.max(value,.8);
         value=Math.clamp(value,0,1);
         if(s.wet())return value;
         // Plan moisture inside the feasible template/landform domain before assigning biomes.
@@ -186,13 +181,12 @@ public final class HumidityPlan {
         }
         return best;
     }
-    /** Reserve only intermittent low banks. Height relative to water also supports upland rivers. */
+    /** Reserve intermittent low ocean banks only; inland rivers never create beach biomes. */
     public boolean isShore(double x,double z,MacroSample s) {
         if(s.wet()||s.hazardous()||s.terrainTemplate().equals("mountains")||shore.sample(x,z)<0)return false;
-        double fresh=freshDistanceAt(x,z),ocean=oceanDistanceAt(x,z);
-        double distance=Math.min(fresh,ocean);
+        double distance=oceanDistanceAt(x,z);
         if(distance>36)return false;
-        double level=sample(fresh<ocean?freshLevel:oceanLevel,x,z),rise=s.groundSurface()-level;
+        double level=sample(oceanLevel,x,z),rise=s.groundSurface()-level;
         return rise>=0&&rise<=7;
     }
     public double[] actualRatios(){return actual.clone();}

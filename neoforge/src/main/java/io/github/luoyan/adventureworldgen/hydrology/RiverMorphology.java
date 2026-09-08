@@ -56,17 +56,30 @@ public final class RiverMorphology {
         // centerline or introducing a discontinuity at segment or chunk boundaries.
         width += StrictMath.min(6, width * 0.24) * banks.sample(x, z)
                 + StrictMath.min(1.8, width * 0.09) * detail.sample(x, z);
-        return StrictMath.max(2.5, StrictMath.min(maximumBedRadius(channel.shape()), width));
+        // A spring-fed headwater emerges as a narrow rill and gains its ordinary width
+        // over a variable 72..152-block reach instead of starting with a blunt full-width cap.
+        double sourceFactor=headwaterFactor(channel,t);
+        return StrictMath.max(1.15, StrictMath.min(maximumBedRadius(channel.shape()), width*sourceFactor));
     }
 
     public static double maximumBedRadius(HydrologyProfile.RiverShape shape) {
         return shape.bedWidth() * 2.4;
     }
 
-    public double bedDepth(RiverNetwork.Channel channel, double centerX, double centerZ, double radius) {
-        return StrictMath.max(2, channel.shape().bedDepth() * (0.72 + 0.28 * StrictMath.sqrt(radius / channel.shape().bedWidth())
-                + 0.24 * bars.sample(centerZ, centerX)));
+    public double bedDepth(RiverNetwork.Channel channel,double along,double centerX,double centerZ,double radius) {
+        double ordinary=channel.shape().bedDepth()*(0.72+0.28*StrictMath.sqrt(radius/channel.shape().bedWidth())
+                +0.24*bars.sample(centerZ,centerX));
+        double source=StrictMath.min(1,along*channel.length()/96.0);
+        return StrictMath.max(1.1,ordinary*(.35+.65*smooth(source)));
     }
+
+    double headwaterFactor(RiverNetwork.Channel channel,double along) {
+        double sourceReach=StrictMath.min(channel.length()*.18,72+80*(.5+.5*reaches.sample(
+                channel.points().getFirst().x(),channel.points().getFirst().z())));
+        return .28+.72*smooth(StrictMath.min(1,along*channel.length()/StrictMath.max(1,sourceReach)));
+    }
+
+    private static double smooth(double value) { return value*value*(3-2*value); }
 
     private static double alongAt(RiverNetwork.Channel channel, Vec2 point) {
         double best = Double.POSITIVE_INFINITY, along = 0;

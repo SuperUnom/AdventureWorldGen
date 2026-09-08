@@ -53,4 +53,22 @@ class RiverMorphologyTest {
         for (int x : new int[]{-768, -512, -256, 0, 256, 512, 768}) for (int z = -60; z <= 60; z++)
             assertEquals(terrain.sample(x - 0.0001, z).groundSurface(), terrain.sample(x + 0.0001, z).groundSurface(), 0.01);
     }
+
+    @Test void headwaterWidensAndDeepensGraduallyInsteadOfStartingWithABluntCap() {
+        var shape = new HydrologyProfile.RiverShape(6,2,6,20,18,.75);
+        var channel = new RiverNetwork.Channel("headwater",0,null,
+                List.of(new Vec2(0,0),new Vec2(400,0)),List.of(0.0,400.0),List.of(100.0,90.0),shape,null);
+        var morphology=new RiverMorphology(new RiverNetwork(List.of(channel),List.of(),"test"));
+        double source=morphology.bedRadius(channel,0,0,0,0,0);
+        double middle=morphology.bedRadius(channel,.5,200,0,200,0);
+        assertTrue(source<middle*.55,"headwater does not taper enough: "+source+" vs "+middle);
+        double previous=source;
+        for(int distance=4;distance<=96;distance+=4) {
+            double radius=morphology.bedRadius(channel,distance/400.0,distance,0,distance,0);
+            assertTrue(radius>=previous-1.0,"headwater width changes abruptly");
+            previous=radius;
+        }
+        assertTrue(morphology.bedDepth(channel,0,0,0,source)
+                <morphology.bedDepth(channel,.5,200,0,middle));
+    }
 }

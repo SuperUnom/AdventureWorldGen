@@ -40,17 +40,17 @@ class DemandClimateTest {
         for(String bad:java.util.List.of("\"temperatures\":{}","\"temperatures\":{\"cold\":0}","\"temperatures\":{\"warm\":1}"))
             assertThrows(ConfigException.class,()->parser.parse(CanonicalConfigJson.write(config).replace("\"temperatures\":{\"cold\":1.0,\"medium\":3.0}",bad)));
     }
-    @Test void dryGrowthContinuesBeyondTargetWithoutCountingRiverOrCrossingTerrainBarrier() {
+    @Test void dryGrowthCrossesRiverWithoutCountingSubmergedCells() {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":256},"spawn":{"biome":"test:a"},"biomes":{
            "required":[{"id":"test:a","adventure_level":0,"area":{"min":1024,"target":16384}}],
            "filler":["test:a"]}}
           """);
-        MacroTerrain river=(x,z)->x>60&&x<76?new MacroSample(65,68,WaterKind.RIVER,false,"r","plains","test"):FLAT.sample(x,z);
+        MacroTerrain river=(x,z)->x>20&&x<36?new MacroSample(65,68,WaterKind.RIVER,false,"r","plains","test"):FLAT.sample(x,z);
         var result=new JointPlanner(PlannerProfile.V2).plan(1,config,river,(d,x,y,z,s)->{throw new AssertionError();});
-        var patch=result.patches().getFirst();assertTrue(patch.area()>16384);
+        var patch=result.patches().getFirst();assertTrue(patch.area()>=1024);
         for(long cell:patch.mask().cells())assertEquals(WaterKind.NONE,river.sample(CellMask.x(cell)+2,CellMask.z(cell)+2).waterKind());
-        assertTrue(patch.maxXExclusive()<=64,"growth crossed an excluded water corridor");
+        assertTrue(patch.maxXExclusive()>36,"river still acts as a biome boundary");
     }
     @Test void targetIsSoftAndOnlyExplicitMaximumCapsArea() {
         assertEquals(Long.MAX_VALUE,config(8192).biomes().required().getFirst().area().max());

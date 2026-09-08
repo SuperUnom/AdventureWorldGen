@@ -148,8 +148,8 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     }
 
     private static double oceanBlend(GeneratedAdventurePlan plan, int x, int z) {
-        double t = StrictMath.max(0, StrictMath.min(1, -plan.coastline().signedDistance(x + 0.5, z + 0.5) / plan.seaBand()));
-        return t * t * (3 - 2 * t);
+        return io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain.oceanBlend(
+                -plan.coastline().signedDistance(x + 0.5, z + 0.5),plan.seaBand());
     }
 
     @Override

@@ -16,6 +16,8 @@ class HumidityPlanTest {
     private static final MacroTerrain TERRAIN=(x,z)->x>650
             ?new MacroSample(60,64,WaterKind.OCEAN,false,"r","plains","test")
             :x>=260&&x<=284?new MacroSample(61,64,WaterKind.RIVER,false,"r","plains","test"):land(66);
+    private static final MacroTerrain NO_RIVER=(x,z)->x>650
+            ?new MacroSample(60,64,WaterKind.OCEAN,false,"r","plains","test"):land(66);
     private AdventureWorldConfig config() {
         return new AdventureWorldConfigParser().parse("""
           {"world":{"radius":1024},"spawn":{"biome":"minecraft:plains"},"biomes":{
@@ -29,15 +31,13 @@ class HumidityPlanTest {
           }}}
           """);
     }
-    @Test void moistureIsContinuousAndRespondsToWaterHeightAndTemperature() {
+    @Test void moistureIsContinuousAndFreshwaterDoesNotRedrawBiomeClimate() {
         var c=config();var temperature=new ClimatePlan(7331,c,TERRAIN);var h=temperature.humidity();
+        var noRiver=new ClimatePlan(7331,c,NO_RIVER).humidity();
+        assertEquals(noRiver.valueAt(246,300,land(66)),h.valueAt(246,300,land(66)),1e-9);
+        assertEquals(noRiver.valueAt(302,300,land(66)),h.valueAt(302,300,land(66)),1e-9);
         var dry=new ClimatePlan(7331,c,(x,z)->land(66)).humidity();
-        assertTrue(h.valueAt(246,300,land(66))>dry.valueAt(246,300,land(66))+.2);
-        double nearBoost=h.valueAt(246,300,land(66))-dry.valueAt(246,300,land(66));
-        double outerBoost=h.valueAt(180,300,land(66))-dry.valueAt(180,300,land(66));
-        assertTrue(outerBoost<nearBoost*.35,"freshwater moisture should stay close to the river");
         assertTrue(h.valueAt(630,300,land(66))>dry.valueAt(630,300,land(66))+.1);
-        // Outside the protected riparian minimum, higher terrain loses moisture.
         assertTrue(h.valueAt(200,300,land(66))>h.valueAt(200,300,land(300)));
         for(int x=-800;x<640;x++)assertTrue(Math.abs(h.valueAt(x+1,300,land(66))-h.valueAt(x,300,land(66)))<.05);
         assertEquals(1,Arrays.stream(h.actualRatios()).sum(),1e-9);
@@ -50,12 +50,11 @@ class HumidityPlanTest {
                 state.spawnType(),state.ratios(),state.actual(),state.corrections(),state.supply(),state.humidity()));
         assertTrue(hotter.humidity().valueAt(-400,300,land(66))<h.valueAt(-400,300,land(66)));
     }
-    @Test void dryBiomesCannotOwnRiversOrTheirBanksAndShoresAreIntermittent() {
+    @Test void beachesOnlyUseOceanShoresAndRemainIntermittent() {
         var c=config();var climate=new ClimatePlan(7331,c,TERRAIN);var h=climate.humidity();
         var filler=new FillerLayout(7331,c,TERRAIN,List.of(),climate);
         int riverBeaches=0,riverOther=0,oceanBeaches=0,oceanOther=0,snowBeaches=0;
         for(int z=-950;z<=950;z+=4) {
-            for(int x:new int[]{246,274,302,638})assertFalse(h.allows(DESERT,x,z,TERRAIN.sample(x,z)));
             for(int x:new int[]{246,638}) {
                 var s=TERRAIN.sample(x,z);var id=filler.biomeAt(x,z,s);
                 boolean beach=id.equals(BEACH)||id.equals(SNOW_BEACH);
@@ -66,12 +65,14 @@ class HumidityPlanTest {
                 assertTrue(climate.allowsEnvironment(id,x,z,s));
             }
         }
-        assertTrue(riverBeaches>0&&riverOther>0,"river bank should contain both beach and other biomes");
+        assertEquals(0,riverBeaches,"river banks must not become beach biomes");
+        assertTrue(riverOther>0);
         assertTrue(oceanBeaches>0&&oceanOther>0,"coast should contain both beach and other biomes");
         assertEquals(0,snowBeaches,"the accepted field does not create a snow band on this flat warm shore");
         assertFalse(climate.allowsEnvironment(BEACH,0,400,land(66)),"beaches cannot spread inland");
         assertFalse(h.isShore(638,400,land(100)),"cliffs cannot become beaches");
         assertFalse(h.isShore(274,400,TERRAIN.sample(274,400)),"the river bed remains water");
+        assertFalse(h.isShore(246,400,TERRAIN.sample(246,400)),"a dry river bank is not an ocean shore");
     }
     @Test void requiredGrowthRespectsHumidityAndReservedShoreCells() {
         var base=config();

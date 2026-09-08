@@ -19,6 +19,21 @@ public enum TerrainTemplate {
     public String category() { return category; }
     public RegionTerrain.Template planningCategory() { return RegionTerrain.Template.valueOf(category.toUpperCase(Locale.ROOT)); }
     public boolean mountain() { return category.equals("mountains"); }
+    /** Natural height above sea level before the recipe shape is applied. Low, flat
+     * recipes deliberately begin close to the coast instead of on an 80+ plateau. */
+    public double naturalBaseElevation() {
+        return switch (this) {
+            case STEPPE -> 1;
+            case PLAINS -> 2;
+            case DALES -> 3;
+            case HILLS_1 -> 4;
+            case HILLS_2 -> 6;
+            case TORRIDONIAN -> 7;
+            case BADLANDS -> 6;
+            case PLATEAU -> 8;
+            case MOUNTAINS_1, MOUNTAINS_2, MOUNTAINS_3, VOLCANO -> 10;
+        };
+    }
     public Settings defaults() { return new Settings(weight,1,amplitude,1); }
     public static TerrainTemplate byId(String id) {
         return valueOf(id.toUpperCase(Locale.ROOT));

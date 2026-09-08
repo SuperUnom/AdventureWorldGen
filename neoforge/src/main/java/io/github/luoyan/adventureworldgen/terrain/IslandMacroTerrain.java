@@ -8,6 +8,9 @@ import java.util.Objects;
 
 /** Coast and regional terrain composition before inland hydrology is applied. */
 public final class IslandMacroTerrain implements MacroTerrain {
+    /** The visible continental shelf is intentionally narrow: ocean depth should
+     * become unmistakable within a few blocks of crossing the coastline. */
+    public static final double COASTAL_DROP_WIDTH = 8.0;
     private final Coastline coastline;
     private final RegionTerrain regions;
     private final double seaSurface;
@@ -59,8 +62,8 @@ public final class IslandMacroTerrain implements MacroTerrain {
                     region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
                     region.recipe().id(),region.secondary()==null?"":region.secondary().id(),region.secondaryWeight(),region.mountainInfluence(),0,0,0);
         }
-        double blend = smooth(clamp(-signedDistance / seaBand));
-        // FTF-adapted deep-water envelope; the first seven blocks remain the fixed shallow shelf.
+        double blend = oceanBlend(-signedDistance,seaBand);
+        // FTF-adapted deep-water envelope reached across the narrow coastal drop.
         double deep = 7.0 + 25.0 * clamp((deepOcean.sample(x, z) + 1.0) * 0.5);
         return new MacroSample(seaSurface - blend * deep, seaSurface, WaterKind.OCEAN, false,
                 region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
@@ -69,4 +72,8 @@ public final class IslandMacroTerrain implements MacroTerrain {
 
     private static double clamp(double value) { return StrictMath.max(0.0, StrictMath.min(1.0, value)); }
     private static double smooth(double value) { return value * value * (3.0 - 2.0 * value); }
+    public static double oceanBlend(double distanceIntoOcean,double configuredSeaBand) {
+        double width=StrictMath.min(COASTAL_DROP_WIDTH,configuredSeaBand);
+        return smooth(clamp(distanceIntoOcean/width));
+    }
 }

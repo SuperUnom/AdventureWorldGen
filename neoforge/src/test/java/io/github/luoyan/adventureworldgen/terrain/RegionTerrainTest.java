@@ -33,4 +33,32 @@ class RegionTerrainTest {
         assertTrue(sea.groundSurface() < sea.waterSurface());
         assertEquals(land, terrain.sample(0, 0));
     }
+
+    @Test
+    void ordinaryFlatLowlandsReachCloseToSeaLevel() {
+        var coast = new Coastline(java.util.List.of(
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(-4000,-4000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(4000,-4000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(4000,4000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(-4000,4000)));
+        var regions=new RegionTerrain(7331,PlannerProfile.V2);
+        var terrain=new IslandMacroTerrain(coast,regions,7331,64,128,256,"test");
+        double minimum=Double.POSITIVE_INFINITY;
+        for(int z=-300;z<=300;z+=8)for(int x=-300;x<=300;x+=8)
+            if(regions.sample(x,z).template()==RegionTerrain.Template.PLAINS)
+                minimum=Math.min(minimum,terrain.sample(x,z).groundSurface());
+        assertTrue(minimum<74,"flat lowland still starts far above sea level: "+minimum);
+    }
+
+    @Test
+    void oceanFloorDropsWithinEightBlocksOfTheCoast() {
+        var coast = new Coastline(java.util.List.of(
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(-1000,-1000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(1000,-1000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(1000,1000),
+                new io.github.luoyan.adventureworldgen.spatial.Vec2(-1000,1000)));
+        var terrain=new IslandMacroTerrain(coast,new RegionTerrain(9,PlannerProfile.V2),9,64,128,256,"test");
+        assertTrue(terrain.sample(1004,0).waterDepth()>=3,"coastal drop is still too gradual");
+        assertTrue(terrain.sample(1008,0).waterDepth()>=7,"deep-water envelope was not reached");
+    }
 }

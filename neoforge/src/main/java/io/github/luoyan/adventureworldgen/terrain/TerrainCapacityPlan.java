@@ -24,7 +24,8 @@ public final class TerrainCapacityPlan {
                 legacyFit(t,min,max).base,legacyFit(t,min,max).amplitude,"legacy-fit");
         }
         private static Fit legacyFit(RegionTerrain.Template t,Double min,Double max) {
-            var fit=fit(representative(t).defaults().verticalAmplitude(),min,max);
+            var recipe=representative(t);
+            var fit=fit(recipe.defaults().verticalAmplitude(),min,max,1.05,recipe.naturalBaseElevation());
             if(fit==null)throw new IllegalArgumentException("height interval cannot hold terrain and erosion");return fit;
         }
     }
@@ -112,7 +113,11 @@ public final class TerrainCapacityPlan {
                     double shape=settings.maximumShape(recipe,secondary);
                     var fitted=bin.fit!=null?bin.fit:new Fit(natural.baseElevation(),amplitude,shape);
                     boolean naturalFit=naturalAllowed&&acceptsEnvelope(fitted,lo,hi);
-                    if(!naturalFit)fitted=fit(amplitude,lo,hi,shape);
+                    if(!naturalFit) {
+                        double naturalBase=recipe.naturalBaseElevation();
+                        if(secondary!=null)naturalBase=Math.max(naturalBase,secondary.naturalBaseElevation());
+                        fitted=fit(amplitude,lo,hi,shape,naturalBase);
+                    }
                     if(fitted==null)continue;
                     double target=config.world().radius()*request.level/10.0;
                     double score=Math.abs(StrictMath.hypot(bin.x,bin.z)-target)
@@ -154,11 +159,8 @@ public final class TerrainCapacityPlan {
         double factor=erosionFactor(high);
         return low>=64&&high+8*factor<=318&&(min==null||low-12*factor>=min)&&(max==null||high+8*factor<=max);
     }
-    private static Fit fit(double amplitude,Double min,Double max) {
-        return fit(amplitude,min,max,1.05);
-    }
-    private static Fit fit(double amplitude,Double min,Double max,double maximumShape) {
-        var natural=new Fit(22,amplitude,maximumShape);if(acceptsEnvelope(natural,min,max))return natural;
+    private static Fit fit(double amplitude,Double min,Double max,double maximumShape,double naturalBase) {
+        var natural=new Fit(naturalBase,amplitude,maximumShape);if(acceptsEnvelope(natural,min,max))return natural;
         double bottom=min==null?65:Math.max(65,min),top=max==null?310:Math.min(310,max);
         if(top<=bottom)return null;
         // Search lower basins too: their coastal erosion fade gives smaller proven bounds.

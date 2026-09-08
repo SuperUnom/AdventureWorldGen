@@ -129,11 +129,13 @@ public final class HydrologyTerrain implements MacroTerrain {
         double along = (channel.cumulativeLengths().get(segment - 1) + nearest.along
                 * (channel.cumulativeLengths().get(segment) - channel.cumulativeLengths().get(segment - 1))) / channel.length();
         double bedRadius = morphology.bedRadius(channel, along, center.x(), center.z(), x, z);
-        double depth = morphology.bedDepth(channel, center.x(), center.z(), bedRadius);
+        double depth = morphology.bedDepth(channel,along,center.x(),center.z(),bedRadius);
+        double headwater=morphology.headwaterFactor(channel,along);
         WaterKind kind = WaterKind.RIVER;
-        double bankStepRadius = bedRadius + StrictMath.max(4, shape.minimumBankHeight() * 2);
-        double valleyRadius = bankStepRadius + shape.bankWidth();
-        double fadeRadius = valleyRadius + shape.bankWidth() * 4.0;
+        double bankWidth=shape.bankWidth()*(.2+.8*headwater);
+        double bankStepRadius = bedRadius + StrictMath.max(2, shape.minimumBankHeight() * 2*headwater);
+        double valleyRadius = bankStepRadius + bankWidth;
+        double fadeRadius = valleyRadius + bankWidth * 4.0;
         if (nearest.distance >= fadeRadius) return null;
 
         double bankTop = water + StrictMath.max(2, shape.minimumBankHeight());
@@ -142,7 +144,7 @@ public final class HydrologyTerrain implements MacroTerrain {
         WaterKind waterKind = WaterKind.NONE;
         if (nearest.distance < bedRadius) {
             double t = smooth(clamp(nearest.distance / bedRadius));
-            ground = water - StrictMath.max(2.0, depth) * (1.0 - t);
+            ground = water - depth * (1.0 - t);
         } else if (nearest.distance < bankStepRadius) {
             double t = smooth((nearest.distance - bedRadius) / (bankStepRadius - bedRadius));
             ground = water + (bankTop - water) * t;

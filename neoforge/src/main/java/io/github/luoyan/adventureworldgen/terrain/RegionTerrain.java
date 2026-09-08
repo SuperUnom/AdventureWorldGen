@@ -259,7 +259,9 @@ public final class RegionTerrain {
         }
         double amplitude=settings.get(recipe).verticalAmplitude();
         if(secondary!=null)amplitude=Math.max(amplitude,settings.get(secondary).verticalAmplitude());
-        double elevation=Math.min(22,310-64-settings.maximumShape(recipe,secondary)*amplitude);
+        double naturalBase=recipe.naturalBaseElevation();
+        if(secondary!=null)naturalBase=Math.max(naturalBase,secondary.naturalBaseElevation());
+        double elevation=Math.min(naturalBase,310-64-settings.maximumShape(recipe,secondary)*amplitude);
         if(reservation!=null) {elevation=reservation.baseElevation();amplitude=reservation.amplitude();secondary=reservation.secondary();}
         return new Region(key,id,new Vec2(x,z),recipe.planningCategory(),recipe,secondary,elevation,amplitude);
     }

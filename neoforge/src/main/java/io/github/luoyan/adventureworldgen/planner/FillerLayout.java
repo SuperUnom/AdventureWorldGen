@@ -75,7 +75,7 @@ public final class FillerLayout {
             Integer number=existingSeeds.get(labels[i]);
             if(number==null){number=seeds.size();existingSeeds.put(labels[i],number);seeds.add(new Seed(i,labels[i]));}
             for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1)
-                enqueue(n,number,STEP);
+                enqueue(n,number,stepDistance(i,n));
         }
         // Seed positions have a strict minimum distance and variable separation, independent of grid rows.
         List<Integer> candidates=new ArrayList<>();
@@ -143,14 +143,23 @@ public final class FillerLayout {
             labels[i]=seed.biome;assigned++;
             if((assigned&511)==0)progress.accept(.4+.55*assigned/Math.max(1.0,total));
             for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1&&allows(id,n)) {
-                double step=STEP*(1+climate.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
+                double distance=stepDistance(i,n);
+                double step=distance*(1+climate.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
                         +STEP*climate.temperatureDistance(id,x(n)+2,z(n)+2,environment[n])*8
                         +4*(1+shape.sample(x(n),z(n)));
                 enqueue(n,edge.seed,edge.cost+step);
             }
         }
     }
-    private int[] neighbors(int i){return new int[]{i%width>0?i-1:-1,i%width<width-1?i+1:-1,i>=width?i-width:-1,i+width<labels.length?i+width:-1};}
+    private int[] neighbors(int i) {
+        int gx=i%width,gz=i/width;int[] result=new int[8];int p=0;
+        for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++)if(dx!=0||dz!=0)
+            result[p++]=gx+dx>=0&&gx+dx<width&&gz+dz>=0&&gz+dz<width?(gz+dz)*width+gx+dx:-1;
+        return result;
+    }
+    private double stepDistance(int from,int to) {
+        return from%width==to%width||from/width==to/width?STEP:STEP*StrictMath.sqrt(2);
+    }
     private void tidy() {
         // Two strictly local passes remove one-cell holes and spikes; hard rules and reservations win.
         for(int pass=0;pass<2;pass++) {
@@ -158,8 +167,8 @@ public final class FillerLayout {
             for(int i=0;i<labels.length;i++)if(labels[i]>=0) {
                 int own=0;Map<Integer,Integer> support=new TreeMap<>();
                 for(int n:neighbors(i))if(n>=0&&labels[n]>=0){support.merge(labels[n],1,Integer::sum);if(labels[n]==labels[i])own++;}
-                if(own>1)continue;
-                for(var e:support.entrySet())if(e.getValue()>=3&&allows(pool.get(e.getKey()),i)
+                if(own>3)continue;
+                for(var e:support.entrySet())if(e.getValue()>=5&&allows(pool.get(e.getKey()),i)
                         &&climate.temperatureDistance(pool.get(e.getKey()),x(i)+2,z(i)+2,environment[i])
                         <=climate.temperatureDistance(pool.get(labels[i]),x(i)+2,z(i)+2,environment[i])){next[i]=e.getKey();break;}
             }
