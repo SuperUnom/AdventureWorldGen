@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.PriorityQueue;
 
 /** The immutable final polyline used for every land/sea and distance query. */
 public final class Coastline {
@@ -87,25 +86,28 @@ public final class Coastline {
     }
 
     private Nearest nearest(double x, double z) {
-        PriorityQueue<NodeDistance> queue = new PriorityQueue<>(Comparator
-                .comparingDouble(NodeDistance::lowerBoundSquared)
-                .thenComparingInt(item -> item.node.minimumSegment));
-        queue.add(new NodeDistance(index, index.distanceSquared(x, z)));
-        Nearest best = null;
-        while (!queue.isEmpty()) {
-            NodeDistance candidate = queue.remove();
-            if (best != null && candidate.lowerBoundSquared > best.distanceSquared) break;
-            Node node = candidate.node;
-            if (node.segment >= 0) {
-                Nearest measured = segments[node.segment].nearest(x, z);
-                if (best == null || measured.distanceSquared < best.distanceSquared
-                        || (measured.distanceSquared == best.distanceSquared
-                        && measured.segment.index < best.segment.index)) best = measured;
-            } else {
-                queue.add(new NodeDistance(node.left, node.left.distanceSquared(x, z)));
-                queue.add(new NodeDistance(node.right, node.right.distanceSquared(x, z)));
-            }
+        return nearest(index, x, z, null);
+    }
+
+    /** Near child first gives a tight bound without allocating a heap and an entry per visited node. */
+    private Nearest nearest(Node node, double x, double z, Nearest best) {
+        if (node.segment >= 0) {
+            Nearest measured = segments[node.segment].nearest(x, z);
+            if (best == null || measured.distanceSquared < best.distanceSquared
+                    || (measured.distanceSquared == best.distanceSquared
+                    && measured.segment.index < best.segment.index)) return measured;
+            return best;
         }
+        Node first = node.left, second = node.right;
+        double firstDistance = first.distanceSquared(x, z), secondDistance = second.distanceSquared(x, z);
+        if (secondDistance < firstDistance || (secondDistance == firstDistance
+                && second.minimumSegment < first.minimumSegment)) {
+            first = node.right; second = node.left;
+            double swap = firstDistance; firstDistance = secondDistance; secondDistance = swap;
+        }
+        if (best == null || firstDistance <= best.distanceSquared) best = nearest(first, x, z, best);
+        // Equality must remain searchable: the lower segment index wins exact distance ties.
+        if (best == null || secondDistance <= best.distanceSquared) best = nearest(second, x, z, best);
         return best;
     }
 
@@ -129,7 +131,6 @@ public final class Coastline {
     public record NearestPoint(int segmentIndex, Vec2 point, double distance) {}
 
     private record Nearest(Segment segment, Vec2 point, double distanceSquared) {}
-    private record NodeDistance(Node node, double lowerBoundSquared) {}
 
     private static final class Segment {
         final int index;

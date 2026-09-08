@@ -28,7 +28,12 @@ class EcotoneTopologyTest {
     @Test void mutuallyExclusiveTerrainRulesStillHaveAnInterleavedBoundary() {
         int mountainIslands=0, ordinaryIslands=0;
         for(long seed:new long[]{345705185492107788L,4126649097427443736L,1}) {
-            var regions=new RegionTerrain(seed,PlannerProfile.V2);
+            // Concrete recipe weights change random coverage. Force a real two-category interface
+            // so this tests the ecotone, not whether these three seeds happen to contain mountains.
+            var reservations=new ArrayList<TerrainCapacityPlan.Reservation>();
+            for(int gx=-3;gx<=3;gx++)for(int gz=-3;gz<=3;gz++)
+                reservations.add(new TerrainCapacityPlan.Reservation(gx,gz,gx>0?RegionTerrain.Template.MOUNTAINS:RegionTerrain.Template.PLAINS,null,null,0));
+            var regions=new RegionTerrain(seed,PlannerProfile.V2,new TerrainCapacityPlan(reservations));
             boolean[][] mountain=new boolean[384][384];
             for(int z=0;z<384;z++)for(int x=0;x<384;x++)
                 mountain[z][x]=regions.sample(x*4-768,z*4-768).template()==RegionTerrain.Template.MOUNTAINS;

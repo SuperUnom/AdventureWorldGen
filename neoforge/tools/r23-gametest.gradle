@@ -1,0 +1,10 @@
+// ./gradlew runGameTestServer -I tools/r23-gametest.gradle --offline
+allprojects {
+ afterEvaluate {
+  def forge = extensions.findByName('neoForge')
+  if (forge != null) {
+   forge.runs.gameTestServer.gameDirectory = file(providers.gradleProperty('terrainAuditWorld').getOrElse('run-r23-performance'))
+   forge.runs.gameTestServer.systemProperty 'neoforge.enabledGameTestNamespaces', 'testcompanion_performance'
+  }
+ }
+}

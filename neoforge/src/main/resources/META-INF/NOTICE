@@ -5,6 +5,14 @@ This product contains adapted portions and algorithms derived from
 FreeTerraForged at commit 43fd42a4d31da5ba36f5ab4d8e4d76d69688e86a:
 https://github.com/ETcodehome/FreeTerraForged/tree/43fd42a4d31da5ba36f5ab4d8e4d76d69688e86a
 
+Terrain r22 adapts all twelve Populators/VolcanoPopulator recipes, nested domain
+warps, Ridge/Billow, Cubic, Worley, Steps and terrace constructions. It uses
+upstream Perlin gradient hashing and CURVE3 interpolation, seeded graph selection,
+block-based amplitude settings and continuous terrace transitions. Dormant volcanoes
+have no lava pipe. Erosion displacements and sediment volumes are converted to
+block units on the persisted grid; full-height smoothing uses the upstream
+1.8-block kernel. This is not a bit-for-bit reproduction of upstream worlds.
+
 FreeTerraForged / ReTerraForged is distributed under the MIT License:
 
 MIT License

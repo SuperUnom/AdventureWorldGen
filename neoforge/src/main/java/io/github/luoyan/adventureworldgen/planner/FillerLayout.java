@@ -104,9 +104,23 @@ public final class FillerLayout {
         int biome=choose(cell);int number=seeds.size();seeds.add(new Seed(cell,biome));
         frontier.add(new Edge(cell,number,0));
     }
-    private boolean allows(ContentId id,int cell){return allows(id,x(cell),z(cell),environment[cell]);}
+    private boolean allows(ContentId id,int cell) {
+        var sample=environment[cell];int x=x(cell),z=z(cell);
+        if(!allows(id,x,z,sample))return false;
+        if(!VanillaAltitudeSnow.applies(id))return true;
+        int y=(int)Math.ceil(sample.groundSurface())+1;
+        boolean snow=VanillaAltitudeSnow.snowy(id,x+2,y,z+2),stable=true;
+        // A coarse ownership cell should not straddle the native snow line. Keep a modest
+        // elevation margin and probe its corners; exact quart queries still enforce real weather.
+        for(int dx:new int[]{-8,8})for(int dz:new int[]{-8,8})
+            if(VanillaAltitudeSnow.snowy(id,x+2+dx,y+(snow?-12:12),z+2+dz)!=snow)stable=false;
+        if(stable)return true;
+        // Prefer a stable species over a noisy ring of per-quart replacements. A profile with
+        // only altitude-sensitive species retains its legal candidates instead of becoming invalid.
+        return pool.stream().noneMatch(other->!VanillaAltitudeSnow.applies(other)&&allows(other,x,z,sample));
+    }
     private boolean allows(ContentId id,int x,int z,MacroSample sample) {
-        return config.biomes().allows(id,sample)&&climate.allowsSnowClass(id,x,z,sample);
+        return config.biomes().allows(id,sample)&&climate.allowsEnvironment(id,x,z,sample);
     }
     private int choose(int cell) {
         int best=-1;double score=Double.POSITIVE_INFINITY;
@@ -120,7 +134,7 @@ public final class FillerLayout {
             if(value<score){score=value;best=b;}
         }
         if(best<0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"filler","no legal filler",
-                Map.of("x",x(cell),"z",z(cell),"terrain",environment[cell].terrainTemplate()));
+                Map.of("x",x(cell),"z",z(cell),"terrain",environment[cell].terrainTemplate(),"recipe",environment[cell].recipe(),"secondary",environment[cell].secondaryRecipe(),"landform",environment[cell].landform(),"humidity",climate.humidity().typeAt(x(cell),z(cell),environment[cell]),"temperature",climate.typeAt(x(cell),z(cell),environment[cell])));
         return best;
     }
     private double adventure(int biome,int cell) {

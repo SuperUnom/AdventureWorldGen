@@ -1,6 +1,84 @@
 {
   "world": {
-    "radius": 3000
+    "radius": 3000,
+    "terrain": {
+      "composite": true,
+      "mountain_ranges": true,
+      "templates": {
+        "steppe": {
+          "weight": 18,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 12,
+          "detail_strength": 1
+        },
+        "plains": {
+          "weight": 20,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 22,
+          "detail_strength": 1
+        },
+        "hills_1": {
+          "weight": 16,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 52,
+          "detail_strength": 1
+        },
+        "hills_2": {
+          "weight": 12,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 72,
+          "detail_strength": 1
+        },
+        "dales": {
+          "weight": 14,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 42,
+          "detail_strength": 1
+        },
+        "torridonian": {
+          "weight": 6,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 82,
+          "detail_strength": 1
+        },
+        "plateau": {
+          "weight": 10,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 90,
+          "detail_strength": 1
+        },
+        "badlands": {
+          "weight": 5,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 90,
+          "detail_strength": 1
+        },
+        "mountains_1": {
+          "weight": 8,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 180,
+          "detail_strength": 1
+        },
+        "mountains_2": {
+          "weight": 6,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 165,
+          "detail_strength": 1
+        },
+        "mountains_3": {
+          "weight": 5,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 200,
+          "detail_strength": 1
+        },
+        "volcano": {
+          "weight": 0.6,
+          "horizontal_scale": 1,
+          "vertical_amplitude": 180,
+          "detail_strength": 1
+        }
+      }
+    }
   },
   "spawn": {
     "biome": "minecraft:plains"
@@ -201,20 +279,58 @@
       "minecraft:sunflower_plains",
       "minecraft:savanna",
       "minecraft:desert",
-      "minecraft:stony_peaks"
+      "minecraft:stony_peaks",
+      "minecraft:beach",
+      "minecraft:snowy_beach",
+      "minecraft:forest",
+      "minecraft:taiga",
+      "minecraft:jungle",
+      "minecraft:flower_forest",
+      "minecraft:birch_forest",
+      "minecraft:old_growth_birch_forest",
+      "minecraft:dark_forest",
+      "minecraft:snowy_taiga",
+      "minecraft:old_growth_pine_taiga",
+      "minecraft:old_growth_spruce_taiga",
+      "minecraft:sparse_jungle",
+      "minecraft:bamboo_jungle",
+      "minecraft:mangrove_swamp",
+      "minecraft:cherry_grove",
+      "minecraft:grove",
+      "minecraft:swamp",
+      "minecraft:savanna_plateau",
+      "minecraft:jagged_peaks",
+      "minecraft:frozen_peaks",
+      "minecraft:badlands",
+      "minecraft:wooded_badlands",
+      "minecraft:eroded_badlands",
+      "minecraft:windswept_hills",
+      "minecraft:windswept_forest",
+      "minecraft:windswept_gravelly_hills",
+      "minecraft:windswept_savanna"
     ],
     "terrain_rules": {
       "minecraft:plains": {
         "allowed_terrain": [
           "plains",
-          "hills",
-          "plateau"
+          "hills"
         ],
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
         },
-        "filler_weight": 5
+        "filler_weight": 5,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "dales"
+        ]
       },
       "minecraft:forest": {
         "allowed_terrain": [
@@ -225,11 +341,23 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:desert": {
         "allowed_terrain": [
           "plains",
+          "hills",
           "plateau"
         ],
         "max_height": 112,
@@ -237,23 +365,41 @@
         "temperatures": {
           "hot": 1
         },
-        "filler_weight": 3
+        "filler_weight": 3,
+        "humidities": {
+          "dry": 1
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "plateau"
+        ]
       },
       "minecraft:snowy_plains": {
         "allowed_terrain": [
           "plains",
-          "hills",
-          "plateau"
+          "hills"
         ],
         "temperature_level": 0,
         "temperatures": {
           "very_cold": 1
         },
-        "filler_weight": 5
+        "filler_weight": 5,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "dales"
+        ]
       },
       "minecraft:taiga": {
         "allowed_terrain": [
-          "plains",
           "hills",
           "plateau"
         ],
@@ -261,7 +407,17 @@
         "temperatures": {
           "cold": 1
         },
-        "max_height": 144
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "hills_1",
+          "hills_2",
+          "dales",
+          "torridonian",
+          "plateau"
+        ]
       },
       "minecraft:jungle": {
         "allowed_terrain": [
@@ -272,19 +428,39 @@
         "temperature_level": 9,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 4
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:savanna": {
         "allowed_terrain": [
           "plains",
-          "hills",
-          "plateau"
+          "hills"
         ],
         "temperature_level": 8,
         "temperatures": {
           "hot": 1
         },
-        "filler_weight": 3
+        "filler_weight": 3,
+        "humidities": {
+          "dry": 3,
+          "medium": 1
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "dales"
+        ]
       },
       "minecraft:stony_peaks": {
         "allowed_terrain": [
@@ -296,7 +472,21 @@
           "medium": 2,
           "hot": 1
         },
-        "filler_weight": 1
+        "filler_weight": 1,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "mountains_1",
+          "mountains_2",
+          "mountains_3",
+          "volcano"
+        ],
+        "landforms": [
+          "peak"
+        ]
       },
       "minecraft:flower_forest": {
         "allowed_terrain": [
@@ -307,7 +497,18 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:birch_forest": {
         "allowed_terrain": [
@@ -318,7 +519,18 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:old_growth_birch_forest": {
         "allowed_terrain": [
@@ -329,7 +541,18 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:dark_forest": {
         "allowed_terrain": [
@@ -340,22 +563,42 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:snowy_taiga": {
         "allowed_terrain": [
-          "plains",
           "hills",
           "plateau"
         ],
         "temperature_level": 1,
         "temperatures": {
           "very_cold": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "hills_1",
+          "hills_2",
+          "dales",
+          "torridonian",
+          "plateau"
+        ]
       },
       "minecraft:old_growth_pine_taiga": {
         "allowed_terrain": [
-          "plains",
           "hills",
           "plateau"
         ],
@@ -363,11 +606,20 @@
         "temperatures": {
           "cold": 1
         },
-        "max_height": 184
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "hills_1",
+          "hills_2",
+          "dales",
+          "torridonian",
+          "plateau"
+        ]
       },
       "minecraft:old_growth_spruce_taiga": {
         "allowed_terrain": [
-          "plains",
           "hills",
           "plateau"
         ],
@@ -375,7 +627,17 @@
         "temperatures": {
           "cold": 1
         },
-        "max_height": 144
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "hills_1",
+          "hills_2",
+          "dales",
+          "torridonian",
+          "plateau"
+        ]
       },
       "minecraft:sparse_jungle": {
         "allowed_terrain": [
@@ -386,7 +648,18 @@
         "temperature_level": 8,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:bamboo_jungle": {
         "allowed_terrain": [
@@ -397,18 +670,36 @@
         "temperature_level": 9,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 4
+        },
+        "allowed_templates": [
+          "plains",
+          "hills_1",
+          "hills_2",
+          "dales",
+          "plateau"
+        ]
       },
       "minecraft:mangrove_swamp": {
         "allowed_terrain": [
-          "plains",
-          "hills"
+          "plains"
         ],
         "max_height": 104,
         "temperature_level": 9,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 4
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains"
+        ]
       },
       "minecraft:cherry_grove": {
         "allowed_terrain": [
@@ -419,7 +710,24 @@
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "dales",
+          "hills_1",
+          "hills_2",
+          "plateau",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "lowland",
+          "foothill"
+        ]
       },
       "minecraft:grove": {
         "allowed_terrain": [
@@ -428,18 +736,38 @@
         "temperature_level": 1,
         "temperatures": {
           "very_cold": 1
-        }
+        },
+        "humidities": {
+          "medium": 2,
+          "wet": 3
+        },
+        "allowed_templates": [
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "foothill",
+          "slope"
+        ]
       },
       "minecraft:swamp": {
         "allowed_terrain": [
-          "plains",
-          "hills"
+          "plains"
         ],
         "max_height": 104,
         "temperature_level": 6,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 4
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains"
+        ]
       },
       "minecraft:savanna_plateau": {
         "allowed_terrain": [
@@ -449,11 +777,19 @@
         "temperature_level": 8,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "humidities": {
+          "dry": 3,
+          "medium": 1
+        },
+        "allowed_templates": [
+          "plateau",
+          "torridonian",
+          "hills_2"
+        ]
       },
       "minecraft:meadow": {
         "allowed_terrain": [
-          "plains",
           "hills",
           "plateau",
           "mountains"
@@ -462,8 +798,25 @@
         "temperatures": {
           "cold": 1
         },
-        "max_height": 336,
-        "filler_weight": 4
+        "filler_weight": 4,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "dales",
+          "hills_1",
+          "hills_2",
+          "plateau",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "lowland",
+          "foothill"
+        ]
       },
       "minecraft:snowy_slopes": {
         "allowed_terrain": [
@@ -473,7 +826,21 @@
         "temperatures": {
           "very_cold": 1
         },
-        "filler_weight": 3
+        "filler_weight": 3,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "foothill",
+          "slope"
+        ]
       },
       "minecraft:jagged_peaks": {
         "allowed_terrain": [
@@ -482,7 +849,20 @@
         "temperature_level": 0,
         "temperatures": {
           "very_cold": 1
-        }
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "peak"
+        ]
       },
       "minecraft:frozen_peaks": {
         "allowed_terrain": [
@@ -491,32 +871,274 @@
         "temperature_level": 0,
         "temperatures": {
           "very_cold": 1
-        }
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "landforms": [
+          "peak"
+        ]
       },
       "minecraft:sunflower_plains": {
         "allowed_terrain": [
           "plains",
-          "hills",
-          "plateau"
+          "hills"
         ],
         "temperature_level": 5,
         "temperatures": {
           "cold": 1,
           "medium": 3
         },
-        "filler_weight": 2.5
+        "filler_weight": 2.5,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "dales"
+        ]
       },
       "minecraft:ice_spikes": {
         "allowed_terrain": [
           "plains",
-          "hills",
-          "plateau"
+          "hills"
         ],
         "temperature_level": 0,
         "temperatures": {
           "very_cold": 1
         },
-        "filler_weight": 0.5
+        "filler_weight": 0.5,
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "allowed_templates": [
+          "steppe",
+          "plains",
+          "hills_1",
+          "dales"
+        ]
+      },
+      "minecraft:beach": {
+        "allowed_terrain": [
+          "plains"
+        ],
+        "temperature_level": 5,
+        "temperatures": {
+          "cold": 1,
+          "medium": 2,
+          "hot": 1
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 2
+        },
+        "shore_only": true,
+        "filler_weight": 1,
+        "allowed_templates": [
+          "steppe",
+          "plains"
+        ]
+      },
+      "minecraft:snowy_beach": {
+        "allowed_terrain": [
+          "plains"
+        ],
+        "temperature_level": 0,
+        "temperatures": {
+          "very_cold": 1
+        },
+        "humidities": {
+          "medium": 1,
+          "wet": 2
+        },
+        "shore_only": true,
+        "filler_weight": 1,
+        "allowed_templates": [
+          "steppe",
+          "plains"
+        ]
+      },
+      "minecraft:badlands": {
+        "temperature_level": 8,
+        "temperatures": {
+          "hot": 3,
+          "medium": 1
+        },
+        "humidities": {
+          "dry": 4,
+          "medium": 1
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "badlands",
+          "plateau",
+          "torridonian",
+          "volcano"
+        ],
+        "allowed_terrain": [
+          "plateau",
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:wooded_badlands": {
+        "temperature_level": 8,
+        "temperatures": {
+          "hot": 3,
+          "medium": 1
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "badlands",
+          "plateau",
+          "torridonian",
+          "volcano"
+        ],
+        "allowed_terrain": [
+          "plateau",
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:eroded_badlands": {
+        "temperature_level": 8,
+        "temperatures": {
+          "hot": 3,
+          "medium": 1
+        },
+        "humidities": {
+          "dry": 4,
+          "medium": 1
+        },
+        "filler_weight": 0.7,
+        "allowed_templates": [
+          "badlands",
+          "plateau",
+          "torridonian",
+          "volcano"
+        ],
+        "allowed_terrain": [
+          "plateau",
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:windswept_hills": {
+        "temperature_level": 4,
+        "temperatures": {
+          "cold": 2,
+          "medium": 2,
+          "hot": 1
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "hills_2",
+          "torridonian",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "allowed_terrain": [
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:windswept_forest": {
+        "temperature_level": 4,
+        "temperatures": {
+          "cold": 2,
+          "medium": 2,
+          "hot": 1
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "hills_2",
+          "torridonian",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "allowed_terrain": [
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:windswept_gravelly_hills": {
+        "temperature_level": 4,
+        "temperatures": {
+          "cold": 2,
+          "medium": 2,
+          "hot": 1
+        },
+        "humidities": {
+          "dry": 1,
+          "medium": 3,
+          "wet": 2
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "hills_2",
+          "torridonian",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3",
+          "volcano"
+        ],
+        "allowed_terrain": [
+          "hills",
+          "mountains"
+        ]
+      },
+      "minecraft:windswept_savanna": {
+        "temperature_level": 8,
+        "temperatures": {
+          "hot": 3,
+          "medium": 1
+        },
+        "humidities": {
+          "dry": 4,
+          "medium": 1
+        },
+        "filler_weight": 1.2,
+        "allowed_templates": [
+          "hills_2",
+          "torridonian",
+          "mountains_1",
+          "mountains_2",
+          "mountains_3"
+        ],
+        "allowed_terrain": [
+          "hills",
+          "mountains"
+        ]
       }
     },
     "blend_radius": 4

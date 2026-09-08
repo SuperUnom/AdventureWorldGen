@@ -12,7 +12,7 @@ import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
-/** Adapted FTF droplet erosion and one-pass smoothing, run only during planning. */
+/** Adapted FTF droplet erosion, frozen during planning; ErodedTerrain applies the block filter. */
 public final class ErosionGenerator {
     private final PlannerProfile planner;
     private final HydrologyProfile profile;
@@ -55,7 +55,8 @@ public final class ErosionGenerator {
             }
         }
         progress.accept(0.2);
-        // A droplet travels at most 96 blocks and has a 16-block brush. Chunks in one 16x16 color
+        // Default droplets travel 12 blocks, with at most 16 blocks of grid brush support.
+        // Keep the conservative r21 scheduling separation: chunks in one 16x16 color
         // are therefore disjoint; fixed color barriers make parallel scheduling output-invariant.
         var workers = Executors.newFixedThreadPool(StrictMath.max(1, StrictMath.min(4,
                 Runtime.getRuntime().availableProcessors())), runnable -> {
@@ -89,17 +90,23 @@ public final class ErosionGenerator {
         } finally {
             workers.shutdownNow();
         }
-        smooth(delta, width, height, profile.smoothing());
+        // The upstream full-height smoothing pass is evaluated by ErodedTerrain at
+        // block resolution. Applying a 1.8-cell kernel here would make it 14.4 blocks
+        // wide at the persisted spacing of 8, rounding hills and plateau edges away.
         long operations = Math.multiplyExact((long) active.size(), erosion.dropletsPerChunk());
         progress.accept(1);
         return new ErosionDeltaField(originX, originZ, spacing, width, height, delta, operations);
     }
 
-    private static void erodeDroplet(double worldX, double worldZ, int originX, int originZ, int spacing,
+    static void erodeDroplet(double worldX, double worldZ, int originX, int originZ, int spacing,
                                      int width, int height, double[] heights, float[] delta,
                                      HydrologyProfile.Erosion profile) {
         double x = (worldX - originX) / spacing, z = (worldZ - originZ) / spacing;
         double dirX = 0, dirZ = 0, speed = profile.velocity(), water = profile.volume(), sediment = 0;
+        // FTF droplets move one BLOCK per step and carry normalized Levels units.
+        // This persisted grid is coarser: convert displacement, gradients and sediment
+        // volume explicitly instead of treating an 8-block cell as one block.
+        double step=1.0/spacing, cellArea=(double)spacing*spacing;
         for (int life = 0; life < profile.lifetime(); life++) {
             int ix = (int) StrictMath.floor(x), iz = (int) StrictMath.floor(z);
             if (ix < 1 || iz < 1 || ix >= width - 2 || iz >= height - 2) break;
@@ -108,30 +115,30 @@ public final class ErosionGenerator {
                     - sampleHeight(x - 0.5, z, heights, delta, height));
             double gradZ = (sampleHeight(x, z + 0.5, heights, delta, height)
                     - sampleHeight(x, z - 0.5, heights, delta, height));
-            dirX = dirX * 0.1 - gradX * 0.9;
-            dirZ = dirZ * 0.1 - gradZ * 0.9;
+            dirX = dirX * 0.05 - gradX / (spacing * 256.0) * 0.95;
+            dirZ = dirZ * 0.05 - gradZ / (spacing * 256.0) * 0.95;
             double directionLength = StrictMath.hypot(dirX, dirZ);
             if (directionLength < 1e-12) break;
             dirX /= directionLength; dirZ /= directionLength;
-            double nextX = x + dirX, nextZ = z + dirZ;
+            double nextX = x + dirX * step, nextZ = z + dirZ * step;
             double newHeight = sampleHeight(nextX, nextZ, heights, delta, height);
             double heightChange = newHeight - oldHeight;
-            double capacity = StrictMath.max(-heightChange, 0.01) * speed * water * 4.0;
+            double capacity = StrictMath.max(-heightChange * speed * water * 4.0, 0.01 * 256.0);
             if (sediment > capacity || heightChange > 0) {
                 double amount = heightChange > 0 ? StrictMath.min(sediment, heightChange)
                         : (sediment - capacity) * profile.depositRate();
-                amount = StrictMath.max(0.0, StrictMath.min(1.0, amount));
-                deposit(delta, width, height, x, z, amount);
+                amount = StrictMath.max(0.0, amount);
+                deposit(delta, width, height, x, z, amount / cellArea);
                 sediment -= amount;
             } else {
                 double amount = StrictMath.min((capacity - sediment) * profile.erosionRate(),
-                        StrictMath.max(0.0, -heightChange + 1.0));
-                amount = StrictMath.max(0.0, StrictMath.min(1.0, amount));
-                erode(delta, width, height, ix, iz, amount, 1.8);
+                        StrictMath.max(0.0, -heightChange));
+                amount = StrictMath.max(0.0, amount);
+                erode(delta, width, height, ix, iz, amount / cellArea, StrictMath.max(1.01, 4.0 / spacing));
                 sediment += amount;
             }
-            speed = StrictMath.sqrt(StrictMath.max(0.01, speed * speed - heightChange * 0.1));
-            water *= 0.95;
+            speed = StrictMath.sqrt(StrictMath.max(0.0, speed * speed + heightChange * (3.0 / 256.0)));
+            water *= 0.99;
             x = nextX; z = nextZ;
         }
     }
@@ -139,12 +146,13 @@ public final class ErosionGenerator {
     private static void erode(float[] delta, int width, int height, int centerX, int centerZ,
                               double amount, double radius) {
         double total = 0;
-        for (int x = centerX - 2; x <= centerX + 2; x++) for (int z = centerZ - 2; z <= centerZ + 2; z++) {
+        int extent=(int)StrictMath.ceil(radius);
+        for (int x = centerX - extent; x <= centerX + extent; x++) for (int z = centerZ - extent; z <= centerZ + extent; z++) {
             if (x < 0 || z < 0 || x >= width || z >= height) continue;
             total += StrictMath.max(0.0, radius - StrictMath.hypot(x - centerX, z - centerZ));
         }
         if (total == 0) return;
-        for (int x = centerX - 2; x <= centerX + 2; x++) for (int z = centerZ - 2; z <= centerZ + 2; z++) {
+        for (int x = centerX - extent; x <= centerX + extent; x++) for (int z = centerZ - extent; z <= centerZ + extent; z++) {
             if (x < 0 || z < 0 || x >= width || z >= height) continue;
             double weight = StrictMath.max(0.0, radius - StrictMath.hypot(x - centerX, z - centerZ));
             accumulate(delta, index(x, z, height), -amount * weight / total);
@@ -177,24 +185,6 @@ public final class ErosionGenerator {
 
     private static double value(double[] heights, float[] delta, int x, int z, int rowHeight) {
         int index = index(x, z, rowHeight); return heights[index] + delta[index];
-    }
-
-    private static void smooth(float[] delta, int width, int height, HydrologyProfile.Smoothing settings) {
-        for (int iteration = 0; iteration < settings.iterations(); iteration++) {
-            float[] source = delta.clone();
-            int radius = (int) StrictMath.ceil(settings.radius());
-            for (int x = 0; x < width; x++) for (int z = 0; z < height; z++) {
-                double sum = 0, weight = 0;
-                for (int dx = -radius; dx <= radius; dx++) for (int dz = -radius; dz <= radius; dz++) {
-                    int sx = x + dx, sz = z + dz;
-                    if (sx < 0 || sz < 0 || sx >= width || sz >= height) continue;
-                    double w = StrictMath.max(0.0, settings.radius() - StrictMath.hypot(dx, dz));
-                    sum += source[index(sx, sz, height)] * w; weight += w;
-                }
-                if (weight > 0) delta[index(x, z, height)] = bounded(lerp(source[index(x, z, height)],
-                        sum / weight, settings.rate()));
-            }
-        }
     }
 
     /** SplitMix64 sequence seeded from one stable SHA key per pre-numbered chunk task. */

@@ -20,7 +20,9 @@ public record AdventureWorldConfig(
         structures = List.copyOf(structures);
     }
 
-    public record WorldSettings(double radius) {
+    public record WorldSettings(double radius, io.github.luoyan.adventureworldgen.terrain.TerrainSettings terrain) {
+        public WorldSettings(double radius) { this(radius,io.github.luoyan.adventureworldgen.terrain.TerrainSettings.defaults()); }
+        public WorldSettings { Objects.requireNonNull(terrain); }
     }
 
     public record SpawnSettings(ContentId biome, SpawnStructure structure) {
@@ -68,10 +70,26 @@ public record AdventureWorldConfig(
         public static TemperatureType fromLevel(int level) { return level <= 1 ? VERY_COLD : level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
     }
 
+    public enum HumidityType { DRY, MEDIUM, WET }
+
     /** Rules apply to land ownership on the final macro terrain, before river/lake biome overlays. */
     public record TerrainRule(Set<String> allowedTerrain, Double minHeight, Double maxHeight, int temperatureLevel,
                               Map<TemperatureType, Double> temperatures, Double preferredMinHeight,
-                              Double preferredMaxHeight, double heightPenalty, double fillerWeight, Integer adventureLevel) {
+                              Double preferredMaxHeight, double heightPenalty, double fillerWeight, Integer adventureLevel,
+                              Map<HumidityType, Double> humidities, boolean shoreOnly,
+                              Set<String> allowedTemplates, Set<String> landforms) {
+        public TerrainRule(Set<String> allowed, Double min, Double max, int temperature,
+                           Map<TemperatureType, Double> temperatures, Double preferredMin, Double preferredMax,
+                           double heightPenalty, double fillerWeight, Integer adventureLevel,
+                           Map<HumidityType, Double> humidities, boolean shoreOnly) {
+            this(allowed,min,max,temperature,temperatures,preferredMin,preferredMax,heightPenalty,fillerWeight,
+                 adventureLevel,humidities,shoreOnly,io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids(),Set.of());
+        }
+        public TerrainRule(Set<String> allowed, Double min, Double max, int temperature,
+                           Map<TemperatureType, Double> temperatures, Double preferredMin, Double preferredMax,
+                           double heightPenalty, double fillerWeight, Integer adventureLevel) {
+            this(allowed,min,max,temperature,temperatures,preferredMin,preferredMax,heightPenalty,fillerWeight,adventureLevel,Map.of(),false);
+        }
         public TerrainRule(Set<String> allowed, Double min, Double max, int temperature) {
             this(allowed,min,max,temperature,Map.of(TemperatureType.fromLevel(temperature),1.0),null,null,1,1,null);
         }
@@ -81,7 +99,16 @@ public record AdventureWorldConfig(
         public static final Set<String> TEMPLATES = Set.of("plains", "hills", "plateau", "mountains");
         public TerrainRule {
             allowedTerrain = Set.copyOf(allowedTerrain);
+            allowedTemplates = Set.copyOf(allowedTemplates);
+            landforms = Set.copyOf(landforms);
+            if(!TEMPLATES.containsAll(allowedTerrain)||allowedTerrain.isEmpty()
+                ||!io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids().containsAll(allowedTemplates)
+                ||allowedTemplates.isEmpty()||!Set.of("lowland","foothill","slope","peak").containsAll(landforms))
+                throw new IllegalArgumentException("invalid terrain/template/landform selection");
             temperatures = Map.copyOf(temperatures);
+            humidities = Map.copyOf(humidities);
+            for(double weight:humidities.values())if(!Double.isFinite(weight)||weight<=0)
+                throw new IllegalArgumentException("humidity preferences must be finite and positive");
             if (temperatureLevel < 0 || temperatureLevel > 10) throw new IllegalArgumentException("temperature_level must be in [0,10]");
         }
         public double heightCost(double height) {
@@ -89,8 +116,18 @@ public record AdventureWorldConfig(
             deviation += preferredMaxHeight == null ? 0 : Math.max(0,height-preferredMaxHeight);
             return heightPenalty * deviation / 32.0;
         }
+        public Set<String> effectiveTemplates() {
+            var result=new java.util.TreeSet<String>();
+            for(var t:io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.values())
+                if(allowedTerrain.contains(t.category())&&allowedTemplates.contains(t.id()))result.add(t.id());
+            return Set.copyOf(result);
+        }
         public boolean accepts(MacroSample sample) {
             return allowedTerrain.contains(sample.terrainTemplate())
+                    && allowedTemplates.contains(sample.recipe())
+                    && (sample.secondaryWeight() <= 0 || (allowedTemplates.contains(sample.secondaryRecipe())
+                        && allowedTerrain.contains(io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.byId(sample.secondaryRecipe()).category())))
+                    && (landforms.isEmpty() || landforms.contains(sample.landform()))
                     && (minHeight == null || sample.groundSurface() >= minHeight)
                     && (maxHeight == null || sample.groundSurface() <= maxHeight);
         }

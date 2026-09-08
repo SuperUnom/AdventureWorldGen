@@ -110,6 +110,8 @@ tasks.withType(JavaCompile).configureEach {
 
 dependencies {
     implementation 'com.google.code.gson:gson:2.10.1'
+    // Minecraft already ships this version; also expose it to standalone planner tests.
+    implementation 'it.unimi.dsi:fastutil:8.5.12'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
 }

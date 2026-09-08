@@ -9,6 +9,7 @@ import io.github.luoyan.adventureworldgen.terrain.Coastline;
 
 /** Builds the complete 16-block global cost field used before bounded 8-block candidate refinement. */
 public final class CostPlanner {
+    private static final int SAMPLE_CACHE_CAPACITY = 65_536;
     private final PlannerProfile profile;
     public CostPlanner(PlannerProfile profile) { this.profile = profile; }
 
@@ -23,9 +24,18 @@ public final class CostPlanner {
         var bounds = new CostDistanceMap.Bounds(-extent, extent, -extent, extent);
         if (bounds.nodeCount() > profile.maximumCostNodes())
             throw new IllegalArgumentException("cost bounds exceed configured maximum");
+        var samples = new io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<io.github.luoyan.adventureworldgen.api.MacroSample>(SAMPLE_CACHE_CAPACITY);
+        java.util.function.BiFunction<Integer,Integer,io.github.luoyan.adventureworldgen.api.MacroSample> query =
+                (x,z) -> terrain.sample(x,z);
+        MacroTerrain cachedTerrain = (x,z) -> {
+            int ix = (int)x, iz = (int)z;
+            // Reuse exact integer endpoints/midpoints. Diagonal fractions and boundary
+            // intersections retain their original coordinates and integration precision.
+            return x == ix && z == iz ? samples.get(ix,iz,query) : terrain.sample(x,z);
+        };
         byte[] allowed = new byte[Math.toIntExact(bounds.nodeCount())];
         for (int gx = -extent; gx <= extent; gx++) for (int gz = -extent; gz <= extent; gz++) {
-            var sample = terrain.sample(gx * (double) spacing, gz * (double) spacing);
+            var sample = cachedTerrain.sample(gx * (double) spacing, gz * (double) spacing);
             allowed[bounds.index(new Node(gx, gz))] = (byte) (sample.waterKind() != WaterKind.OCEAN
                     && sample.waterKind() != WaterKind.LAVA && !sample.hazardous() ? 1 : 0);
         }
@@ -44,9 +54,10 @@ public final class CostPlanner {
             }
             return java.util.List.of((low + high) * 0.5);
         };
-        var calculator = new EdgeCostCalculator(terrain, coastBoundaries, profile.costEdgeSampleSpacing());
+        var calculator = new EdgeCostCalculator(cachedTerrain, coastBoundaries, profile.costEdgeSampleSpacing());
         long retainedBytes = CompactGridCostGraph.retainedBytes(bounds.nodeCount())
-                + Math.multiplyExact(bounds.nodeCount(), Long.BYTES + 2L * Integer.BYTES + 2L);
+                + Math.multiplyExact(bounds.nodeCount(), Long.BYTES + 2L * Integer.BYTES + 2L)
+                + SAMPLE_CACHE_CAPACITY * 192L;
         if (retainedBytes > profile.maximumWorkingMemoryBytes())
             throw new io.github.luoyan.adventureworldgen.planner.PlanningFailure(
                     io.github.luoyan.adventureworldgen.planner.PlanningFailure.Code.RESOURCE_LIMIT, "cost-graph",

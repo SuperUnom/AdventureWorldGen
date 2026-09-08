@@ -29,6 +29,7 @@ final class PlanningMetrics {
         var stages=new com.google.gson.JsonObject(); millis.forEach(stages::addProperty); json.add("stage_ms",stages);
         json.addProperty("observed_heap_bytes",observedHeap);
         var gson=new com.google.gson.Gson();
+        json.add("humidity_actual_ratios",gson.toJsonTree(plan.climate().humidity().actualRatios()));
         json.add("temperature_target_ratios",gson.toJsonTree(plan.climate().targetRatios()));
         json.add("temperature_actual_ratios",gson.toJsonTree(plan.climate().actualRatios()));
         json.add("temperature_land_supply",gson.toJsonTree(plan.climate().supply()));

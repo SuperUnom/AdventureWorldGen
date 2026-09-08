@@ -1,0 +1,9 @@
+allprojects {
+ tasks.register('writePlanningBenchmarkClasspath') {
+  dependsOn 'classes'
+  doLast {
+   file('build/planning-benchmark-classpath.txt').text = sourceSets.main.output.asPath +
+       File.pathSeparator + sourceSets.main.compileClasspath.asPath
+  }
+ }
+}

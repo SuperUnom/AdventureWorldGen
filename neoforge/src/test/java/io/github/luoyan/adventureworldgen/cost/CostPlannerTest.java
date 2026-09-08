@@ -7,6 +7,31 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 class CostPlannerTest {
+    @Test void cachedSamplingPreservesDirectedCostsAtIntegerAndFractionalCoordinates() {
+        var coast=new Coastline(List.of(new Vec2(-64,-64),new Vec2(64,-64),new Vec2(64,64),new Vec2(-64,64)));
+        MacroTerrain terrain=(x,z)-> {
+            double h=80+StrictMath.sin(x*.05)*3+z*.1;
+            return new MacroSample(h,Math.abs(x)<7?h+2:Double.NaN,
+                    Math.abs(x)<7?WaterKind.RIVER:WaterKind.NONE,false,"r","hills","test");
+        };
+        var source=new Vec2(.5,-.5);
+        var optimized=new CostPlanner(PlannerProfile.V2).build(terrain,coast,source);
+        int extent=(int)StrictMath.ceil(StrictMath.hypot(64,64)/16)+2;
+        var bounds=new CostDistanceMap.Bounds(-extent,extent,-extent,extent);
+        var calculator=new EdgeCostCalculator(terrain,optimized.boundaries(),8);
+        var graph=new CompactGridCostGraph(bounds,0,0,16,calculator);
+        var reference=CostDistanceMap.build(bounds,0,0,16,node->true,graph,calculator,source,
+                PlannerProfile.V2.maximumCostNodes(),PlannerProfile.V2.maximumWorkingMemoryBytes());
+        for(int x=-extent;x<=extent;x++)for(int z=-extent;z<=extent;z++) {
+            var node=new AdjacentEdgeCache.Node(x,z);
+            assertEquals(reference.nodeCost(node),optimized.distances().nodeCost(node));
+        }
+        for(double x:new double[]{-63.25,-32,-.5,0,16,31.75,65.5})
+            for(double z:new double[]{-48.5,-16,0,16.125,63}) {
+                var point=new Vec2(x,z);
+                assertEquals(reference.costAt(point),optimized.distances().costAt(point));
+            }
+    }
     private CostPlanner.Result flat() {
         MacroTerrain terrain=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");
         var coast=new Coastline(List.of(new Vec2(-1024,-1024),new Vec2(1024,-1024),new Vec2(1024,1024),new Vec2(-1024,1024)));

@@ -43,10 +43,25 @@ public final class CanonicalConfigJson {
                     if (entry.getValue().minHeight() != null) json.name("min_height").value(entry.getValue().minHeight());
                     json.name("temperature_level").value(entry.getValue().temperatureLevel());
                     var rule=entry.getValue();
+                    json.name("allowed_templates").beginArray();
+                    for(String t:new java.util.TreeSet<>(rule.allowedTemplates()))json.value(t);
+                    json.endArray();
+                    if(!rule.landforms().isEmpty()) {
+                        json.name("landforms").beginArray();
+                        for(String form:new java.util.TreeSet<>(rule.landforms()))json.value(form);
+                        json.endArray();
+                    }
                     json.name("temperatures").beginObject();
                     for(var type:AdventureWorldConfig.TemperatureType.values())if(rule.temperatures().containsKey(type))
                         json.name(type.name().toLowerCase(java.util.Locale.ROOT)).value(rule.temperatures().get(type));
                     json.endObject();
+                    if(!rule.humidities().isEmpty()) {
+                        json.name("humidities").beginObject();
+                        for(var type:AdventureWorldConfig.HumidityType.values())if(rule.humidities().containsKey(type))
+                            json.name(type.name().toLowerCase(java.util.Locale.ROOT)).value(rule.humidities().get(type));
+                        json.endObject();
+                    }
+                    if(rule.shoreOnly())json.name("shore_only").value(true);
                     if(rule.preferredMinHeight()!=null)json.name("preferred_min_height").value(rule.preferredMinHeight());
                     if(rule.preferredMaxHeight()!=null)json.name("preferred_max_height").value(rule.preferredMaxHeight());
                     json.name("height_penalty").value(rule.heightPenalty());
@@ -87,6 +102,18 @@ public final class CanonicalConfigJson {
 
             json.name("world").beginObject();
             json.name("radius").value(config.world().radius());
+            var terrain=config.world().terrain();
+            json.name("terrain").beginObject();
+            json.name("composite").value(terrain.composite());
+            json.name("mountain_ranges").value(terrain.mountainRanges());
+            json.name("templates").beginObject();
+            for(var t:io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.values()) {
+                var s=terrain.get(t); json.name(t.id()).beginObject();
+                json.name("weight").value(s.weight()); json.name("horizontal_scale").value(s.horizontalScale());
+                json.name("vertical_amplitude").value(s.verticalAmplitude()); json.name("detail_strength").value(s.detailStrength());
+                json.endObject();
+            }
+            json.endObject(); json.endObject();
             json.endObject();
             json.endObject();
         } catch (IOException impossible) {

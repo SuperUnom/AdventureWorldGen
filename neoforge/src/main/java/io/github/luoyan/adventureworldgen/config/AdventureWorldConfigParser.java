@@ -37,7 +37,7 @@ import java.util.TreeSet;
 /** Strict parser for the first author configuration contract. */
 public final class AdventureWorldConfigParser {
     private static final Set<String> TOP_FIELDS = Set.of("world", "spawn", "biomes", "structures");
-    private static final Set<String> WORLD_FIELDS = Set.of("radius");
+    private static final Set<String> WORLD_FIELDS = Set.of("radius", "terrain");
     private static final Set<String> SPAWN_FIELDS = Set.of("biome", "structure");
     private static final Set<String> SPAWN_STRUCTURE_FIELDS = Set.of("id", "spawn_point");
     private static final Set<String> BIOME_FIELDS = Set.of("required", "filler", "terrain_rules", "blend_radius");
@@ -82,6 +82,19 @@ public final class AdventureWorldConfigParser {
 
         AdventureWorldConfig result = new AdventureWorldConfig(world, spawn, biomes, structures);
         validateCrossFields(result);
+        var enabled=result.world().terrain().enabled();
+        for(var entry:result.biomes().terrainRules().entrySet()) {
+            if(java.util.Collections.disjoint(enabled,entry.getValue().effectiveTemplates()))
+                throw conflict("$.biomes.terrain_rules."+entry.getKey(),"no allowed template is enabled");
+        }
+        for(String template:enabled) {
+            boolean covered=result.biomes().filler().stream().anyMatch(id->!result.biomes().terrainRules().containsKey(id)
+                || (result.biomes().terrainRules().get(id).effectiveTemplates().contains(template)
+                && !result.biomes().terrainRules().get(id).shoreOnly()
+                && result.biomes().terrainRules().get(id).landforms().isEmpty()
+                && result.biomes().terrainRules().get(id).minHeight()==null && result.biomes().terrainRules().get(id).maxHeight()==null));
+            if(!covered)throw conflict("$.biomes.filler","needs a filler without height/landform limits for template "+template);
+        }
         return result;
     }
 
@@ -91,7 +104,50 @@ public final class AdventureWorldConfigParser {
         if (radius <= 0) {
             throw error(path + ".radius", "must be greater than zero");
         }
-        return new WorldSettings(radius);
+        var settings=io.github.luoyan.adventureworldgen.terrain.TerrainSettings.defaults();
+        if(object.has("terrain")) {
+            String tp=path+".terrain";
+            var terrain=object(object.get("terrain"),tp,Set.of("templates","composite","mountain_ranges"));
+            var recipes=new java.util.EnumMap<io.github.luoyan.adventureworldgen.terrain.TerrainTemplate,io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.Settings>(io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.class);
+            if(terrain.has("templates")) {
+                var ts=object(terrain.get("templates"),tp+".templates",io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids());
+                for(var e:ts.entrySet()) {
+                    String rp=tp+".templates."+e.getKey();
+                    var r=object(e.getValue(),rp,Set.of("weight","horizontal_scale","vertical_amplitude","detail_strength"));
+                    var t=io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.byId(e.getKey());
+                    var d=t.defaults();
+                    try { recipes.put(t,new io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.Settings(
+                        numberOr(r,"weight",rp,d.weight()),numberOr(r,"horizontal_scale",rp,d.horizontalScale()),
+                        numberOr(r,"vertical_amplitude",rp,d.verticalAmplitude()),numberOr(r,"detail_strength",rp,d.detailStrength()))); }
+                    catch(IllegalArgumentException ex) { throw error(rp,ex.getMessage()); }
+                }
+            }
+            try { settings=new io.github.luoyan.adventureworldgen.terrain.TerrainSettings(recipes,
+                booleanOr(terrain,"composite",tp,true),booleanOr(terrain,"mountain_ranges",tp,true)); }
+            catch(IllegalArgumentException ex) { throw conflict(tp,ex.getMessage()); }
+        }
+        return new WorldSettings(radius,settings);
+    }
+
+    private double numberOr(JsonObject object,String field,String path,double fallback) {
+        return object.has(field)?finiteNumber(object.get(field),path+"."+field):fallback;
+    }
+    private boolean booleanOr(JsonObject object,String field,String path,boolean fallback) {
+        if(!object.has(field))return fallback;
+        var value=object.get(field);
+        if(!value.isJsonPrimitive()||!value.getAsJsonPrimitive().isBoolean())throw error(path+"."+field,"must be a boolean");
+        return value.getAsBoolean();
+    }
+    private Set<String> selection(JsonObject object,String field,String path,Set<String> known,Set<String> fallback) {
+        if(!object.has(field))return fallback;
+        var result=new TreeSet<String>();
+        for(var entry:array(object.get(field),path+"."+field)) {
+            String value=string(entry,path+"."+field);
+            if(!known.contains(value))throw error(path+"."+field,"unknown value: "+value);
+            result.add(value);
+        }
+        if(result.isEmpty())throw conflict(path+"."+field,"must not be empty");
+        return Set.copyOf(result);
     }
 
     private SpawnSettings parseSpawn(JsonElement element, String path) {
@@ -144,7 +200,7 @@ public final class AdventureWorldConfigParser {
                 String rulePath = path + ".terrain_rules." + entry.getKey();
                 ContentId id = contentId(new JsonPrimitive(entry.getKey()), rulePath);
                 JsonObject rule = object(nonNull(entry.getValue(), rulePath), rulePath,
-                        Set.of("allowed_terrain", "min_height", "max_height", "temperature_level", "temperatures", "preferred_min_height", "preferred_max_height", "height_penalty", "filler_weight", "adventure_level"));
+                        Set.of("allowed_terrain", "min_height", "max_height", "temperature_level", "temperatures", "preferred_min_height", "preferred_max_height", "height_penalty", "filler_weight", "adventure_level", "humidities", "shore_only", "allowed_templates", "landforms"));
                 JsonArray names = rule.has("allowed_terrain")
                         ? array(nonNull(rule.get("allowed_terrain"), rulePath + ".allowed_terrain"), rulePath + ".allowed_terrain") : null;
                 Set<String> allowed = new TreeSet<>();
@@ -173,21 +229,35 @@ public final class AdventureWorldConfigParser {
                     if(types.containsKey(AdventureWorldConfig.TemperatureType.VERY_COLD)&&types.size()>1)
                         throw conflict(rulePath+".temperatures","very_cold snowy biomes cannot also be non-snow temperature types");
                 } else types.put(AdventureWorldConfig.TemperatureType.fromLevel((int)temperature),1.0);
+                Map<AdventureWorldConfig.HumidityType,Double> humidities = new java.util.EnumMap<>(AdventureWorldConfig.HumidityType.class);
+                if(rule.has("humidities")) {
+                    var hs=object(rule.get("humidities"),rulePath+".humidities",Set.of("dry","medium","wet"));
+                    for(var e:hs.entrySet()) {
+                        double weight=finiteNumber(e.getValue(),rulePath+".humidities."+e.getKey());
+                        if(weight<=0)throw error(rulePath+".humidities", "preferences must be positive");
+                        humidities.put(AdventureWorldConfig.HumidityType.valueOf(e.getKey().toUpperCase(java.util.Locale.ROOT)),weight);
+                    }
+                    if(humidities.isEmpty())throw error(rulePath+".humidities","must not be empty");
+                }
+                boolean shoreOnly=false;
+                if(rule.has("shore_only")) {
+                    var value=rule.get("shore_only");
+                    if(!value.isJsonPrimitive()||!value.getAsJsonPrimitive().isBoolean())
+                        throw error(rulePath+".shore_only","must be a boolean");
+                    shoreOnly=value.getAsBoolean();
+                }
                 Double pmin=optionalNumber(rule,"preferred_min_height",rulePath),pmax=optionalNumber(rule,"preferred_max_height",rulePath);
                 if(pmin!=null&&pmax!=null&&pmin>pmax)throw conflict(rulePath,"preferred_min_height exceeds preferred_max_height");
                 double hp=rule.has("height_penalty")?finiteNumber(rule.get("height_penalty"),rulePath+".height_penalty"):1;
                 double fw=rule.has("filler_weight")?finiteNumber(rule.get("filler_weight"),rulePath+".filler_weight"):1;
                 if(hp<0||fw<=0)throw error(rulePath,"height_penalty must be nonnegative and filler_weight positive");
                 Integer level=rule.has("adventure_level")?adventureLevel(rule.get("adventure_level"),rulePath+".adventure_level"):null;
-                rules.put(id, new AdventureWorldConfig.TerrainRule(allowed,min,max,(int)temperature,types,pmin,pmax,hp,fw,level));
+                var templates=selection(rule,"allowed_templates",rulePath,io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids(),io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids());
+                var landforms=selection(rule,"landforms",rulePath,Set.of("lowland","foothill","slope","peak"),Set.of());
+                var parsed=new AdventureWorldConfig.TerrainRule(allowed,min,max,(int)temperature,types,pmin,pmax,hp,fw,level,humidities,shoreOnly,templates,landforms);
+                if(parsed.effectiveTemplates().isEmpty())throw conflict(rulePath,"allowed_terrain and allowed_templates have an empty intersection");
+                rules.put(id, parsed);
             }
-        }
-        // An unrestricted-height filler for every template prevents undefined runtime fallback.
-        for (String template : AdventureWorldConfig.TerrainRule.TEMPLATES) {
-            boolean covered = filler.stream().anyMatch(id -> !rules.containsKey(id)
-                    || (rules.get(id).allowedTerrain().contains(template)
-                    && rules.get(id).minHeight() == null && rules.get(id).maxHeight() == null));
-            if (!covered) throw conflict(path + ".filler", "needs a filler without height limits for terrain " + template);
         }
         long blend=object.has("blend_radius")?integer(object.get("blend_radius"),path+".blend_radius"):4;
         if(blend<0||blend>32)throw error(path+".blend_radius","must be in [0,32] blocks");

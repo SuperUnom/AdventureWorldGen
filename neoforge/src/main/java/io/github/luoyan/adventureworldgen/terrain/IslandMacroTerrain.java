@@ -35,13 +35,15 @@ public final class IslandMacroTerrain implements MacroTerrain {
             double blend = smooth(clamp(signedDistance / landBand));
             double relative = StrictMath.max(0.0, region.relativeHeight());
             return new MacroSample(seaSurface + blend * relative, Double.NaN, WaterKind.NONE, false,
-                    region.regionId(), region.template().name().toLowerCase(), version);
+                    region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
+                    region.recipe().id(),region.secondary()==null?"":region.secondary().id(),region.secondaryWeight(),region.mountainInfluence(),0,0,0);
         }
         double blend = smooth(clamp(-signedDistance / seaBand));
         // FTF-adapted deep-water envelope; the first seven blocks remain the fixed shallow shelf.
         double deep = 7.0 + 25.0 * clamp((deepOcean.sample(x, z) + 1.0) * 0.5);
         return new MacroSample(seaSurface - blend * deep, seaSurface, WaterKind.OCEAN, false,
-                region.regionId(), region.template().name().toLowerCase(), version);
+                region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
+                    region.recipe().id(),region.secondary()==null?"":region.secondary().id(),region.secondaryWeight(),region.mountainInfluence(),0,0,0);
     }
 
     private static double clamp(double value) { return StrictMath.max(0.0, StrictMath.min(1.0, value)); }

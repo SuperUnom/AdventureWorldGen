@@ -6,7 +6,7 @@ import java.util.function.DoubleConsumer;
 /** Observation only: progress never participates in generation, retries or random inputs. */
 public final class PlanningProgress {
     public enum Stage {
-        CACHE(0, 2), COAST(2, 8), EROSION(8, 46), RIVERS(46, 55), COSTS(55, 75), PLACEMENT(75, 78), TEMPERATURE(78, 81), SEEDS(81, 84), GROWTH(84, 89), STRUCTURES(89, 90), FILLER(90, 94), TRANSITION(94, 95), VALIDATION(95, 98), SAVE(98, 100);
+        CACHE(0, 2), COAST(2, 8), EROSION(8, 46), RIVERS(46, 55), COSTS(55, 75), PLACEMENT(75, 78), TEMPERATURE(78, 80), HUMIDITY(80, 81), SEEDS(81, 84), GROWTH(84, 89), STRUCTURES(89, 90), FILLER(90, 94), TRANSITION(94, 95), VALIDATION(95, 98), SAVE(98, 100);
         final int start, end;
         Stage(int start, int end) { this.start = start; this.end = end; }
         public String translationKey() { return "adventureworldgen.planning." + name().toLowerCase(java.util.Locale.ROOT); }

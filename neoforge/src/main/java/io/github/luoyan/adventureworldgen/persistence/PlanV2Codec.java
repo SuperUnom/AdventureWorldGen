@@ -58,7 +58,7 @@ public final class PlanV2Codec {
             json.name("random_keys").beginArray();
             json.value("coast-phase"); json.value("erosion"); json.value("filler-biome");
             json.value("hydrology"); json.value("joint-candidate"); json.value("region-center");
-            json.value("region-template"); json.value("structure"); json.value("terrain-noise");
+            json.value("recipe"); json.value("composite"); json.value("mountain-range"); json.value("structure"); json.value("terrain-noise");
             json.endArray();
             json.name("seed").value(plan.seed());
             json.name("biome_layout");
@@ -94,7 +94,7 @@ public final class PlanV2Codec {
                     integer(operations, "joint_operations"), string(operations, "terrain_version"));
             AdventurePlanView.SpawnPosition spawn = readSpawn(root.get("spawn"));
             JsonObject terrain = object(root.get("terrain"), "$.terrain",
-                    Set.of("biome_patches", "coast", "erosion", "land_band", "river_network", "sea_band", "sea_surface", "terrain_version", "capacity_regions"));
+                    Set.of("biome_patches", "coast", "erosion", "land_band", "river_network", "sea_band", "sea_surface", "terrain_version", "capacity_regions", "mountain_ranges", "recipe_regions", "recipe_settings"));
             double seaSurface = finite(terrain, "sea_surface");
             double landBand = positive(terrain, "land_band");
             double seaBand = positive(terrain, "sea_band");
@@ -106,9 +106,15 @@ public final class PlanV2Codec {
             ErosionDeltaField erosion = terrain.has("erosion") ? readErosion(object(terrain.get("erosion"), "$.terrain.erosion",
                     Set.of("deltas_base64", "height", "operation_count", "origin_x", "origin_z", "spacing", "width"))) : null;
             List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
-            return new GeneratedAdventurePlan(seed, config, coast, network, seaSurface, landBand, seaBand,
+            var restored = new GeneratedAdventurePlan(seed, config, coast, network, seaSurface, landBand, seaBand,
                     terrainVersion, spawn, patches, structures, diagnostics, erosion, readCapacities(terrain),
                     java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),GeneratedAdventurePlan.BiomeLayout.class),"missing frozen biome layout"));
+            if(!settingsJson(config.world().terrain()).equals(terrain.get("recipe_settings")))
+                throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
+            // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.
+            if(!LAYOUT_JSON.toJsonTree(restored.recipeRegions()).equals(terrain.get("recipe_regions")))
+                throw new IllegalArgumentException("recipe region manifest does not match frozen terrain inputs");
+            return restored;
         } catch (PlanningFailure failure) {
             throw failure;
         } catch (RuntimeException malformed) {
@@ -145,10 +151,22 @@ public final class PlanV2Codec {
         json.name("coast").beginArray();
         for (Vec2 point : plan.coastline().vertices()) writePoint(json, point);
         json.endArray();
+        json.name("recipe_settings"); LAYOUT_JSON.toJson(settingsJson(plan.terrainSettings()),json);
+        json.name("recipe_regions"); LAYOUT_JSON.toJson(plan.recipeRegions(),new com.google.gson.reflect.TypeToken<List<io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Region>>(){}.getType(),json);
+        json.name("mountain_ranges").beginArray();
+        for(var range:plan.capacities().ranges().ranges()) {
+            json.beginObject();json.name("id").value(range.id());json.name("width").value(range.width());
+            json.name("spine").beginArray();for(var point:range.spine())writePoint(json,point);json.endArray();json.endObject();
+        }
+        json.endArray();
         json.name("capacity_regions").beginArray();
         for(var r:plan.capacities().reservations()) {
             json.beginObject(); json.name("grid_x").value(r.gridX()); json.name("grid_z").value(r.gridZ());
             json.name("template").value(r.template().name()); json.name("reserved_area").value(r.reservedArea());
+            json.name("recipe").value(r.recipe().id());
+            if(r.secondary()!=null)json.name("secondary").value(r.secondary().id());
+            json.name("allowed_templates").beginArray();for(String t:new java.util.TreeSet<>(r.allowedTemplates()))json.value(t);json.endArray();
+            json.name("base_elevation").value(r.baseElevation());json.name("amplitude").value(r.amplitude());json.name("strategy").value(r.strategy());
             if(r.minHeight()!=null)json.name("min_height").value(r.minHeight());
             if(r.maxHeight()!=null)json.name("max_height").value(r.maxHeight());
             json.endObject();
@@ -194,12 +212,40 @@ public final class PlanV2Codec {
     private static io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan readCapacities(JsonObject terrain) {
         var result=new ArrayList<io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation>();
         if(terrain.has("capacity_regions"))for(var value:array(terrain,"capacity_regions")) {
-            var item=object(value,"capacity_region",Set.of("grid_x","grid_z","template","reserved_area","min_height","max_height"));
+            var item=object(value,"capacity_region",Set.of("grid_x","grid_z","template","reserved_area","min_height","max_height","recipe","secondary","allowed_templates","base_elevation","amplitude","strategy"));
             result.add(new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation(integer(item,"grid_x"),integer(item,"grid_z"),
                     io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Template.valueOf(string(item,"template")),
-                    item.has("min_height")?finite(item,"min_height"):null,item.has("max_height")?finite(item,"max_height"):null,integer(item,"reserved_area")));
+                    item.has("min_height")?finite(item,"min_height"):null,item.has("max_height")?finite(item,"max_height"):null,integer(item,"reserved_area"),
+                    io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.byId(string(item,"recipe")),
+                    item.has("secondary")?io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.byId(string(item,"secondary")):null,
+                    stringSet(array(item,"allowed_templates")),finite(item,"base_elevation"),positive(item,"amplitude"),string(item,"strategy")));
         }
-        return new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(result);
+        var ranges=new ArrayList<io.github.luoyan.adventureworldgen.terrain.MountainRangePlan.Range>();
+        for(var value:array(terrain,"mountain_ranges")) {
+            var item=object(value,"mountain_range",Set.of("id","width","spine"));
+            ranges.add(new io.github.luoyan.adventureworldgen.terrain.MountainRangePlan.Range(string(item,"id"),readPoints(array(item,"spine"),"spine"),positive(item,"width")));
+        }
+        return new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(result,new io.github.luoyan.adventureworldgen.terrain.MountainRangePlan(ranges));
+    }
+
+    private static JsonObject settingsJson(io.github.luoyan.adventureworldgen.terrain.TerrainSettings settings) {
+        var result=new JsonObject();result.addProperty("composite",settings.composite());result.addProperty("mountain_ranges",settings.mountainRanges());
+        var templates=new JsonObject();
+        for(var t:io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.values()) {
+            var s=settings.get(t);var value=new JsonObject();value.addProperty("weight",s.weight());
+            value.addProperty("horizontal_scale",s.horizontalScale());value.addProperty("vertical_amplitude",s.verticalAmplitude());value.addProperty("detail_strength",s.detailStrength());
+            templates.add(t.id(),value);
+        }
+        result.add("templates",templates);return result;
+    }
+
+    private static Set<String> stringSet(JsonArray array) {
+        var values=new java.util.TreeSet<String>();
+        for(var v:array) {
+            if(!v.isJsonPrimitive()||!v.getAsJsonPrimitive().isString())throw new IllegalArgumentException("expected string selection");
+            if(!values.add(v.getAsString()))throw new IllegalArgumentException("duplicate selection");
+        }
+        return Set.copyOf(values);
     }
 
     private static void writeErosion(JsonWriter json, ErosionDeltaField field) throws IOException {

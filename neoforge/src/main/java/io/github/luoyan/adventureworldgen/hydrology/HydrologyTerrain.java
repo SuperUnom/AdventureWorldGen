@@ -82,8 +82,7 @@ public final class HydrologyTerrain implements MacroTerrain {
         if (best == null) return original;
         WaterKind kind = original.waterKind() == WaterKind.OCEAN ? WaterKind.OCEAN : best.kind;
         double water = kind == WaterKind.OCEAN ? original.waterSurface() : kind == WaterKind.NONE ? Double.NaN : best.water;
-        return new MacroSample(StrictMath.min(original.groundSurface(), best.ground), water, kind, false,
-                original.regionId(), original.terrainTemplate(), original.terrainVersion() + "+" + network.version());
+        return original.withSurface(StrictMath.min(original.groundSurface(), best.ground), water, kind, original.terrainVersion() + "+" + network.version());
     }
 
     /** Conservative bank rasterization: retain the edge voxel where floor rounding would open

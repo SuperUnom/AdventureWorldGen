@@ -10,6 +10,8 @@ import java.util.*;
 public final class ClimatePlan {
     public static final int STEP=32;
     private final AdventureWorldConfig config;
+    private HumidityPlan humidity;
+    private final List<ContentId> shores;
     private final ValueNoise regional, detail, warpX, warpZ, foothills;
     private final int heightExtent,heightWidth;
     private final double[] slopeHeight,regionalHeight;
@@ -17,6 +19,8 @@ public final class ClimatePlan {
     private double angle, low, high;
     private final double[] thresholds=new double[3];
     private boolean snowBoundary;
+    private final List<ContentId> snowFillers,warmFillers;
+    private final boolean altitudeSnowBiomes;
     private final TemperatureType spawnType;
     private final double[] ratios=new double[4], actual=new double[4];
     private final List<Site> sites=new ArrayList<>();
@@ -29,10 +33,10 @@ public final class ClimatePlan {
     public record State(int extent, double[] slopeHeight, double[] regionalHeight, double angle,
                         double low, double high, double[] thresholds, boolean snowBoundary,
                         TemperatureType spawnType, double[] ratios, double[] actual,
-                        List<Correction> corrections, List<Supply> supply) {}
+                        List<Correction> corrections, List<Supply> supply, HumidityPlan.State humidity) {}
     public State snapshot() {
         return new State(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
-                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply));
+                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot());
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain) {
         this(seed,config,terrain,ignored->{});
@@ -41,7 +45,15 @@ public final class ClimatePlan {
         this(seed,config,terrain,progress,null);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,State frozen) {
-        this.config=config;radius=config.world().radius();core=Math.min(64,radius/8);
+        shores=config.biomes().filler().stream().filter(id->{var r=config.biomes().terrainRules().get(id);return r!=null&&r.shoreOnly();}).toList();
+        this.config=config;
+        altitudeSnowBiomes=config.biomes().filler().stream().anyMatch(VanillaAltitudeSnow::applies)
+                ||config.biomes().required().stream().anyMatch(r->VanillaAltitudeSnow.applies(r.id()))
+                ||config.biomes().terrainRules().keySet().stream().anyMatch(VanillaAltitudeSnow::applies)
+                ||config.structures().stream().flatMap(s->s.allowedBiomes().ids().stream()).anyMatch(VanillaAltitudeSnow::applies);
+        snowFillers=config.biomes().filler().stream().filter(id->VanillaAltitudeSnow.applies(id)||preferences(config,id).containsKey(TemperatureType.VERY_COLD)).toList();
+        warmFillers=config.biomes().filler().stream().filter(id->VanillaAltitudeSnow.applies(id)||!preferences(config,id).containsKey(TemperatureType.VERY_COLD)).toList();
+        radius=config.world().radius();core=Math.min(64,radius/8);
         regional=new ValueNoise(seed,"climate/region",Math.max(128,radius*.48));
         detail=new ValueNoise(seed,"climate/detail",Math.max(96,radius*.13));
         warpX=new ValueNoise(seed,"climate/warp-x",Math.max(192,radius*.32));
@@ -68,6 +80,7 @@ public final class ClimatePlan {
             for(var c:frozen.corrections())if(!Double.isFinite(c.x())||!Double.isFinite(c.z())||!Double.isFinite(c.radius())
                     ||!Double.isFinite(c.delta())||c.radius()<=0)throw new IllegalArgumentException("invalid climate correction");
             corrections.addAll(frozen.corrections());supply.addAll(frozen.supply());
+            humidity=new HumidityPlan(seed,config,terrain,this,ignored->{},Objects.requireNonNull(frozen.humidity(),"missing frozen humidity"));
             return;
         }
         double[] heights=new double[heightWidth*heightWidth];
@@ -100,8 +113,8 @@ public final class ClimatePlan {
         for(int i=0;i<4;i++)ratios[i]=.8*(rt>0?required[i]/rt:1.0/4)+.2*(ft>0?filler[i]/ft:1.0/4);
         // Only request snow land when the profile actually supplies snowy content.
         for(int i=1;i<4;i++)ratios[i]=Math.max(.04,ratios[i]);
-        if(required[0]+filler[0]>0)ratios[0]=Math.max(.04,ratios[0]);
-        snowBoundary=filler[0]>0;
+        if(required[0]+filler[0]>0||altitudeSnowBiomes)ratios[0]=Math.max(.04,ratios[0]);
+        snowBoundary=filler[0]>0||altitudeSnowBiomes;
         if(required[0]>0&&!snowBoundary)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"climate-supply",
                 "very_cold requirements need a snowy filler for remaining snow land");
         double sum=Arrays.stream(ratios).sum();for(int i=0;i<4;i++)ratios[i]/=sum;
@@ -132,6 +145,8 @@ public final class ClimatePlan {
             supply.add(new Supply(id.value(),d.area().target(),legal,climateArea(id)));
         }
         progress.accept(1);
+        humidity=new HumidityPlan(seed,config,terrain,this,
+                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.HUMIDITY),null);
     }
     private void distribute(ContentId id,double amount,double[] out) {
         var prefs=preferences(config,id);
@@ -212,7 +227,14 @@ public final class ClimatePlan {
         double d=Math.hypot(x,z),influence=1-Math.clamp((d-core)/(core*3),0,1);
         influence=influence*influence*(3-2*influence);
         double target=rawCenter(spawnType);
-        return value*(1-influence)+target*influence;
+        value=value*(1-influence)+target*influence;
+        // Climate layout respects terrain supply: never freeze badlands into a snow band without
+        // a legal snowy filler, or expose a snow-only slope as warm bare ground.
+        if(snowBoundary) {
+            if(value<thresholds[0]&&snowFillers.stream().noneMatch(id->config.biomes().allows(id,s)&&snowyBiomeAt(id,x,z,s)))value=thresholds[0]+.001;
+            else if(value>=thresholds[0]&&warmFillers.stream().noneMatch(id->config.biomes().allows(id,s)&&!snowyBiomeAt(id,x,z,s)))value=thresholds[0]-.001;
+        }
+        return value;
     }
     private double rawCenter(TemperatureType type) {
         int i=type.ordinal();
@@ -232,8 +254,28 @@ public final class ClimatePlan {
     /** Snow and non-snow ownership never cross the snow band; the other climate preferences stay soft. */
     public boolean allowsSnowClass(ContentId id,double x,double z,MacroSample sample) {
         double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
-        return !snowBoundary || preferences(config,id).containsKey(TemperatureType.VERY_COLD)
+        return !snowBoundary || snowyBiomeAt(id,qx,qz,sample)
                 == (typeAt(qx,qz,sample)==TemperatureType.VERY_COLD);
+    }
+    int altitudeSnowAt(double x,double z,MacroSample s) {
+        return altitudeSnowBiomes?VanillaAltitudeSnow.bands((int)(Math.floor(x/4)*4+2),
+                (int)Math.ceil(s.groundSurface())+1,(int)(Math.floor(z/4)*4+2)):0;
+    }
+    private boolean snowyBiomeAt(ContentId id,double x,double z,MacroSample sample) {
+        return VanillaAltitudeSnow.applies(id)?(altitudeSnowAt(x,z,sample)&(1<<VanillaAltitudeSnow.band(id)))!=0
+                :preferences(config,id).containsKey(TemperatureType.VERY_COLD);
+    }
+    public HumidityPlan humidity(){return humidity;}
+    /** Every ownership path shares moisture, snow and intermittent shore constraints. */
+    public boolean allowsEnvironment(ContentId id,double x,double z,MacroSample sample) {
+        double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
+        if(!allowsSnowClass(id,qx,qz,sample)||!humidity.allows(id,qx,qz,sample))return false;
+        var rule=config.biomes().terrainRules().get(id);
+        if(rule!=null&&rule.shoreOnly())return humidity.isShore(qx,qz,sample);
+        if(shores.isEmpty()||!humidity.isShore(qx,qz,sample))return true;
+        for(var shore:shores)if(config.biomes().allows(shore,sample)&&allowsSnowClass(shore,qx,qz,sample)
+                &&humidity.allows(shore,qx,qz,sample))return false;
+        return true;
     }
     public boolean prefersType(ContentId id,double x,double z,MacroSample sample) {
         return preferences(config,id).containsKey(typeAt(x,z,sample));
@@ -247,7 +289,7 @@ public final class ClimatePlan {
             best=Math.min(best,deviation*deviation*.4-Math.log(e.getValue()/max)*.3);
         }
         var rule=config.biomes().terrainRules().get(id);
-        return best+(rule==null?0:rule.heightCost(sample.groundSurface()));
+        return best+(rule==null?0:rule.heightCost(sample.groundSurface()))+(humidity==null?0:humidity.cost(id,x,z,sample));
     }
     public static Map<TemperatureType,Double> preferences(AdventureWorldConfig config,ContentId id) {
         var rule=config.biomes().terrainRules().get(id);

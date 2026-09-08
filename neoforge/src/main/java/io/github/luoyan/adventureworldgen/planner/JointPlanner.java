@@ -56,7 +56,7 @@ public final class JointPlanner {
         climate=new ClimatePlan(seed,config,terrain,io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE));
         checkpoint.accept("climate");
         io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS);
-        BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsSnowClass(biome,x,z,placementIndex.sample(x,z));
+        BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsEnvironment(biome,x,z,placementIndex.sample(x,z));
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
                 "Placement index built in {0} ms", (System.nanoTime() - indexStart) / 1_000_000);
 
@@ -485,7 +485,7 @@ public final class JointPlanner {
         }
         return true;
     }
-    private static boolean sufficientlyFlat(MacroTerrain terrain, int x, int z) {
+    static boolean sufficientlyFlat(MacroTerrain terrain, int x, int z) {
         double minimum = Double.POSITIVE_INFINITY, maximum = Double.NEGATIVE_INFINITY;
         for (int dx : new int[]{-16, 16}) for (int dz : new int[]{-16, 16}) {
             var sample = terrain.sample(x + dx + 0.5, z + dz + 0.5);

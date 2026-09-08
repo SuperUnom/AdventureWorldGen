@@ -3,6 +3,8 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import java.util.*;
+import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
+import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 
 /** One coarse candidate catalog and lazily cached exact quart samples for a frozen terrain. */
 public final class PlacementIndex {
@@ -11,8 +13,10 @@ public final class PlacementIndex {
     private final JointPlanner.LevelConstraint levels;
     private final JointPlanner.BiomeConstraint adapters;
     private final AdventureWorldConfig config;
-    private final Map<Long, MacroSample> samples = new HashMap<>();
-    private final Map<ContentId, Map<Long, Boolean>> compatibility = new HashMap<>();
+    // Packed x/z keys collide heavily under Long.hashCode() (x XOR z).
+    // Primitive maps mix the full key and avoid boxed tree nodes on the million-cell grid.
+    private final Long2ObjectOpenHashMap<MacroSample> samples = new Long2ObjectOpenHashMap<>();
+    private final Map<ContentId, Long2ByteOpenHashMap> compatibility = new HashMap<>();
     private final Map<Integer, List<Point>> candidates = new HashMap<>();
     private final List<Point> land = new ArrayList<>();
     private final Map<Integer,List<Point>> finerLand = new HashMap<>();
@@ -40,17 +44,26 @@ public final class PlacementIndex {
     public MacroSample sampleAt(double x,double z) { return terrain.sample(x,z); }
     public MacroSample sample(int x, int z) {
         long cell = CellMask.key(x,z);
-        return samples.computeIfAbsent(cell, ignored -> {
+        MacroSample result = samples.get(cell);
+        if (result == null) {
             queries++;
-            return terrain.sample(CellMask.x(cell) + 2, CellMask.z(cell) + 2);
-        });
+            result = terrain.sample(CellMask.x(cell) + 2, CellMask.z(cell) + 2);
+            samples.put(cell, result);
+        }
+        return result;
     }
     public boolean allows(ContentId biome, int x, int z) {
-        return compatibility.computeIfAbsent(biome, ignored -> new HashMap<>()).computeIfAbsent(CellMask.key(x,z), cell -> {
+        var cache = compatibility.computeIfAbsent(biome, ignored -> new Long2ByteOpenHashMap());
+        long cell = CellMask.key(x,z);
+        byte result = cache.get(cell);
+        if (result == 0) {
             MacroSample s = sample(x,z);
-            return s.waterKind() == WaterKind.NONE && !s.hazardous()
+            boolean allowed = s.waterKind() == WaterKind.NONE && !s.hazardous()
                     && config.biomes().allows(biome,s) && adapters.accepts(biome,CellMask.x(cell)+2,CellMask.z(cell)+2);
-        });
+            result = (byte) (allowed ? 1 : 2);
+            cache.put(cell, result);
+        }
+        return result == 1;
     }
     public List<Point> candidates(int level) {
         return candidates.computeIfAbsent(level, ignored -> land.stream().filter(p -> levels.mightAccept(level,p.x,p.z)).toList());

@@ -45,4 +45,24 @@ class StructureBiomePlanningTest {
         assertTrue(error.getMessage().contains("structure-in-biome"));
         assertTrue(error.getMessage().contains("test:keep"));
     }
+    @Test void smallCarrierRetainsUsableInteriorOnUnevenTerrain() {
+        var c=new AdventureWorldConfigParser().parse("""
+          {"world":{"radius":512},"spawn":{"biome":"test:plains"},
+           "biomes":{"required":[],"filler":["test:plains"]},
+           "structures":[{"id":"test:keep","adventure_level":4,"count":{"min":1,"max":1},
+           "allowed_biomes":{"id":["test:desert"],"area":{"min":4096,"max":8192}},"entrance":[0,0,0]}]}
+          """);
+        MacroTerrain uneven=(x,z)->new MacroSample(90+12*Math.sin(x/120)+7*Math.cos(z/80),
+                Double.NaN,WaterKind.NONE,false,"r","hills","test");
+        for(long seed:new long[]{9,7331,8844}) {
+            var result=new JointPlanner(PlannerProfile.V2).plan(seed,c,uneven,(d,x,y,z,s)->
+                    new AdventurePlanView.PlannedStructure(d.instanceId(),d.structureId(),x,y,z,"north",
+                            List.of(new AdventurePlanView.PlannedPiece(d.instanceId()+"/0",x-16,y,z-10,x+29,y+8,z+16,new byte[]{1}))));
+            var carrier=result.patches().stream().filter(p->p.patchId().startsWith("patch/carrier/")).findFirst().orElseThrow();
+            assertTrue(carrier.area()>=4096&&carrier.area()<=8192);
+            var structure=result.structures().getFirst();
+            for(int x=structure.originX()-16;x<=structure.originX()+29;x++)
+                for(int z=structure.originZ()-10;z<=structure.originZ()+16;z++)assertTrue(carrier.contains(x,z));
+        }
+    }
 }

@@ -20,6 +20,7 @@ import net.minecraft.world.level.NoiseColumn;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
+import net.minecraft.world.level.biome.Biomes;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -30,6 +31,8 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
+import net.minecraft.world.level.levelgen.SurfaceRules;
+import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.nbt.NbtIo;
@@ -65,6 +68,9 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private final NoiseBasedChunkGenerator vanillaDelegate;
     private final NoiseBasedChunkGenerator oceanDelegate;
     private final NoiseGeneratorSettings oceanSettings;
+    private final SurfaceRules.RuleSource surfaceRule;
+    private final io.github.luoyan.adventureworldgen.hydrology.RiverSediments riverSediments =
+            new io.github.luoyan.adventureworldgen.hydrology.RiverSediments();
     private final HolderLookup.RegistryLookup<NormalNoise.NoiseParameters> noises;
     private volatile RandomState oceanRandomState;
 
@@ -81,6 +87,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         this.profile = profile;
         Holder<NoiseGeneratorSettings> overworld = noiseSettings.getOrThrow(NoiseGeneratorSettings.OVERWORLD);
         this.vanillaDelegate = new NoiseBasedChunkGenerator(biomeSource, overworld);
+        this.surfaceRule = overworld.value().surfaceRule();
         this.noises = noises;
         Holder<NoiseGeneratorSettings> ocean = noiseSettings.getOrThrow(net.minecraft.resources.ResourceKey.create(
                 Registries.NOISE_SETTINGS, ResourceLocation.fromNamespaceAndPath("adventureworldgen", "ocean")));
@@ -148,37 +155,70 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override
     public void buildSurface(WorldGenRegion region, StructureManager structures, RandomState randomState,
                              ChunkAccess chunk) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
-        if (hasOcean(chunk, plan)) oceanDelegate.buildSurface(region, structures, oceanState(plan), chunk);
-        buildLandSurface(region.registryAccess(),chunk);
+        buildPlannedSurface(region.registryAccess(), chunk);
     }
 
-    /** Land surface pass, shared by normal world generation and chunk-level integration checks. */
-    public void buildLandSurface(net.minecraft.core.RegistryAccess registries,ChunkAccess chunk) {
+    /** The same surface pass is used in production and chunk-level integration checks. */
+    public void buildPlannedSurface(RegistryAccess registries, ChunkAccess chunk) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        // Surface noises use the world seed and our sea-level datum. Rules come from the
+        // registered overworld settings, including datapack changes, not adapter palettes.
+        RandomState state = oceanState(plan);
+        // Surface rules query these columns repeatedly. Snapshot the already composed floor
+        // before painting instead of regenerating 384-block columns (including ocean noise).
+        int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
+        int[] floors = new int[256];
+        for (int x = 0; x < 16; x++) for (int z = 0; z < 16; z++)
+            floors[x * 16 + z] = chunk.getHeight(Heightmap.Types.OCEAN_FLOOR_WG, x, z) + 1;
+        var surfaceNoise = new PlannedSurfaceNoiseChunk(chunk, state, oceanSettings,
+                (x, z) -> x >= minX && x < minX + 16 && z >= minZ && z < minZ + 16
+                        ? floors[(x - minX) * 16 + z - minZ]
+                        : getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, chunk, state));
+        BiomeManager biomes = new BiomeManager(
+                (x, y, z) -> getBiomeSource().getNoiseBiome(x, y, z, state.sampler()), plan.seed()) {
+            @Override public Holder<Biome> getBiome(BlockPos pos) {
+                // Match the planner's stored quart cells without a second biome-boundary warp.
+                Holder<Biome> biome = getBiomeSource().getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2,
+                        pos.getZ() >> 2, state.sampler());
+                // 1.21.1 SurfaceSystem probes the air above the column to grow badlands
+                // pillars before applying rules. Disable that terrain extension only;
+                // rule evaluations inside the column still see ERODED_BADLANDS.
+                if (biome.is(Biomes.ERODED_BADLANDS) && pos.getY() > chunk.getHeight(
+                        Heightmap.Types.WORLD_SURFACE_WG, pos.getX() & 15, pos.getZ() & 15))
+                    return registries.registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.BADLANDS);
+                return biome;
+            }
+        };
+        state.surfaceSystem().buildSurface(state, biomes, registries.registryOrThrow(Registries.BIOME),
+                false, new WorldGenerationContext(this, chunk), chunk, surfaceNoise, surfaceRule);
+        buildRiverbeds(registries, chunk, plan);
+        Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG,
+                Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.MOTION_BLOCKING,
+                Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
+    }
+
+    private void buildRiverbeds(RegistryAccess registries, ChunkAccess chunk, GeneratedAdventurePlan plan) {
         int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
         BlockPos.MutableBlockPos position = new BlockPos.MutableBlockPos();
         for (int localX = 0; localX < 16; localX++) for (int localZ = 0; localZ < 16; localZ++) {
             int x = minX + localX, z = minZ + localZ;
             var sample = plan.terrainAt(x + 0.5, z + 0.5);
-            if (sample.waterKind() == WaterKind.OCEAN) continue;
-            var palette = MinecraftAdapters.builtIn().biome(plan.surfaceBiomeAt(x, z)).surface(sample, plan.seed(), x, z);
+            if (sample.waterKind() != WaterKind.RIVER && sample.waterKind() != WaterKind.LAKE) continue;
+            int bedY = plan.solidSurfaceAt(x, z, sample) - 1;
+            if (bedY <= MIN_Y || bedY + 1 >= MIN_Y + DEPTH
+                    || !chunk.getBlockState(position.set(x, bedY + 1, z)).is(Blocks.WATER)) continue;
+            var palette = riverSediments.surface(sample, plan.seed(), x, z);
             Block top = registries.registryOrThrow(Registries.BLOCK)
                     .get(ResourceLocation.parse(palette.top().value()));
             Block under = registries.registryOrThrow(Registries.BLOCK)
                     .get(ResourceLocation.parse(palette.under().value()));
             if (top == null || under == null) throw new IllegalStateException("biome adapter returned an unregistered block");
-            for (int y = MIN_Y + DEPTH - 1; y >= MIN_Y; y--) {
-                BlockState state = chunk.getBlockState(position.set(x, y, z));
-                if (state.blocksMotion()) {
-                    chunk.setBlockState(position, top.defaultBlockState(), false);
-                    for (int depth = 1; depth <= palette.underDepth() && y - depth > MIN_Y; depth++) {
-                        position.set(x, y - depth, z);
-                        if (chunk.getBlockState(position).blocksMotion())
-                            chunk.setBlockState(position, under.defaultBlockState(), false);
-                    }
-                    break;
-                }
+            if (!chunk.getBlockState(position.set(x, bedY, z)).blocksMotion()) continue;
+            chunk.setBlockState(position, top.defaultBlockState(), false);
+            for (int depth = 1; depth <= palette.underDepth() && bedY - depth > MIN_Y; depth++) {
+                position.set(x, bedY - depth, z);
+                if (!chunk.getBlockState(position).blocksMotion()) break;
+                chunk.setBlockState(position, under.defaultBlockState(), false);
             }
         }
     }
@@ -240,6 +280,15 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override
     public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor level,
                              RandomState randomState) {
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        if (oceanBlend(plan, x, z) <= 0) {
+            MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
+            int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
+            int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
+                    MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
+            return (type.isOpaque().test(Blocks.WATER.defaultBlockState())
+                    ? StrictMath.max(solidTop, waterTop) : solidTop) + 1;
+        }
         NoiseColumn column = getBaseColumn(x, z, level, randomState);
         for (int y = MIN_Y + DEPTH - 1; y >= MIN_Y; y--)
             if (type.isOpaque().test(column.getBlock(y))) return y + 1;
@@ -283,7 +332,9 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         MacroSample sample = RuntimePlanRegistry.await(profile).terrainAt(pos.getX(), pos.getZ());
         lines.add("AdventureWorldGen " + sample.terrainVersion());
         lines.add(io.github.luoyan.adventureworldgen.runtime.RuntimePlanner.IMPLEMENTATION_REVISION);
-        lines.add("Region " + sample.regionId() + " / " + sample.terrainTemplate());
+        lines.add("Region " + sample.regionId() + " / " + sample.terrainTemplate() + " / " + sample.recipe());
+        if(sample.secondaryWeight()>0)lines.add("Composite " + sample.secondaryRecipe() + " @ " + String.format(java.util.Locale.ROOT,"%.2f",sample.secondaryWeight()));
+        lines.add(String.format(java.util.Locale.ROOT,"%s slope %.2f relief %.1f range %.2f",sample.landform(),sample.slope(),sample.localRelief(),sample.mountainInfluence()));
     }
 
     private static int clamp(int value, int minimum, int maximum) {

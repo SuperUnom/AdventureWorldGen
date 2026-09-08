@@ -28,7 +28,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final io.github.luoyan.adventureworldgen.planner.FillerLayout filler;
     private final java.util.Set<String> blendProtectedPatches=new java.util.HashSet<>();
     private final AdventureWorldConfig config;
-    private final HydrologyTerrain terrain;
+    private final MacroTerrain terrain;
+    private final HydrologyTerrain waterTerrain;
+    private final RegionTerrain regions;
     private final MacroTerrain islandTerrain;
     private final SpawnPosition spawn;
     private final Coastline coastline;
@@ -43,6 +45,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final ErosionDeltaField erosion;
     private final io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities;
     private final io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend blockBlend;
+    private final ColumnQueryCache<MacroSample> columnSamples = new ColumnQueryCache<>(16384);
+    private final ColumnQueryCache<ContentId> columnBiomes;
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
@@ -86,11 +90,13 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this.structures = List.copyOf(structures);
         this.diagnostics = diagnostics;
         this.erosion = erosion;
-        MacroTerrain island = new IslandMacroTerrain(coastline, new RegionTerrain(seed, PlannerProfile.V2,capacities), seed,
+        this.regions=new RegionTerrain(seed, PlannerProfile.V2,capacities,config.world().terrain(),config);
+        MacroTerrain island = new IslandMacroTerrain(coastline, regions, seed,
                 seaSurface, landBand, seaBand, terrainVersion);
         this.islandTerrain = island;
-        MacroTerrain eroded = erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v1");
-        this.terrain = new HydrologyTerrain(eroded, riverNetwork);
+        MacroTerrain eroded = erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v2");
+        this.waterTerrain = new HydrologyTerrain(eroded, riverNetwork);
+        this.terrain = new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain);
         if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
             throw new IllegalArgumentException("incomplete frozen biome layout");
         climate=new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},frozenLayout==null?null:frozenLayout.climate());
@@ -105,6 +111,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             if(!ids.containsAll(frozenLayout.protectedPatches()))throw new IllegalArgumentException("unknown blend protection patch");
             blendProtectedPatches.addAll(frozenLayout.protectedPatches());
         }
+        // Minimum-area protection can change biome selection during construction.
+        // Publish the cache only after that layout is final, and keep it local to this plan.
+        columnBiomes = new ColumnQueryCache<>(16384);
     }
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
@@ -119,6 +128,11 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         // Rounding the warped coordinates instead creates uneven cells and comb-like aliases.
         blockX = Math.floorDiv(blockX, 4) * 4 + 2;
         blockZ = Math.floorDiv(blockZ, 4) * 4 + 2;
+        if (columnBiomes != null) return columnBiomes.get(blockX, blockZ, this::uncachedBiomeAt);
+        return uncachedBiomeAt(blockX, blockZ);
+    }
+
+    private ContentId uncachedBiomeAt(int blockX, int blockZ) {
         MacroSample sample = terrain.sample(blockX, blockZ);
         if (sample.waterKind() == WaterKind.OCEAN) return OCEAN;
         ContentId land = mixedLandBiomeAt(blockX, blockZ, sample);
@@ -144,7 +158,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             int qx=Math.floorDiv(nx,4)*4+2,qz=Math.floorDiv(nz,4)*4+2;
             var nearby=terrain.sample(qx,qz);
             return nearby.waterKind()==WaterKind.NONE?landBiomeAt(qx,qz,nearby):fallback;
-        },id->config.biomes().allows(id,sample)&&climate.allowsSnowClass(id,x,z,sample),fallback);
+        },id->config.biomes().allows(id,sample)&&climate.allowsEnvironment(id,x,z,sample),fallback);
     }
 
     private double spawnPositionX(){return spawn==null?0:spawn.x();}
@@ -173,8 +187,14 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         return new ContentId(frozen ? "minecraft:frozen_river" : "minecraft:river");
     }
 
-    @Override public MacroSample terrainAt(double blockX, double blockZ) { return terrain.sample(blockX, blockZ); }
-    public int solidSurfaceAt(int x, int z, MacroSample sample) { return terrain.solidSurfaceAt(x, z, sample); }
+    @Override public MacroSample terrainAt(double blockX, double blockZ) {
+        int x = (int) StrictMath.floor(blockX), z = (int) StrictMath.floor(blockZ);
+        // Cache exact block centers only. Arbitrary planning/debug coordinates keep their precision.
+        if (blockX == x + 0.5 && blockZ == z + 0.5)
+            return columnSamples.get(x, z, (cx, cz) -> terrain.sample(cx + 0.5, cz + 0.5));
+        return terrain.sample(blockX, blockZ);
+    }
+    public int solidSurfaceAt(int x, int z, MacroSample sample) { return waterTerrain.solidSurfaceAt(x, z, sample); }
     @Override public List<PlannedStructure> structuresIntersecting(int chunkX, int chunkZ) {
         int minX = chunkX << 4, minZ = chunkZ << 4, maxX = minX + 15, maxZ = minZ + 15;
         List<PlannedStructure> result = new ArrayList<>();
@@ -200,6 +220,13 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public double seaSurface() { return seaSurface; }
     public double landBand() { return landBand; }
     public double seaBand() { return seaBand; }
+    public io.github.luoyan.adventureworldgen.terrain.TerrainSettings terrainSettings() {return config.world().terrain();}
+    public java.util.List<RegionTerrain.Region> recipeRegions() {
+        int extent=(int)Math.ceil(config.world().radius()/PlannerProfile.V2.terrain().regionSpacing())+3;
+        var list=new java.util.ArrayList<RegionTerrain.Region>();
+        for(int x=-extent;x<=extent;x++)for(int z=-extent;z<=extent;z++)list.add(regions.region(x,z));
+        return java.util.List.copyOf(list);
+    }
     public String terrainVersion() { return terrainVersion; }
     public List<PlannedBiomePatch> biomePatches() { return biomePatches; }
     public List<PlannedStructure> structures() { return structures; }
@@ -271,7 +298,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         public static PlanDiagnostics basic(Coastline coast, RiverNetwork rivers) {
             return new PlanDiagnostics(coast.vertices().size(), rivers.channels().size(),
                     rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
-                    0, 0, 0, 0, 0, "terrain-v2+" + rivers.version());
+                    0, 0, 0, 0, 0, "terrain-r22+" + rivers.version());
         }
     }
 }

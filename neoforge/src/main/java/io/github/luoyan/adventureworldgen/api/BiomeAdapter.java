@@ -2,14 +2,15 @@ package io.github.luoyan.adventureworldgen.api;
 
 import io.github.luoyan.adventureworldgen.config.ContentId;
 
-/** Public compatibility contract used during preflight, planning, and surface generation. */
+/** Public compatibility contract used during preflight and planning. */
 public interface BiomeAdapter {
     ContentId biomeId();
     String adapterVersion();
     Compatibility compatibility(MacroSample terrain);
+    /** Legacy palette API; ordinary runtime terrain now uses registered overworld surface rules. */
     SurfacePalette surface(MacroSample terrain);
 
-    /** Spatial surface patterns; existing third-party adapters keep their original policy. */
+    /** Legacy spatial palette query, retained for adapter callers; not a land surface override. */
     default SurfacePalette surface(MacroSample terrain, long seed, int blockX, int blockZ) {
         return surface(terrain);
     }

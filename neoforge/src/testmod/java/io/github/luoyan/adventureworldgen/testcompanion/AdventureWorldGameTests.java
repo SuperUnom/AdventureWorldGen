@@ -188,7 +188,8 @@ public final class AdventureWorldGameTests {
             helper.assertTrue(largestComponentArea(patch) == area,
                     "required biome lost its main contiguous body: " + required.id());
         }
-        helper.assertTrue(config.biomes().filler().stream().noneMatch(id->id.value().contains("windswept")),"windswept remains in filler pool");
+        helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("windswept")).count()==4,"new windswept filler candidates disappeared");
+        helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("badlands")).count()==3,"new badlands filler candidates disappeared");
         int mountains = 0, openHotLand = 0;
         for (int z = -3000; z < 3000; z += 32) for (int x = -3000; x < 3000; x += 32) {
             var terrain = plan.terrainAt(x+2,z+2);
@@ -342,7 +343,7 @@ public final class AdventureWorldGameTests {
             var future = generator.fillFromNoise(net.minecraft.world.level.levelgen.blending.Blender.empty(), random,
                     level.structureManager(), chunk);
             level.getServer().managedBlock(future::isDone); future.join();
-            generator.buildLandSurface(registries, chunk);
+            generator.buildPlannedSurface(registries, chunk);
             java.util.Set<net.minecraft.core.BlockPos> updates = new java.util.HashSet<>();
             var processing = chunk.getPostProcessing();
             for (int section = 0; section < processing.length; section++) if (processing[section] != null)
@@ -412,26 +413,42 @@ public final class AdventureWorldGameTests {
         }
     }
 
-    private static void assertSurfaceFollowsBiome(GameTestHelper helper,GeneratedAdventurePlan plan,
+    private static void assertSurfaceFollowsBiome(GameTestHelper helper, GeneratedAdventurePlan plan,
             io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator generator) {
-        var level=helper.getLevel();int verified=0;
-        for(int z=-1536;z<=1536;z+=512)for(int x=-1536;x<=1536;x+=512) {
-            var pos=new net.minecraft.world.level.ChunkPos(Math.floorDiv(x,16),Math.floorDiv(z,16));
-            var chunk=new net.minecraft.world.level.chunk.ProtoChunk(pos,net.minecraft.world.level.chunk.UpgradeData.EMPTY,
-                    level,level.registryAccess().registryOrThrow(Registries.BIOME),null);
-            for(int dz=0;dz<16;dz++)for(int dx=0;dx<16;dx++)chunk.setBlockState(
-                    new net.minecraft.core.BlockPos(x+dx,80,z+dz),net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(),false);
-            generator.buildLandSurface(level.registryAccess(),chunk);
-            for(int dz=0;dz<16;dz++)for(int dx=0;dx<16;dx++) {
-                int wx=x+dx,wz=z+dz;var sample=plan.terrainAt(wx+.5,wz+.5);if(sample.wet())continue;
-                var id=plan.biomeAt(wx,64,wz);
-                helper.assertTrue(id.equals(plan.surfaceBiomeAt(wx,wz)),"surface performed an independent biome mix");
-                var expected=MinecraftAdapters.builtIn().biome(id).surface(sample).top();
-                var block=level.registryAccess().registryOrThrow(Registries.BLOCK).get(ResourceLocation.parse(expected.value()));
-                helper.assertTrue(chunk.getBlockState(new net.minecraft.core.BlockPos(wx,80,wz)).is(block),"surface did not follow queried biome");
+        var level = helper.getLevel();
+        var random = level.getChunkSource().randomState();
+        int verified = 0;
+        for (int z = -1536; z <= 1536; z += 512) for (int x = -1536; x <= 1536; x += 512) {
+            boolean ocean = false;
+            for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++)
+                ocean |= plan.terrainAt(x + dx + .5, z + dz + .5).waterKind()
+                        == io.github.luoyan.adventureworldgen.api.WaterKind.OCEAN;
+            // Detached chunks have no WorldGenRegion for the native ocean beardifier.
+            // This check exercises land; ocean/coast columns have a separate regression.
+            if (ocean) continue;
+            var pos = new net.minecraft.world.level.ChunkPos(Math.floorDiv(x, 16), Math.floorDiv(z, 16));
+            var chunk = new net.minecraft.world.level.chunk.ProtoChunk(pos, net.minecraft.world.level.chunk.UpgradeData.EMPTY,
+                    level, level.registryAccess().registryOrThrow(Registries.BIOME), null);
+            generator.createBiomes(random, net.minecraft.world.level.levelgen.blending.Blender.empty(),
+                    level.structureManager(), chunk).join();
+            chunk.setPersistedStatus(net.minecraft.world.level.chunk.status.ChunkStatus.BIOMES);
+            var fill = generator.fillFromNoise(net.minecraft.world.level.levelgen.blending.Blender.empty(),
+                    random, level.structureManager(), chunk);
+            level.getServer().managedBlock(fill::isDone); fill.join();
+            generator.buildPlannedSurface(level.registryAccess(), chunk);
+            for (int dz = 0; dz < 16; dz++) for (int dx = 0; dx < 16; dx++) {
+                int wx = x + dx, wz = z + dz;
+                var sample = plan.terrainAt(wx + .5, wz + .5);
+                if (sample.wet()) continue;
+                var id = plan.biomeAt(wx, 64, wz);
+                helper.assertTrue(id.equals(plan.surfaceBiomeAt(wx, wz)), "surface performed an independent biome mix");
+                helper.assertTrue(chunk.getNoiseBiome(wx >> 2, 16, wz >> 2).is(ResourceLocation.parse(id.value())),
+                        "surface changed stored biome ownership");
+                helper.assertTrue(chunk.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE_WG, dx, dz)
+                        == plan.solidSurfaceAt(wx, wz, sample) - 1, "surface changed planned land height");
                 verified++;
             }
         }
-        helper.assertTrue(verified>256,"surface test did not sample enough dry land");
+        helper.assertTrue(verified > 256, "surface test did not sample enough dry land");
     }
 }

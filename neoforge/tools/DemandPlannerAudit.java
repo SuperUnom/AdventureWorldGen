@@ -26,12 +26,12 @@ public class DemandPlannerAudit {
    var profile=PlannerProfile.V2;double radius=config.world().radius();
    var coast=new CoastGenerator(profile).generate(seed,radius,Math.min(256,radius/10)+32);
    var capacity=TerrainCapacityPlan.reserve(seed,config,coast.coastline(),coast.landBand());
-   var island=new IslandMacroTerrain(coast.coastline(),new RegionTerrain(seed,profile,capacity),seed,64,coast.landBand(),coast.seaBand(),"terrain-v2");
+   var island=new IslandMacroTerrain(coast.coastline(),new RegionTerrain(seed,profile,capacity,config.world().terrain(),config),seed,64,coast.landBand(),coast.seaBand(),"terrain-r21");
    int extent=(int)Math.ceil((radius+256)/8)*8,size=extent*2/8+1;
    var erosion=new ErosionGenerator(profile,HydrologyProfile.FINITE_CONTINENT).generate(seed,island,-extent,-extent,8,size,size);
    var eroded=new ErodedTerrain(island,erosion,"erosion-v1");
    var rivers=new HydrologyGenerator(profile,HydrologyProfile.FINITE_CONTINENT).generate(seed,radius,64,coast.coastline(),eroded);
-   var terrain=new HydrologyTerrain(eroded,rivers);
+   var terrain=new TerrainMorphology(new HydrologyTerrain(eroded,rivers));
    var climate=new ClimatePlan(seed,config,terrain);
    renderEnvironment(out,seed,config,terrain,climate);
    System.out.println("MAPS "+out.resolve(seed+"-temperature.png")+" "+out.resolve(seed+"-terrain.png"));
@@ -40,7 +40,7 @@ public class DemandPlannerAudit {
    var joint=new JointPlanner(profile).plan(seed,config,terrain,(d,x,y,z,s)->new AdventurePlanView.PlannedStructure(d.instanceId(),d.structureId(),x,y,z,"north",
     java.util.List.of(new AdventurePlanView.PlannedPiece(d.instanceId()+"/0",x-10,y,z-10,x+10,y+14,z+10,new byte[]{1}))),levels);
    System.out.println("SEED "+seed+" filler and validation");
-   var plan=new GeneratedAdventurePlan(seed,config,coast.coastline(),rivers,64,coast.landBand(),coast.seaBand(),"terrain-v2",joint.spawn(),joint.patches(),joint.structures(),
+   var plan=new GeneratedAdventurePlan(seed,config,coast.coastline(),rivers,64,coast.landBand(),coast.seaBand(),"terrain-r21",joint.spawn(),joint.patches(),joint.structures(),
     GeneratedAdventurePlan.PlanDiagnostics.basic(coast.coastline(),rivers),erosion,capacity);
    validateAndReport(out,seed,config,plan);
    renderBiomes(out,seed,config,plan);
@@ -80,6 +80,7 @@ public class DemandPlannerAudit {
  }
  static void renderEnvironment(Path out,long seed,AdventureWorldConfig c,MacroTerrain terrain,ClimatePlan climate)throws Exception {
   var temp=frame("Demand-calibrated temperature bands",seed);var land=frame("Frozen terrain, elevation and water",seed);var bands=frame("Temperature classes | continuous field thresholds",seed);
+  var humidity=frame("Humidity | dry, medium, wet",seed);
   for(int z=0;z<780;z++)for(int x=0;x<780;x++) {
    int wx=-3100+x*6200/780,wz=-3100+z*6200/780;var s=terrain.sample(wx,wz);int tc,lc;
    if(s.wet()){tc=lc=s.waterKind()==WaterKind.OCEAN?0x193C57:0x4E9BBC;}
@@ -89,11 +90,16 @@ public class DemandPlannerAudit {
     tc=heatColor(climate.valueAt(wx,wz,s));
     int base=switch(s.terrainTemplate()){case "plains"->0x8AB56E;case "hills"->0xB9B879;case "plateau"->0xBB946D;default->0xA2A3B3;};
     double shade=Math.clamp(.7+(s.groundSurface()-64)/230,.65,1.15);lc=shade(base,shade);
-   }if(s.wet())bands.setRGB(x+30,z+80,tc);temp.setRGB(x+30,z+80,tc);land.setRGB(x+30,z+80,lc);
+   }
+   int hc=s.wet()?tc:switch(climate.humidity().typeAt(wx,wz,s)){case DRY->0xD8B875;case MEDIUM->0x99B88A;case WET->0x418C94;};
+   humidity.setRGB(x+30,z+80,hc);
+   if(s.wet())bands.setRGB(x+30,z+80,tc);temp.setRGB(x+30,z+80,tc);land.setRGB(x+30,z+80,lc);
   }
   label(temp,"Continuous temperature: blue (0) -> green (5) -> amber (10)", "Target VC/C/M/H: "+percent(climate.targetRatios())+" | Actual: "+percent(climate.actualRatios()));
   label(land,"Green: plains   Olive: hills   Brown: plateau   Gray: mountains", "Elevation affects shading; blue marks real coast, rivers and lakes.");
   label(bands,"VERY COLD: snow white   COLD: blue   MILD: green   HOT: amber", "Classification used for configuration; biome scores use continuous temperature.");
+  label(humidity,"Sand: dry   Green: medium   Teal: wet   Blue: water", "Actual D/M/W: "+percent(climate.humidity().actualRatios()));
+  ImageIO.write(humidity,"png",out.resolve(seed+"-humidity.png").toFile());
   ImageIO.write(bands,"png",out.resolve(seed+"-temperature-classes.png").toFile());
   ImageIO.write(temp,"png",out.resolve(seed+"-temperature.png").toFile());ImageIO.write(land,"png",out.resolve(seed+"-terrain.png").toFile());
  }
@@ -134,6 +140,6 @@ public class DemandPlannerAudit {
    |(int)(((a>>8)&255)*(1-f)+((b>>8)&255)*f)<<8|(int)((a&255)*(1-f)+(b&255)*f);
  }
  static int shade(int rgb,double f){return Math.min(255,(int)(((rgb>>16)&255)*f))<<16|Math.min(255,(int)(((rgb>>8)&255)*f))<<8|Math.min(255,(int)((rgb&255)*f));}
- static String percent(double[] a){return String.format(java.util.Locale.ROOT,"%.1f / %.1f / %.1f / %.1f %%",a[0]*100,a[1]*100,a[2]*100,a[3]*100);}
+ static String percent(double[] a){return Arrays.stream(a).mapToObj(v->String.format(java.util.Locale.ROOT,"%.1f",v*100)).collect(java.util.stream.Collectors.joining(" / "))+" %";}
  static void label(BufferedImage im,String first,String second){var g=im.createGraphics();g.setColor(Color.WHITE);g.drawLine(415,470,425,470);g.drawLine(420,465,420,475);g.setFont(new Font("SansSerif",0,14));g.drawString(first,20,895);g.drawString(second,20,922);g.dispose();}
 }

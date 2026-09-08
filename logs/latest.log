@@ -1,0 +1,8 @@
+[22:44:34] [main/INFO]: AdventureWorldGen planning coast for adventureworldgen:default with seed 7331
+[22:44:36] [main/INFO]: AdventureWorldGen planning continuous regions for adventureworldgen:default
+[22:44:36] [main/INFO]: AdventureWorldGen simulating and freezing erosion delta field for adventureworldgen:default
+[22:44:56] [main/INFO]: AdventureWorldGen planning ftf-hydrology-adapted-v2 hydrology for adventureworldgen:default
+[22:45:30] [main/INFO]: AdventureWorldGen building complete 16-block directed cost graph for adventureworldgen:default
+[22:45:49] [main/INFO]: AdventureWorldGen cost graph has 145161 nodes and 174476 canonical edges for adventureworldgen:default
+[22:45:49] [main/INFO]: AdventureWorldGen jointly planning biome patches and structures for adventureworldgen:default
+[22:46:41] [main/INFO]: AdventureWorldGen plan READY for adventureworldgen:default in 127330 ms

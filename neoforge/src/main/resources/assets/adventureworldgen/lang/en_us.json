@@ -16,5 +16,6 @@
   "adventureworldgen.planning.filler": "Filling",
   "adventureworldgen.planning.transition": "Boundary transition",
   "adventureworldgen.planning.validation": "Validation",
-  "adventureworldgen.planning.structures": "Required structure placement"
+  "adventureworldgen.planning.structures": "Required structure placement",
+  "adventureworldgen.planning.humidity": "Planning humidity"
 }

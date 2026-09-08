@@ -17,11 +17,14 @@ public final class RegionTerrain {
     private final PlannerProfile.Terrain profile;
     private final ValueNoise warpX;
     private final ValueNoise warpZ;
-    private final ValueNoise base;
-    private final MountainTerrain mountains;
-    private final EcotoneNoise templateEcotone;
-    private static final Template[] TEMPLATES = Template.values();
+    private final TerrainRecipes recipes;
+    private final EcotoneNoise recipeEcotone;
+    private final TerrainSettings settings;
+    private final ValueNoise compositeNoise;
+    private final io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config;
     private final Map<GridKey, Region> regions = new ConcurrentHashMap<>();
+    private record Neighborhood(long x, long z, Region[] regions) {}
+    private final ThreadLocal<Neighborhood> neighborhoodCache = new ThreadLocal<>();
     private final GridKey centralRegion;
     private final TerrainCapacityPlan capacities;
 
@@ -29,15 +32,20 @@ public final class RegionTerrain {
         this(seed,plannerProfile,TerrainCapacityPlan.empty());
     }
     public RegionTerrain(long seed, PlannerProfile plannerProfile,TerrainCapacityPlan capacities) {
+        this(seed,plannerProfile,capacities,TerrainSettings.defaults(),null);
+    }
+    public RegionTerrain(long seed, PlannerProfile plannerProfile,TerrainCapacityPlan capacities,
+                         TerrainSettings settings,io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config) {
         this.capacities=capacities;
+        this.settings=settings; this.config=config;
         this.seed = seed;
         this.algorithmVersion = plannerProfile.algorithmVersion();
         this.profile = plannerProfile.terrain();
         this.warpX = new ValueNoise(seed, "region-warp/x", profile.coordinateWarpScale());
         this.warpZ = new ValueNoise(seed, "region-warp/z", profile.coordinateWarpScale());
-        this.mountains = new MountainTerrain(seed);
-        this.templateEcotone = new EcotoneNoise(seed, "terrain/biome-ecotone-r10", 40);
-        this.base = new ValueNoise(seed, "terrain/base", 1024);
+        this.recipes = new TerrainRecipes(seed,settings);
+        this.recipeEcotone=new EcotoneNoise(seed,"terrain/biome-ecotone-r10",40);
+        this.compositeNoise = new ValueNoise(seed,"terrain/composite",320);
         this.centralRegion = nearestPair(warped(0, 0)).nearest.key;
         // It was provisionally created before the central key was known.
         regions.remove(centralRegion);
@@ -45,32 +53,76 @@ public final class RegionTerrain {
 
     public Sample sample(double x, double z) {
         Vec2 query = warped(x, z);
-        Pair pair = nearestPair(query);
+        // The blend already visits this 5x5 neighborhood. Reuse those exact distances
+        // for nearest-region selection instead of searching the same regions twice.
+        Candidate[] neighborhood = new Candidate[25];
+        Candidate nearest = null, second = null;
+        long gx = fastFloor(query.x() / profile.regionSpacing()), gz = fastFloor(query.z() / profile.regionSpacing());
+        int n = 0;
+        for (Region region : neighborhood(gx, gz)) {
+            Candidate candidate = new Candidate(region.key, region, query.distance(region.center));
+            neighborhood[n++] = candidate;
+            if (nearest == null || ORDER.compare(candidate, nearest) < 0) {
+                second = nearest; nearest = candidate;
+            } else if (second == null || ORDER.compare(candidate, second) < 0) second = candidate;
+        }
+        double unsearchedLowerBound = (2 - profile.maximumRegionJitterFraction()) * profile.regionSpacing();
+        Pair pair = second.distance < unsearchedLowerBound ? new Pair(nearest, second) : nearestPair(query);
         double ratio = pair.nearest.distance / pair.second.distance;
         double t = clamp((1.0 - ratio) / 0.35);
         double internalWeight = smooth(t);
-        double commonBase = 24.0 + 6.0 * base.sample(x, z);
-        // Blend neighboring templates directly: a shared low boundary made every region a mound.
-        double sum = 0, weights = 0;
-        double[] templateDistances = new double[TEMPLATES.length];
-        java.util.Arrays.fill(templateDistances, Double.POSITIVE_INFINITY);
-        long gx = fastFloor(query.x() / profile.regionSpacing()), gz = fastFloor(query.z() / profile.regionSpacing());
-        for (long rx = gx - 2; rx <= gx + 2; rx++) for (long rz = gz - 2; rz <= gz + 2; rz++) {
-            Region region = region(new GridKey(rx, rz));
-            double distance = query.distance(region.center);
-            templateDistances[region.template.ordinal()] = StrictMath.min(templateDistances[region.template.ordinal()], distance);
-            double w = smooth(clamp(1 - (distance - pair.nearest.distance) / 220.0));
-            if (w > 0) {
-                sum += w * templateHeight(region, commonBase, x, z); weights += w;
-            }
+        double sum = 0, weights = 0, mountain = 0, detailSum=0, detailWeights=0;
+        double[] distances=new double[TerrainTemplate.values().length];java.util.Arrays.fill(distances,Double.POSITIVE_INFINITY);
+        Region[] owners=new Region[distances.length];
+        Candidate[] nearby=new Candidate[25];int count=0;
+        for (Candidate candidate : neighborhood) {
+            Region region = candidate.region;
+            double distance = candidate.distance;
+            if(distance<distances[region.recipe.ordinal()]){distances[region.recipe.ordinal()]=distance;owners[region.recipe.ordinal()]=region;}
+            if(distance-pair.nearest.distance<200)nearby[count++]=candidate;
         }
-        double height = sum / weights;
-        // Broad height blending must not turn the entire slope into a multi-template mosaic.
-        // Eligibility only interleaves near the two closest template regions; height is unchanged.
-        Template biomeTemplate = TEMPLATES[EcotoneSelector.select(templateDistances,
-                templateEcotone.threshold(x, z), 48)];
-        return new Sample(height, pair.nearest.region.id, biomeTemplate,
-                internalWeight, pair.nearest.distance, pair.second.distance);
+        for(int i=0;i<count;i++) {
+            var candidate=nearby[i];var region=candidate.region;
+            double w=1,dw=1;
+            // Pairwise weights stay continuous at three-region junctions. Selecting transition
+            // widths from only the nearest label would jump when that nearest label changes.
+            for(int j=0;j<count;j++)if(i!=j) {
+                double difference=Math.max(0,candidate.distance-nearby[j].distance);
+                w*=smooth(clamp(1-difference/transitionWidth(region.recipe,nearby[j].region.recipe)));
+                dw*=smooth(clamp(1-difference/32));
+            }
+            if(w<=0)continue;
+            var height=templateHeight(region,x,z);
+            sum+=w*height.coarse;weights+=w;
+            detailSum+=dw*height.detail;detailWeights+=dw;
+            if(region.recipe.mountain())mountain+=w*height.envelope;
+        }
+        Region owner=owners[EcotoneSelector.select(distances,recipeEcotone.threshold(x,z),48)];
+        double blend=compositeWeight(owner,x,z);
+        // A narrow ecotone selects one of the actual contributing recipes. Both composite ingredients are exposed
+        // and both checked by biome rules. Height blending never changes recipe permissions.
+        return new Sample(sum/weights+detailSum/detailWeights,owner.id,owner.template,internalWeight,pair.nearest.distance,
+                pair.second.distance,owner.recipe,owner.secondary,blend,mountain/weights);
+    }
+
+    public static double transitionWidth(TerrainTemplate a,TerrainTemplate b) {
+        if(a==b)return 96;
+        if(a.mountain()||b.mountain())return 200;
+        if(a==TerrainTemplate.PLATEAU||b==TerrainTemplate.PLATEAU||a==TerrainTemplate.BADLANDS||b==TerrainTemplate.BADLANDS)return 88;
+        return 144;
+    }
+
+    /** Adjacent terrain/filter queries usually share a region neighborhood. Keep only
+     * one immutable 5x5 window per sampling thread; no cache state participates in selection. */
+    private Region[] neighborhood(long x, long z) {
+        Neighborhood cached = neighborhoodCache.get();
+        if (cached != null && cached.x == x && cached.z == z) return cached.regions;
+        Region[] nearby = new Region[25];
+        int i = 0;
+        for (long rx = x - 2; rx <= x + 2; rx++) for (long rz = z - 2; rz <= z + 2; rz++)
+            nearby[i++] = region(new GridKey(rx, rz));
+        neighborhoodCache.set(new Neighborhood(x, z, nearby));
+        return nearby;
     }
 
     public Region region(long gridX, long gridZ) {
@@ -82,29 +134,36 @@ public final class RegionTerrain {
         return pair.second.distance-pair.nearest.distance>=margin?pair.nearest.key:null;
     }
 
-    private double templateHeight(Region region, double commonBase, double x, double z) {
-        double f;
-        double wx = x + 90 * warpX.sample(x * 1.7, z * 1.7);
-        double wz = z + 90 * warpZ.sample(x * 1.7, z * 1.7);
-        double height = switch (region.template) {
-            case PLAINS -> commonBase + 6.0 * fractal(region.noise512, wx, wz);
-            case HILLS -> commonBase + 30.0 + 30.0 * fractal(region.noise512, wx, wz);
-            case PLATEAU -> {
-                f = fractal(region.noise768, wx, wz);
-                yield commonBase + 70.0 * smooth(clamp((f + 0.3) / 0.6));
-            }
-            case MOUNTAINS -> {
-                yield commonBase + mountains.sample(x, z);
-            }
-        };
-        var reservation=capacities.at(region.key);
-        if(reservation!=null) {
-            // Erosion delta is bounded to [-12,+8]. Coast blending and water are checked again on final cells.
-            if(reservation.minHeight()!=null)height=StrictMath.max(height,reservation.minHeight()+12-64);
-            if(reservation.maxHeight()!=null)height=StrictMath.min(height,reservation.maxHeight()-8-64);
-        }
-        return height;
+    private double compositeWeight(Region r,double x,double z) {
+        return r.secondary==null?0:.45*smooth(clamp((compositeNoise.sample(x,z)+.65)/1.3));
     }
+    private double mountainEnvelope(Region r,double x,double z) {
+        if(!r.recipe.mountain())return 0;
+        if(capacities.ranges().ranges().isEmpty()||capacities.at(r.key)!=null)return 1;
+        return .2+.8*capacities.ranges().influence(x,z);
+    }
+    private Height templateHeight(Region r,double x,double z) {
+        var primary=settings.get(r.recipe);
+        double shape=recipes.shape(r.recipe,x,z,primary.horizontalScale());
+        double detail=primary.detailStrength()*recipes.detail(r.recipe,x,z,primary.horizontalScale());
+        double blend=compositeWeight(r,x,z);
+        if(r.secondary!=null) {
+            var secondary=settings.get(r.secondary);
+            // Each ingredient retains its own amplitude and scale within the shared fitted envelope.
+            double envelopeAmplitude=Math.max(primary.verticalAmplitude(),secondary.verticalAmplitude());
+            double ratio=secondary.verticalAmplitude()/envelopeAmplitude;
+            shape=TerrainRecipes.lerp(shape*primary.verticalAmplitude()/envelopeAmplitude,
+                    recipes.shape(r.secondary,x,z,secondary.horizontalScale())*ratio,blend);
+            detail=TerrainRecipes.lerp(detail*primary.verticalAmplitude()/envelopeAmplitude,
+                    secondary.detailStrength()*recipes.detail(r.secondary,x,z,secondary.horizontalScale())*ratio,blend);
+        }
+        double envelope=mountainEnvelope(r,x,z);
+        double height=r.baseElevation+r.amplitude*(r.recipe.mountain()?(.15+.85*envelope)*shape:shape);
+        // Local detail is not subjected to broad regional averaging; its amplitude stays bounded.
+        return new Height(height,r.amplitude*detail,envelope);
+    }
+
+    private record Height(double coarse,double detail,double envelope) {}
 
     private Pair nearestPair(Vec2 query) {
         int spacing = profile.regionSpacing();
@@ -142,18 +201,51 @@ public final class RegionTerrain {
         String id = "region/" + key.x + "/" + key.z;
         double x = key.x * (double) spacing + signedSample(id, 0) * jitter;
         double z = key.z * (double) spacing + signedSample(id, 1) * jitter;
-        Template template;
-        if (capacities.at(key)!=null) {
-            template=capacities.at(key).template();
-        } else if (key.equals(centralRegion)) {
-            template = Template.PLAINS;
-        } else {
-            double choice = DeterministicRandom.sample(seed, algorithmVersion, "region-template", id, 0) * 100.0;
-            template = choice < 35 ? Template.PLAINS : choice < 70 ? Template.HILLS
-                    : choice < 85 ? Template.PLATEAU : Template.MOUNTAINS;
+        var reservation=capacities.at(key);
+        var allowed=new java.util.TreeSet<>(settings.enabled());
+        if(reservation!=null)allowed.retainAll(reservation.allowedTemplates());
+        boolean inRange=capacities.ranges().influence(x,z)>.12;
+        // Reserve every region touched by the corridor, including where its spine crosses a
+        // Voronoi corner. The continuous envelope, not a center-point coin toss, sets uplift.
+        if(!inRange)for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++)
+            if(capacities.ranges().influence(x+dx*spacing*.45,z+dz*spacing*.45)>.45)inRange=true;
+        final boolean rangeRegion=inRange;
+        TerrainTemplate recipe;
+        if(reservation!=null)recipe=reservation.recipe();
+        else {
+            var choices=allowed.stream().map(TerrainTemplate::byId)
+                .filter(t->key.equals(centralRegion)?!t.mountain():
+                    !settings.mountainRanges()||capacities.ranges().ranges().isEmpty()||t.mountain()==rangeRegion).toList();
+            if(choices.isEmpty())choices=allowed.stream().map(TerrainTemplate::byId).toList();
+            recipe=key.equals(centralRegion)&&allowed.contains("plains")?TerrainTemplate.PLAINS:choose(id,choices,0);
         }
-        return new Region(key, id, new Vec2(x, z), template,
-                fractalFields(seed, id + "/512", 512), fractalFields(seed, id + "/768", 768));
+        TerrainTemplate secondary=null;
+        if(settings.composite()&&!recipe.mountain()&&!key.equals(centralRegion)) {
+            final var primary=recipe;
+            var choices=allowed.stream().map(TerrainTemplate::byId)
+                .filter(t->!t.mountain()&&t!=primary&&commonFiller(primary,t)).toList();
+            if(!choices.isEmpty()&&DeterministicRandom.sample(seed,algorithmVersion,"composite",id,0)<.6)
+                secondary=choose(id,choices,1);
+        }
+        double amplitude=settings.get(recipe).verticalAmplitude();
+        if(secondary!=null)amplitude=Math.max(amplitude,settings.get(secondary).verticalAmplitude());
+        double elevation=Math.min(22,310-64-settings.maximumShape(recipe,secondary)*amplitude);
+        if(reservation!=null) {elevation=reservation.baseElevation();amplitude=reservation.amplitude();secondary=reservation.secondary();}
+        return new Region(key,id,new Vec2(x,z),recipe.planningCategory(),recipe,secondary,elevation,amplitude);
+    }
+    private boolean commonFiller(TerrainTemplate a,TerrainTemplate b) {
+        if(config==null)return a.category().equals(b.category());
+        return config.biomes().filler().stream().anyMatch(id->{
+            var rule=config.biomes().terrainRules().get(id);
+            return rule==null||(!rule.shoreOnly()&&rule.landforms().isEmpty()&&rule.minHeight()==null&&rule.maxHeight()==null
+                &&rule.effectiveTemplates().contains(a.id())&&rule.effectiveTemplates().contains(b.id()));
+        });
+    }
+    private TerrainTemplate choose(String id,java.util.List<TerrainTemplate> choices,int operation) {
+        double total=choices.stream().mapToDouble(t->settings.get(t).weight()).sum();
+        double value=DeterministicRandom.sample(seed,algorithmVersion,"recipe",id,operation)*total;
+        for(var t:choices){value-=settings.get(t).weight();if(value<0)return t;}
+        return choices.getLast();
     }
 
     private double signedSample(String id, long index) {
@@ -165,17 +257,6 @@ public final class RegionTerrain {
                 z + profile.coordinateWarpAmplitude() * warpZ.sample(x, z));
     }
 
-    private static ValueNoise[] fractalFields(long seed, String id, int wavelength) {
-        return new ValueNoise[] { new ValueNoise(seed, id + "/0", wavelength),
-                new ValueNoise(seed, id + "/1", wavelength / 2.0),
-                new ValueNoise(seed, id + "/2", wavelength / 4.0) };
-    }
-
-    private static double fractal(ValueNoise[] fields, double x, double z) {
-        return (fields[0].sample(x, z) + 0.5 * fields[1].sample(x, z)
-                + 0.25 * fields[2].sample(x, z)) / 1.75;
-    }
-
     private static double clamp(double value) { return StrictMath.max(0.0, StrictMath.min(1.0, value)); }
     private static double smooth(double value) { return value * value * (3.0 - 2.0 * value); }
     private static long fastFloor(double value) { long i = (long) value; return value < i ? i - 1 : i; }
@@ -184,13 +265,10 @@ public final class RegionTerrain {
             .thenComparing(candidate -> candidate.region.id);
 
     public record Sample(double relativeHeight, String regionId, Template template, double internalWeight,
-                         double nearestDistance, double secondDistance) {}
-    public record Region(GridKey key, String id, Vec2 center, Template template,
-                         ValueNoise[] noise512, ValueNoise[] noise768) {
-        public Region { noise512 = noise512.clone(); noise768 = noise768.clone(); }
-        @Override public ValueNoise[] noise512() { return noise512.clone(); }
-        @Override public ValueNoise[] noise768() { return noise768.clone(); }
-    }
+                         double nearestDistance, double secondDistance,TerrainTemplate recipe,
+                         TerrainTemplate secondary,double secondaryWeight,double mountainInfluence) {}
+    public record Region(GridKey key, String id, Vec2 center, Template template,TerrainTemplate recipe,
+                         TerrainTemplate secondary,double baseElevation,double amplitude) {}
     public record GridKey(long x, long z) {}
     private record Candidate(GridKey key, Region region, double distance) {}
     private record Pair(Candidate nearest, Candidate second) {}

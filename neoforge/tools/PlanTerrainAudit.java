@@ -14,7 +14,7 @@ public class PlanTerrainAudit {
   try(var stream=new GZIPInputStream(Files.newInputStream(input.resolve("plan.json.gz")))) {
    plan=new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash,config);
   }
-  StringBuilder report=new StringBuilder("biome\tlevel\tx\tz\tterrain\tarea\tmin_height\tmax_height\n");
+  StringBuilder report=new StringBuilder("biome\tlevel\tx\tz\tterrain\trecipe\tsecondary\tlandform\tarea\tmin_height\tmax_height\n");
   for(var patch:plan.biomePatches()) {
    double min=Double.POSITIVE_INFINITY,max=Double.NEGATIVE_INFINITY; long area=0;
    for(int z=patch.minZ()+2;z<patch.maxZExclusive();z+=4)for(int x=patch.minX()+2;x<patch.maxXExclusive();x+=4) if(patch.contains(x,z)) {
@@ -25,7 +25,7 @@ public class PlanTerrainAudit {
    }
    int x=(patch.minX()+patch.maxXExclusive())/2,z=(patch.minZ()+patch.maxZExclusive())/2;
    report.append(patch.biomeId()).append('\t').append(patch.adventureLevel()).append('\t').append(x).append('\t').append(z).append('\t')
-    .append(plan.terrainAt(x,z).terrainTemplate()).append('\t').append(area).append('\t').append(min).append('\t').append(max).append('\n');
+    .append(plan.terrainAt(x,z).terrainTemplate()).append('\t').append(plan.terrainAt(x,z).recipe()).append('\t').append(plan.terrainAt(x,z).secondaryRecipe()).append('\t').append(plan.terrainAt(x,z).landform()).append('\t').append(area).append('\t').append(min).append('\t').append(max).append('\n');
   }
   Files.createDirectories(output.getParent());Files.writeString(output,report);
   System.out.println("Seed "+plan.seed()+": "+plan.biomePatches().size()+" complete patches validated; "+output);

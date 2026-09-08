@@ -53,9 +53,24 @@ class PlanV2CodecTest {
         assertEquals(original.biomePatches(),restored.biomePatches());
         assertEquals(original.capacities().reservations(),restored.capacities().reservations());
         assertArrayEquals(original.climate().actualRatios(),restored.climate().actualRatios());
+        assertArrayEquals(original.climate().humidity().actualRatios(),restored.climate().humidity().actualRatios());
+        assertEquals(original.recipeRegions(),restored.recipeRegions());
+        assertEquals(original.terrainSettings(),restored.terrainSettings());
+        assertEquals(original.capacities().ranges(),restored.capacities().ranges());
+        var badRecipe=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
+        badRecipe.getAsJsonObject("terrain").getAsJsonArray("recipe_regions").get(0).getAsJsonObject().addProperty("recipe","VOLCANO");
+        assertThrows(RuntimeException.class,()->codec.decode(badRecipe.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
+        var badSettings=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
+        badSettings.getAsJsonObject("terrain").getAsJsonObject("recipe_settings").getAsJsonObject("templates").getAsJsonObject("plains").addProperty("horizontal_scale",2);
+        assertThrows(RuntimeException.class,()->codec.decode(badSettings.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
+        var malformed=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
+        malformed.getAsJsonObject("biome_layout").getAsJsonObject("climate").remove("humidity");
+        assertThrows(RuntimeException.class,()->codec.decode(malformed.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
         for(int z=-128;z<128;z+=4)for(int x=-128;x<256;x+=4) {
             assertEquals(original.landBiomeAt(x,z),restored.landBiomeAt(x,z));
             assertEquals(original.terrainAt(x,z),restored.terrainAt(x,z));
+            assertEquals(original.climate().humidity().valueAt(x,z,original.terrainAt(x,z)),
+                    restored.climate().humidity().valueAt(x,z,restored.terrainAt(x,z)));
         }
     }
 
