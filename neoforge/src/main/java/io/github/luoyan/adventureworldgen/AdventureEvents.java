@@ -46,6 +46,10 @@ public final class AdventureEvents {
             @Override public boolean biomeExists(ContentId id) {
                 return server.registryAccess().registryOrThrow(Registries.BIOME).containsKey(ResourceLocation.parse(id.value()));
             }
+            @Override public Boolean snowyAtSeaLevel(ContentId id) {
+                var biome=server.registryAccess().registryOrThrow(Registries.BIOME).get(ResourceLocation.parse(id.value()));
+                return biome!=null && biome.hasPrecipitation() && biome.coldEnoughToSnow(new net.minecraft.core.BlockPos(0,64,0));
+            }
             @Override public boolean structureExists(ContentId id) {
                 return server.registryAccess().registryOrThrow(Registries.STRUCTURE).containsKey(ResourceLocation.parse(id.value()));
             }

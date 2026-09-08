@@ -19,7 +19,7 @@ public record PlannerProfile(
     public static final PlannerProfile V2 = new PlannerProfile(
             "planner-v2",
             "plan-v2",
-            "ftf-hydrology-adapted-v1",
+            io.github.luoyan.adventureworldgen.hydrology.RiverMorphology.VERSION,
             4,
             List.of(16, 8, 4),
             List.of(16, 8),

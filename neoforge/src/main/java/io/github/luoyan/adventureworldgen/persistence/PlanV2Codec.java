@@ -30,7 +30,9 @@ import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 /** Canonical, explicit plan-v2 payload. No runtime random draw is needed to restore coast or water geometry. */
 public final class PlanV2Codec {
     private static final Set<String> ROOT_KEYS = Set.of("algorithm", "format", "hydrology", "input_sha256",
-            "operation_counts", "profile", "random_keys", "seed", "spawn", "terrain", "structures");
+            "operation_counts", "profile", "random_keys", "seed", "spawn", "terrain", "structures", "biome_layout");
+
+    private static final com.google.gson.Gson LAYOUT_JSON=new com.google.gson.Gson();
 
     public byte[] encode(ContentId profileId, String inputHash, GeneratedAdventurePlan plan) {
         StringWriter output = new StringWriter();
@@ -59,6 +61,8 @@ public final class PlanV2Codec {
             json.value("region-template"); json.value("structure"); json.value("terrain-noise");
             json.endArray();
             json.name("seed").value(plan.seed());
+            json.name("biome_layout");
+            LAYOUT_JSON.toJson(plan.biomeLayout(),GeneratedAdventurePlan.BiomeLayout.class,json);
             writeSpawn(json, plan.spawnPosition());
             writeTerrain(json, plan);
             writeStructures(json, plan.structures());
@@ -103,7 +107,8 @@ public final class PlanV2Codec {
                     Set.of("deltas_base64", "height", "operation_count", "origin_x", "origin_z", "spacing", "width"))) : null;
             List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
             return new GeneratedAdventurePlan(seed, config, coast, network, seaSurface, landBand, seaBand,
-                    terrainVersion, spawn, patches, structures, diagnostics, erosion, readCapacities(terrain));
+                    terrainVersion, spawn, patches, structures, diagnostics, erosion, readCapacities(terrain),
+                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),GeneratedAdventurePlan.BiomeLayout.class),"missing frozen biome layout"));
         } catch (PlanningFailure failure) {
             throw failure;
         } catch (RuntimeException malformed) {

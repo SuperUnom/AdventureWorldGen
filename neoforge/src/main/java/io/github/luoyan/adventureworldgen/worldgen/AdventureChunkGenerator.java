@@ -162,7 +162,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
             int x = minX + localX, z = minZ + localZ;
             var sample = plan.terrainAt(x + 0.5, z + 0.5);
             if (sample.waterKind() == WaterKind.OCEAN) continue;
-            var palette = MinecraftAdapters.builtIn().biome(plan.surfaceBiomeAt(x, z)).surface(sample);
+            var palette = MinecraftAdapters.builtIn().biome(plan.surfaceBiomeAt(x, z)).surface(sample, plan.seed(), x, z);
             Block top = registries.registryOrThrow(Registries.BLOCK)
                     .get(ResourceLocation.parse(palette.top().value()));
             Block under = registries.registryOrThrow(Registries.BLOCK)

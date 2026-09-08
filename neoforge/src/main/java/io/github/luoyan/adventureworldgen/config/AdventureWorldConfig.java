@@ -64,8 +64,8 @@ public record AdventureWorldConfig(
     }
 
     public enum TemperatureType {
-        COLD, MEDIUM, HOT;
-        public static TemperatureType fromLevel(int level) { return level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
+        VERY_COLD, COLD, MEDIUM, HOT;
+        public static TemperatureType fromLevel(int level) { return level <= 1 ? VERY_COLD : level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
     }
 
     /** Rules apply to land ownership on the final macro terrain, before river/lake biome overlays. */
@@ -144,7 +144,7 @@ public record AdventureWorldConfig(
 
     public record AreaRange(long min, long max, long target) {
         public AreaRange(long min, long max) { this(min,max,max); }
-        public static final AreaRange DEFAULT = new AreaRange(16_384, 196_608, 131_072);
+        public static final AreaRange DEFAULT = new AreaRange(32_768, Long.MAX_VALUE, 393_216);
 
         public CellRange inCells(int cellSide) {
             if (cellSide <= 0) {

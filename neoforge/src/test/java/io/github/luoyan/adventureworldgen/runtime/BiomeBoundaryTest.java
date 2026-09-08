@@ -69,22 +69,20 @@ class BiomeBoundaryTest {
                 assertEquals(expected,plan.biomeAt(x+dx,192,z+dz), "uneven biome cell at " + x + "," + z);
         }
     }
-    @Test void neighbouringBiomesInterleaveInCoherentPatches() {
+    @Test void queryMixingOnlyImportsANearbyRawBiome() {
         var plan = plan("\"minecraft:forest\",\"minecraft:desert\"", false);
-        int interleavings = 0;
-        for (int z = -1200; z < 1200; z += 20) {
-            var previous = plan.landBiomeAt(-1200,z);
-            int lastChange = -1200, previousWidth = 0;
-            for (int x = -1196; x < 1200; x += 4) {
-                var current = plan.landBiomeAt(x,z);
-                if (!current.equals(previous)) {
-                    int width = x - lastChange;
-                    if (previousWidth >= 16 && width >= 8 && width <= 48) interleavings++;
-                    previousWidth = width; lastChange = x; previous = current;
-                }
-            }
+        int changed=0;
+        for(int z=-1200;z<1200;z+=20)for(int x=-1200;x<1200;x+=4) {
+            if(plan.terrainAt(x+2,z+2).waterKind()!=io.github.luoyan.adventureworldgen.api.WaterKind.NONE)continue;
+            var raw=plan.landBiomeAt(x,z);var mixed=plan.biomeAt(x,64,z);
+            if(raw.equals(mixed))continue;
+            changed++;boolean nearby=false;
+            for(int dx=-4;dx<=4;dx+=4)for(int dz=-4;dz<=4;dz+=4)
+                nearby|=plan.landBiomeAt(x+dx,z+dz).equals(mixed);
+            assertTrue(nearby,"mixing imported a distant biome");
+            assertEquals(mixed,plan.biomeAt(x,64,z));
         }
-        assertTrue(interleavings > 12, "biomes still meet only along a single simple edge");
+        assertTrue(changed>0,"no boundary mixing was exercised");
     }
 
     @Test void riversAndLakesHaveWaterBiomesWithoutErasingLandOwnership() {

@@ -18,7 +18,7 @@ public class HydrologyAudit {
   for(var channel:rivers.channels()) for(int i=1;i<channel.points().size()-1;i++) {
    var p=channel.points().get(i);var prev=channel.points().get(i-1);var next=channel.points().get(i+1);
    double len=prev.distance(next),nx=-(next.z()-prev.z())/len,nz=(next.x()-prev.x())/len;
-   for(int cross=-18;cross<=18;cross++) for(int along=-3;along<=3;along+=3) {
+   for(int cross=-(int)Math.ceil(RiverMorphology.maximumBedRadius(channel.shape())+6);cross<=Math.ceil(RiverMorphology.maximumBedRadius(channel.shape())+6);cross++) for(int along=-3;along<=3;along+=3) {
     int x=(int)Math.floor(p.x()+nx*cross+nz*along),z=(int)Math.floor(p.z()+nz*cross-nx*along);
     var a=terrain.sample(x+.5,z+.5);
     if(!a.wet()||a.waterKind()==WaterKind.OCEAN||Math.floor(a.waterSurface())<=Math.floor(a.groundSurface()))continue;

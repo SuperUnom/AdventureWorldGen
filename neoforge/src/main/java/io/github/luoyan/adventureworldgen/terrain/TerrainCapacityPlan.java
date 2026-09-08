@@ -49,8 +49,6 @@ public final class TerrainCapacityPlan {
         var expanded=new RequirementExpander().expandMinimum(config);
         List<Request> requests=new ArrayList<>();
         for(var d:expanded.patches())requests.add(new Request(d.patchId(),d.allowedBiomes().getFirst(),d.adventureLevel(),d.area().inCells(4).min()*16));
-        for(var d:expanded.structures()) requests.add(new Request(d.instanceId(),d.allowedBiomes().isEmpty()?config.biomes().filler().getFirst():d.allowedBiomes().getFirst(),
-                d.adventureLevel(),d.carrierArea().inCells(4).min()*16));
         requests.sort(Comparator.comparingInt((Request r)->r.level==0?-1:allowed(config,r.biome).size()).thenComparing(Request::id));
         var central=geometry.regionKeyAt(0,0);
         for(var request:requests) {

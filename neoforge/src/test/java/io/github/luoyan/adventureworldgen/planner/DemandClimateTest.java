@@ -17,8 +17,8 @@ class DemandClimateTest {
     }
     @Test void increasingHotTargetExpandsHotLandAndPreservesSpawnCore() {
         var a=new ClimatePlan(7331,config(8192),FLAT);var b=new ClimatePlan(7331,config(262144),FLAT);
-        assertTrue(b.targetRatios()[2]>a.targetRatios()[2]+.3);
-        assertTrue(b.actualRatios()[2]>a.actualRatios()[2]+.25);
+        assertTrue(b.targetRatios()[3]>a.targetRatios()[3]+.3);
+        assertTrue(b.actualRatios()[3]>a.actualRatios()[3]+.25);
         for(int z=-32;z<=32;z+=4)for(int x=-32;x<=32;x+=4)
             assertEquals(AdventureWorldConfig.TemperatureType.MEDIUM,b.typeAt(x,z,FLAT.sample(x,z)));
         assertArrayEquals(b.actualRatios(),new ClimatePlan(7331,config(262144),FLAT).actualRatios());
@@ -40,7 +40,7 @@ class DemandClimateTest {
         for(String bad:java.util.List.of("\"temperatures\":{}","\"temperatures\":{\"cold\":0}","\"temperatures\":{\"warm\":1}"))
             assertThrows(ConfigException.class,()->parser.parse(CanonicalConfigJson.write(config).replace("\"temperatures\":{\"cold\":1.0,\"medium\":3.0}",bad)));
     }
-    @Test void dryGrowthReachesTargetWithoutCountingRiverOrCrossingTerrainBarrier() {
+    @Test void dryGrowthContinuesBeyondTargetWithoutCountingRiverOrCrossingTerrainBarrier() {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":256},"spawn":{"biome":"test:a"},"biomes":{
            "required":[{"id":"test:a","adventure_level":0,"area":{"min":1024,"target":16384}}],
@@ -48,9 +48,36 @@ class DemandClimateTest {
           """);
         MacroTerrain river=(x,z)->x>60&&x<76?new MacroSample(65,68,WaterKind.RIVER,false,"r","plains","test"):FLAT.sample(x,z);
         var result=new JointPlanner(PlannerProfile.V2).plan(1,config,river,(d,x,y,z,s)->{throw new AssertionError();});
-        var patch=result.patches().getFirst();assertTrue(patch.area()>8192&&patch.area()<=16384);
+        var patch=result.patches().getFirst();assertTrue(patch.area()>16384);
         for(long cell:patch.mask().cells())assertEquals(WaterKind.NONE,river.sample(CellMask.x(cell)+2,CellMask.z(cell)+2).waterKind());
         assertTrue(patch.maxXExclusive()<=64,"growth crossed an excluded water corridor");
+    }
+    @Test void targetIsSoftAndOnlyExplicitMaximumCapsArea() {
+        assertEquals(Long.MAX_VALUE,config(8192).biomes().required().getFirst().area().max());
+        assertEquals(0,BiomeAllocationPlanner.areaPressure(1,false),1e-10);
+        assertTrue(BiomeAllocationPlanner.areaPressure(1.001,false)>-.01);
+        assertTrue(BiomeAllocationPlanner.areaPressure(2,false)>-2);
+    }
+    @Test void snowIsASeparateFourthBand() {
+        var parser=new AdventureWorldConfigParser();
+        var c=parser.parse("""
+          {"world":{"radius":512},"spawn":{"biome":"test:temperate"},"biomes":{
+           "filler":["test:snow","test:cold","test:temperate","test:hot"],
+           "terrain_rules":{"test:snow":{"temperatures":{"very_cold":1}},
+            "test:cold":{"temperatures":{"cold":1}},"test:hot":{"temperatures":{"hot":1}}}}}
+          """);
+        assertEquals(c,parser.parse(CanonicalConfigJson.write(c)));
+        var climate=new ClimatePlan(7331,c,FLAT);
+        var types=java.util.EnumSet.noneOf(AdventureWorldConfig.TemperatureType.class);
+        for(int x=-500;x<500;x+=16)for(int z=-500;z<500;z+=16) {
+            var t=climate.typeAt(x+2,z+2,FLAT.sample(x,z));types.add(t);
+            assertEquals(t==AdventureWorldConfig.TemperatureType.VERY_COLD,
+                climate.allowsSnowClass(new ContentId("test:snow"),x,z,FLAT.sample(x,z)));
+            assertEquals(t!=AdventureWorldConfig.TemperatureType.VERY_COLD,
+                climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
+        }
+        assertEquals(4,types.size());
+        assertThrows(ConfigException.class,()->parser.parse(CanonicalConfigJson.write(c).replace("\"very_cold\":1.0","\"very_cold\":1.0,\"cold\":1.0")));
     }
     @Test void mountainMassCoolsContinuouslyAndValleysRemainWarmer() {
         var config=config(131072);

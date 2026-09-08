@@ -56,26 +56,13 @@ public final class JointPlanner {
         climate=new ClimatePlan(seed,config,terrain,io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE));
         checkpoint.accept("climate");
         io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS);
-        BiomeConstraint biomeConstraint = placementIndex::allows;
+        BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsSnowClass(biome,x,z,placementIndex.sample(x,z));
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
                 "Placement index built in {0} ms", (System.nanoTime() - indexStart) / 1_000_000);
 
-        // Reserve the actual spawn cell before preparing structural footprints. The full spawn
-        // quota participates in the same matching as all other required biome quotas.
-        if (config.spawn().hasBiome()) {
-            patches.add(new GeneratedAdventurePlan.PlannedBiomePatch("reservation/spawn", config.spawn().biome(), 0,
-                    0, 0, 4, 4, new CellMask(new long[]{CellMask.key(0,0)}), 0, 0));
-        }
-        for (int i=0; i<demands.structures().size(); i++) {
-            placeStructure(seed,config,terrain,freezer,levelConstraint,biomeConstraint,patches,structures,occupied,
-                    demands.structures().get(i),i+10_000,true);
-            operations++;
-        }
-        patches.removeIf(p -> p.patchId().equals("reservation/spawn"));
-        checkpoint.accept("structures");
         progress.accept(0.4);
         long assignmentStart = System.nanoTime();
-        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),patches,climate,value -> {
+        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),climate,value -> {
             var stage=value<.18?io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS:io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.GROWTH;
             io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(stage).accept(value<.18?value/.18:(value-.18)/.82);
         });
@@ -85,6 +72,22 @@ public final class JointPlanner {
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
                 "Joint area assignment finished in {0} ms; {1} exact terrain samples, {2} operations",
                 (System.nanoTime()-assignmentStart)/1_000_000,placementIndex.queries(),assigned.operations());
+
+        checkpoint.accept("biomes");
+        io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.STRUCTURES);
+        // The entire required biome layout is frozen before any required structure is prepared.
+        var structureOrder=new ArrayList<>(demands.structures());
+        structureOrder.sort(java.util.Comparator.comparing((RequirementExpander.StructureInstanceDemand d)->!d.spawnInstance())
+                .thenComparingInt(RequirementExpander.StructureInstanceDemand::adventureLevel)
+                .thenComparing(RequirementExpander.StructureInstanceDemand::instanceId));
+        for(var demand:structureOrder) {
+            var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(demand.instanceId()))).findFirst().orElseThrow();
+            placeRequiredStructure(seed,config,terrain,freezer,levelConstraint,carrier,structures,demand);
+            operations++;
+            io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.STRUCTURES)
+                    .accept(structures.size()/(double)structureOrder.size());
+        }
+        checkpoint.accept("structures");
 
         // Optional instances are a soft optimization: each attempt commits atomically or leaves the legal minimum unchanged.
         long optionalAttempts = 0;
@@ -107,6 +110,58 @@ public final class JointPlanner {
         validate(config, demands, patches, structures, spawn, terrain, levelConstraint, biomeConstraint);
         checkpoint.accept("area_assignment");
         return new Result(patches, structures, spawn, operations);
+    }
+
+    private void placeRequiredStructure(long seed,AdventureWorldConfig config,MacroTerrain terrain,
+            StructureFreezer freezer,LevelConstraint levels,GeneratedAdventurePlan.PlannedBiomePatch carrier,
+            List<AdventurePlanView.PlannedStructure> structures,RequirementExpander.StructureInstanceDemand demand) {
+        var settings=config.structures().stream().filter(v->v.id().equals(demand.structureId())).findFirst().orElseThrow();
+        long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure-in-biome",demand.instanceId(),0);
+        long prepared=0, budget=Math.min(4096,profile.search().requiredCandidatePreparations());
+        var attempted=new HashSet<Long>();
+        for(int step:new int[]{16,8,4}) {
+            var candidates=new ArrayList<PlacementIndex.Point>();
+            for(long cell:carrier.mask().cells()) {
+                int x=CellMask.x(cell),z=CellMask.z(cell);
+                if(Math.floorMod(x,step)!=0||Math.floorMod(z,step)!=0||attempted.contains(cell))continue;
+                if(demand.spawnInstance()&&Math.hypot(x,z)>Math.min(256,config.world().radius()/10)*.8)continue;
+                if(!levels.accepts(demand.adventureLevel(),x,z)||!sufficientlyFlat(terrain,x,z))continue;
+                candidates.add(new PlacementIndex.Point(x,z));
+            }
+            candidates.sort(java.util.Comparator.comparingDouble((PlacementIndex.Point p)->
+                    levels.penalty(demand.adventureLevel(),p.x(),p.z())*4
+                    +climate.cost(carrier.biomeId(),p.x()+2,p.z()+2,placementIndex.sample(p.x(),p.z()))*3
+                    +Math.hypot(p.x()-carrier.anchorX(),p.z()-carrier.anchorZ())/Math.max(32,Math.sqrt(carrier.area()))
+                    +(PlacementIndex.mix(salt^p.cell())>>>11)*0x1.0p-53*.35).thenComparingLong(PlacementIndex.Point::cell));
+            for(var point:candidates) {
+                attempted.add(point.cell());int x=point.x(),z=point.z();
+                if(!spacingAllows(new Center(x,z),demand.structureId(),settings.spacing(),structures))continue;
+                if(++prepared>budget)break;
+                try {
+                    int y=(int)Math.ceil(terrain.sample(x,z).groundSurface());
+                    var selected=new RequirementExpander.StructureInstanceDemand(demand.instanceId(),demand.structureId(),demand.sequence(),
+                            demand.adventureLevel(),List.of(carrier.biomeId()),demand.carrierArea(),demand.relativeEntrance(),demand.spawnInstance(),demand.required());
+                    var frozen=freezer.freeze(selected,x,y,z,DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure",demand.instanceId(),0));
+                    if(!frozen.instanceId().equals(demand.instanceId())||!frozen.structureId().equals(demand.structureId())
+                            ||frozen.originX()!=x||frozen.originZ()!=z||frozen.footprint().isEmpty()||frozen.biomeProtection().isEmpty()
+                            ||!levels.accepts(demand.adventureLevel(),frozen.entranceX(),frozen.entranceZ())
+                            ||!carrier.contains(frozen.entranceX(),frozen.entranceZ())
+                            ||frozen.biomeProtection().stream().anyMatch(box->!contains(carrier,box))
+                            ||frozen.footprint().stream().anyMatch(box->!contains(carrier,box))
+                            ||structures.stream().anyMatch(other->reservationsConflict(other,frozen)))continue;
+                    if(demand.spawnInstance()) {
+                        var spawn=resolveSpawn(config,terrain,List.of(frozen));
+                        var sample=terrain.sample(spawn.x(),spawn.z());
+                        if(sample.wet()||sample.hazardous()||!carrier.contains((int)Math.floor(spawn.x()),(int)Math.floor(spawn.z())))continue;
+                    }
+                    structures.add(frozen);return;
+                } catch(PlanningFailure|IllegalArgumentException rejected) { /* Try another position inside this same planned biome. */ }
+            }
+            if(prepared>budget)break;
+        }
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"structure-in-biome",
+                "no legal complete structure footprint in its planned required biome",
+                Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"prepared",prepared,"budget",budget));
     }
 
     private boolean placeStructure(long seed, AdventureWorldConfig config, MacroTerrain terrain,
@@ -328,6 +383,9 @@ public final class JointPlanner {
             if (sample.wet() || sample.hazardous()) fail("structure origin is not safe dry terrain", structure.instanceId());
             if (!levels.accepts(settings.adventureLevel(), structure.entranceX(), structure.entranceZ()))
                 fail("structure violates the shared adventure level", structure.instanceId());
+            var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(structure.instanceId()))).findFirst().orElseThrow();
+            if(!carrier.contains(structure.originX(),structure.originZ())||structure.biomeProtection().stream().anyMatch(box->!contains(carrier,box)))
+                fail("structure lost protected carrier ownership",structure.instanceId());
             counts.merge(structure.structureId(), 1L, Long::sum);
         }
         for (var settings : config.structures()) {
@@ -404,7 +462,7 @@ public final class JointPlanner {
     }
     private static boolean contains(GeneratedAdventurePlan.PlannedBiomePatch patch,
                                     io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox box) {
-        for (int x = box.minX(); x <= box.maxX(); x++) for (int z = box.minZ(); z <= box.maxZ(); z++)
+        for (int x = align4(box.minX()); x <= box.maxX(); x+=4) for (int z = align4(box.minZ()); z <= box.maxZ(); z+=4)
             if (!patch.contains(x, z)) return false;
         return true;
     }

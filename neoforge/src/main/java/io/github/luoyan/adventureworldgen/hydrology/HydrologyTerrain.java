@@ -15,6 +15,7 @@ public final class HydrologyTerrain implements MacroTerrain {
     private final MacroTerrain base;
     private final io.github.luoyan.adventureworldgen.terrain.GradientNoise lakeWarpX, lakeWarpZ, lakeFineX, lakeFineZ, wetlandMounds, wetlandWarp;
     private final RiverNetwork network;
+    private final RiverMorphology morphology;
     private final Map<Long, List<ChannelSegments>> segmentBuckets;
     private final Map<Long, List<RiverNetwork.Wetland>> wetlandBuckets;
     private final Map<Long, List<LakeRef>> lakeBuckets;
@@ -23,6 +24,7 @@ public final class HydrologyTerrain implements MacroTerrain {
     public HydrologyTerrain(MacroTerrain base, RiverNetwork network) {
         this.base = base; this.network = network;
         long seed = network.hashCode();
+        morphology = new RiverMorphology(network);
         lakeWarpX = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/x", 200);
         lakeWarpZ = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/z", 200);
         lakeFineX = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/fine-x", 50);
@@ -53,7 +55,7 @@ public final class HydrologyTerrain implements MacroTerrain {
                     nearest = projection; nearestSegment = segment;
                 }
             }
-            Result result = segmentResult(references.channel, nearestSegment, nearest, original.groundSurface());
+            Result result = segmentResult(references.channel, nearestSegment, nearest, x, z, original.groundSurface());
             best = merge(best, result);
         }
         if (original.waterKind() != WaterKind.OCEAN) for (LakeRef lake : lakeBuckets.getOrDefault(bucket, List.of())) {
@@ -119,13 +121,16 @@ public final class HydrologyTerrain implements MacroTerrain {
         return new Result(wet.id, ground, wet.water, wet.kind);
     }
 
-    private Result segmentResult(RiverNetwork.Channel channel, int segment, Projection nearest, double original) {
+    private Result segmentResult(RiverNetwork.Channel channel, int segment, Projection nearest, double x, double z, double original) {
         double water = channel.waterSurfaces().get(segment - 1) + nearest.along
                 * (channel.waterSurfaces().get(segment) - channel.waterSurfaces().get(segment - 1));
 
         var shape = channel.shape();
-        double bedRadius = shape.bedWidth();
-        double depth = shape.bedDepth();
+        Vec2 center = channel.points().get(segment - 1).interpolate(channel.points().get(segment), nearest.along);
+        double along = (channel.cumulativeLengths().get(segment - 1) + nearest.along
+                * (channel.cumulativeLengths().get(segment) - channel.cumulativeLengths().get(segment - 1))) / channel.length();
+        double bedRadius = morphology.bedRadius(channel, along, center.x(), center.z(), x, z);
+        double depth = morphology.bedDepth(channel, center.x(), center.z(), bedRadius);
         WaterKind kind = WaterKind.RIVER;
         double bankStepRadius = bedRadius + StrictMath.max(4, shape.minimumBankHeight() * 2);
         double valleyRadius = bankStepRadius + shape.bankWidth();
@@ -204,7 +209,7 @@ public final class HydrologyTerrain implements MacroTerrain {
     private static Map<Long, List<ChannelSegments>> indexSegments(RiverNetwork network) {
         Map<Long, List<SegmentRef>> result = new HashMap<>();
         for (RiverNetwork.Channel channel : network.channels()) {
-            double ordinary = channel.shape().bedWidth() + StrictMath.max(4, channel.shape().minimumBankHeight() * 2)
+            double ordinary = RiverMorphology.maximumBedRadius(channel.shape()) + StrictMath.max(4, channel.shape().minimumBankHeight() * 2)
                     + channel.shape().bankWidth() * 5.0;
             double expansion = ordinary;
             for (int i = 1; i < channel.points().size(); i++) {
@@ -241,7 +246,7 @@ public final class HydrologyTerrain implements MacroTerrain {
     private static boolean compatibleWater(RiverNetwork network, Vec2 start, Vec2 end, double radius, double water) {
         for (var channel : network.channels()) for (int i = 1; i < channel.points().size(); i++) {
             Vec2 a = channel.points().get(i - 1), b = channel.points().get(i);
-            double expansion = radius + channel.shape().bedWidth();
+            double expansion = radius + RiverMorphology.maximumBedRadius(channel.shape());
             double distance = StrictMath.min(StrictMath.min(distanceToSegment(a, start, end).distance,
                     distanceToSegment(b, start, end).distance), StrictMath.min(distanceToSegment(start, a, b).distance,
                     distanceToSegment(end, a, b).distance));

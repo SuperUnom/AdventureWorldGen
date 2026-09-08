@@ -11,287 +11,210 @@
         "id": "minecraft:forest",
         "adventure_level": 2,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:flower_forest",
         "adventure_level": 2,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:birch_forest",
         "adventure_level": 3,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:old_growth_birch_forest",
         "adventure_level": 4,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:dark_forest",
         "adventure_level": 4,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:taiga",
         "adventure_level": 3,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:snowy_taiga",
         "adventure_level": 6,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:old_growth_pine_taiga",
         "adventure_level": 5,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:old_growth_spruce_taiga",
         "adventure_level": 6,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:jungle",
         "adventure_level": 4,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:sparse_jungle",
         "adventure_level": 3,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:bamboo_jungle",
         "adventure_level": 5,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:mangrove_swamp",
         "adventure_level": 5,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:cherry_grove",
         "adventure_level": 6,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:grove",
         "adventure_level": 7,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:swamp",
         "adventure_level": 2,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:savanna",
         "adventure_level": 3,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:savanna_plateau",
         "adventure_level": 5,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
-        }
-      },
-      {
-        "id": "minecraft:windswept_savanna",
-        "adventure_level": 6,
-        "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
-        }
-      },
-      {
-        "id": "minecraft:windswept_forest",
-        "adventure_level": 6,
-        "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:meadow",
         "adventure_level": 5,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:snowy_slopes",
         "adventure_level": 7,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:jagged_peaks",
         "adventure_level": 8,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:frozen_peaks",
         "adventure_level": 8,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       },
       {
         "id": "minecraft:stony_peaks",
         "adventure_level": 7,
         "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
-        }
-      },
-      {
-        "id": "minecraft:windswept_hills",
-        "adventure_level": 6,
-        "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
-        }
-      },
-      {
-        "id": "minecraft:windswept_gravelly_hills",
-        "adventure_level": 7,
-        "area": {
-          "min": 16384,
-          "target": 131072,
-          "max": 196608
+          "min": 32768,
+          "target": 393216
         }
       }
     ],
     "filler": [
-      "minecraft:plains",
-      "minecraft:forest",
-      "minecraft:flower_forest",
-      "minecraft:birch_forest",
-      "minecraft:old_growth_birch_forest",
-      "minecraft:dark_forest",
-      "minecraft:taiga",
-      "minecraft:old_growth_pine_taiga",
-      "minecraft:old_growth_spruce_taiga",
       "minecraft:snowy_plains",
-      "minecraft:snowy_taiga",
-      "minecraft:desert",
-      "minecraft:savanna",
-      "minecraft:savanna_plateau",
-      "minecraft:jungle",
-      "minecraft:sparse_jungle",
-      "minecraft:bamboo_jungle",
-      "minecraft:swamp",
-      "minecraft:mangrove_swamp",
-      "minecraft:meadow",
-      "minecraft:cherry_grove",
-      "minecraft:windswept_forest",
-      "minecraft:windswept_hills",
-      "minecraft:windswept_gravelly_hills",
-      "minecraft:grove",
+      "minecraft:ice_spikes",
       "minecraft:snowy_slopes",
-      "minecraft:stony_peaks",
-      "minecraft:jagged_peaks",
-      "minecraft:frozen_peaks"
+      "minecraft:meadow",
+      "minecraft:plains",
+      "minecraft:sunflower_plains",
+      "minecraft:savanna",
+      "minecraft:desert",
+      "minecraft:stony_peaks"
     ],
     "terrain_rules": {
       "minecraft:plains": {
         "allowed_terrain": [
           "plains",
-          "hills"
+          "hills",
+          "plateau"
         ],
         "temperature_level": 5,
         "temperatures": {
           "medium": 1
-        }
+        },
+        "filler_weight": 5
       },
       "minecraft:forest": {
         "allowed_terrain": [
@@ -313,17 +236,20 @@
         "temperature_level": 10,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "filler_weight": 3
       },
       "minecraft:snowy_plains": {
         "allowed_terrain": [
           "plains",
-          "hills"
+          "hills",
+          "plateau"
         ],
         "temperature_level": 0,
         "temperatures": {
-          "cold": 1
-        }
+          "very_cold": 1
+        },
+        "filler_weight": 5
       },
       "minecraft:taiga": {
         "allowed_terrain": [
@@ -334,7 +260,8 @@
         "temperature_level": 3,
         "temperatures": {
           "cold": 1
-        }
+        },
+        "max_height": 144
       },
       "minecraft:jungle": {
         "allowed_terrain": [
@@ -356,7 +283,8 @@
         "temperature_level": 8,
         "temperatures": {
           "hot": 1
-        }
+        },
+        "filler_weight": 3
       },
       "minecraft:stony_peaks": {
         "allowed_terrain": [
@@ -364,8 +292,11 @@
         ],
         "temperature_level": 4,
         "temperatures": {
-          "medium": 1
-        }
+          "cold": 1,
+          "medium": 2,
+          "hot": 1
+        },
+        "filler_weight": 1
       },
       "minecraft:flower_forest": {
         "allowed_terrain": [
@@ -419,7 +350,7 @@
         ],
         "temperature_level": 1,
         "temperatures": {
-          "cold": 1
+          "very_cold": 1
         }
       },
       "minecraft:old_growth_pine_taiga": {
@@ -431,7 +362,8 @@
         "temperature_level": 3,
         "temperatures": {
           "cold": 1
-        }
+        },
+        "max_height": 184
       },
       "minecraft:old_growth_spruce_taiga": {
         "allowed_terrain": [
@@ -442,7 +374,8 @@
         "temperature_level": 2,
         "temperatures": {
           "cold": 1
-        }
+        },
+        "max_height": 144
       },
       "minecraft:sparse_jungle": {
         "allowed_terrain": [
@@ -494,7 +427,7 @@
         ],
         "temperature_level": 1,
         "temperatures": {
-          "cold": 1
+          "very_cold": 1
         }
       },
       "minecraft:swamp": {
@@ -518,38 +451,19 @@
           "hot": 1
         }
       },
-      "minecraft:windswept_savanna": {
+      "minecraft:meadow": {
         "allowed_terrain": [
           "plains",
           "hills",
-          "plateau"
-        ],
-        "temperature_level": 7,
-        "temperatures": {
-          "hot": 1
-        }
-      },
-      "minecraft:windswept_forest": {
-        "allowed_terrain": [
-          "hills",
           "plateau",
           "mountains"
         ],
         "temperature_level": 4,
         "temperatures": {
-          "medium": 1
-        }
-      },
-      "minecraft:meadow": {
-        "allowed_terrain": [
-          "hills",
-          "plateau",
-          "mountains"
-        ],
-        "temperature_level": 4,
-        "temperatures": {
-          "medium": 1
-        }
+          "cold": 1
+        },
+        "max_height": 336,
+        "filler_weight": 4
       },
       "minecraft:snowy_slopes": {
         "allowed_terrain": [
@@ -557,8 +471,9 @@
         ],
         "temperature_level": 1,
         "temperatures": {
-          "cold": 1
-        }
+          "very_cold": 1
+        },
+        "filler_weight": 3
       },
       "minecraft:jagged_peaks": {
         "allowed_terrain": [
@@ -566,7 +481,7 @@
         ],
         "temperature_level": 0,
         "temperatures": {
-          "cold": 1
+          "very_cold": 1
         }
       },
       "minecraft:frozen_peaks": {
@@ -575,30 +490,33 @@
         ],
         "temperature_level": 0,
         "temperatures": {
-          "cold": 1
+          "very_cold": 1
         }
       },
-      "minecraft:windswept_hills": {
+      "minecraft:sunflower_plains": {
         "allowed_terrain": [
+          "plains",
           "hills",
-          "plateau",
-          "mountains"
+          "plateau"
         ],
-        "temperature_level": 4,
+        "temperature_level": 5,
         "temperatures": {
-          "medium": 1
-        }
+          "cold": 1,
+          "medium": 3
+        },
+        "filler_weight": 2.5
       },
-      "minecraft:windswept_gravelly_hills": {
+      "minecraft:ice_spikes": {
         "allowed_terrain": [
+          "plains",
           "hills",
-          "plateau",
-          "mountains"
+          "plateau"
         ],
-        "temperature_level": 3,
+        "temperature_level": 0,
         "temperatures": {
-          "cold": 1
-        }
+          "very_cold": 1
+        },
+        "filler_weight": 0.5
       }
     },
     "blend_radius": 4
@@ -614,11 +532,7 @@
       "allowed_biomes": {
         "id": [
           "minecraft:desert"
-        ],
-        "area": {
-          "min": 16384,
-          "max": 32768
-        }
+        ]
       },
       "placement_mode": "scattered",
       "entrance": [

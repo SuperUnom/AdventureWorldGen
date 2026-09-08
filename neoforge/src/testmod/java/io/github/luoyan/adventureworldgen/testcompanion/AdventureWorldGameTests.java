@@ -173,7 +173,7 @@ public final class AdventureWorldGameTests {
 
     private static void assertTerrainBiomes(GameTestHelper helper, GeneratedAdventurePlan plan,
             io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config) {
-        helper.assertTrue(config.biomes().required().size() == 27, "default woodland/mountain requirements disappeared");
+        helper.assertTrue(config.biomes().required().size() == 23, "default woodland/mountain requirements disappeared");
         for (var required : config.biomes().required()) {
             var patch = plan.biomePatches().stream().filter(p -> p.patchId().equals(required.patchId())).findFirst().orElseThrow();
             long area = 0;
@@ -188,16 +188,27 @@ public final class AdventureWorldGameTests {
             helper.assertTrue(largestComponentArea(patch) == area,
                     "required biome lost its main contiguous body: " + required.id());
         }
-        int mountains = 0, deserts = 0;
+        helper.assertTrue(config.biomes().filler().stream().noneMatch(id->id.value().contains("windswept")),"windswept remains in filler pool");
+        int mountains = 0, openHotLand = 0;
         for (int z = -3000; z < 3000; z += 32) for (int x = -3000; x < 3000; x += 32) {
             var terrain = plan.terrainAt(x+2,z+2);
             if (terrain.waterKind() == io.github.luoyan.adventureworldgen.api.WaterKind.OCEAN) continue;
             var biome = plan.landBiomeAt(x,z);
             helper.assertTrue(config.biomes().allows(biome,terrain), "filler violates terrain rule: " + biome + " at " + x + "," + z);
+            if(terrain.waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE) {
+                var nativeBiome=helper.getLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME)
+                        .get(net.minecraft.resources.ResourceLocation.parse(biome.value()));
+                var position=new net.minecraft.core.BlockPos(x+2,(int)Math.ceil(terrain.groundSurface())+1,z+2);
+                var type=plan.climate().typeAt(x+2,z+2,terrain);
+                if(type==io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType.VERY_COLD)
+                    helper.assertTrue(nativeBiome.hasPrecipitation()&&nativeBiome.coldEnoughToSnow(position),"very cold land has no native snow: "+biome);
+                if(type==io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType.COLD)
+                    helper.assertTrue(!nativeBiome.coldEnoughToSnow(position),"cold land unexpectedly snows: "+biome+" at "+position);
+            }
             if (terrain.terrainTemplate().equals("mountains")) mountains++;
-            if (biome.value().equals("minecraft:desert")) deserts++;
+            if (biome.value().equals("minecraft:desert")||biome.value().equals("minecraft:savanna")) openHotLand++;
         }
-        helper.assertTrue(mountains > 100 && deserts > 50, "terrain-rule test lacks mountain/desert coverage");
+        helper.assertTrue(mountains > 100 && openHotLand > 50, "terrain-rule test lacks mountain/open hot land coverage");
     }
 
     private static long largestComponentArea(GeneratedAdventurePlan.PlannedBiomePatch patch) {
@@ -230,6 +241,13 @@ public final class AdventureWorldGameTests {
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "crash-seed-r11");
             var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
+            var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn());
+            var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
+            helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
+                    && progress.stage()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,
+                    "READY reload reran filling or transition");
+            for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
+                helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");
             helper.assertTrue(!generated.terrainAt(generated.spawnPosition().x(),generated.spawnPosition().z()).wet(),"crash seed has wet spawn");
             helper.assertTrue(generated.structures().size() == 1,"crash seed lost its required pyramid");
             helper.succeed();
@@ -264,6 +282,13 @@ public final class AdventureWorldGameTests {
                             canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "production-profile-test");
             var generated = RuntimePlanner.plan(7331, loaded, java.nio.file.Path.of("production-profile-r6"), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
+            var reloaded=RuntimePlanner.plan(7331,loaded,java.nio.file.Path.of("production-profile-r6"),MinecraftAdapters.builtIn());
+            var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
+            helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
+                    && progress.stage()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,
+                    "READY reload reran filling or transition");
+            for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
+                helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");
             helper.assertTrue(!generated.terrainAt(generated.spawnPosition().x(), generated.spawnPosition().z()).wet(), "wet production spawn");
             helper.assertTrue(generated.structures().stream().anyMatch(structure -> structure.structureId().value().equals("minecraft:desert_pyramid")),
                     "production profile failed to place pyramid");
@@ -307,6 +332,7 @@ public final class AdventureWorldGameTests {
             }
         }
         int waterColumns = 0, descendingEdges = 0, waterBiomeColumns = 0;
+        java.util.Set<net.minecraft.world.level.block.Block> riverbedMaterials = new java.util.HashSet<>();
         for (var pos : positions) {
             var chunk = new net.minecraft.world.level.chunk.ProtoChunk(pos, net.minecraft.world.level.chunk.UpgradeData.EMPTY,
                     level, registries.registryOrThrow(Registries.BIOME), null);
@@ -316,6 +342,7 @@ public final class AdventureWorldGameTests {
             var future = generator.fillFromNoise(net.minecraft.world.level.levelgen.blending.Blender.empty(), random,
                     level.structureManager(), chunk);
             level.getServer().managedBlock(future::isDone); future.join();
+            generator.buildLandSurface(registries, chunk);
             java.util.Set<net.minecraft.core.BlockPos> updates = new java.util.HashSet<>();
             var processing = chunk.getPostProcessing();
             for (int section = 0; section < processing.length; section++) if (processing[section] != null)
@@ -333,6 +360,16 @@ public final class AdventureWorldGameTests {
                 var surface = new net.minecraft.core.BlockPos(x, top, z);
                 if (chunk.getBlockState(surface).getFluidState().isEmpty()) continue;
                 waterColumns++;
+                if (sample.waterKind() == io.github.luoyan.adventureworldgen.api.WaterKind.RIVER) {
+                    for (int bedY = top - 1; bedY > level.getMinBuildHeight(); bedY--) {
+                        var bed = chunk.getBlockState(new net.minecraft.core.BlockPos(x, bedY, z));
+                        if (bed.blocksMotion()) {
+                            riverbedMaterials.add(bed.getBlock());
+                            helper.assertTrue(!bed.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK), "underwater riverbed has grass at " + x + "," + z + " biome=" + generated.surfaceBiomeAt(x, z));
+                            break;
+                        }
+                    }
+                }
                 var storedBiome = chunk.getNoiseBiome(x >> 2, top >> 2, z >> 2);
                 var expectedBiome = ResourceLocation.parse(generated.biomeAt(x, top, z).value());
                 helper.assertTrue(storedBiome.is(net.minecraft.resources.ResourceKey.create(Registries.BIOME, expectedBiome)),
@@ -350,6 +387,7 @@ public final class AdventureWorldGameTests {
                 }
             }
         }
+        helper.assertTrue(riverbedMaterials.size() >= 3, "generated riverbed still uses a uniform material");
         helper.assertTrue(waterBiomeColumns > 100, "river water has no actual river biome palette");
         helper.assertTrue(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current().status()
                         == io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY,

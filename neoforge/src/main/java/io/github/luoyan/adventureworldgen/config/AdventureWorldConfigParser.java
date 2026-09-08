@@ -163,13 +163,15 @@ public final class AdventureWorldConfigParser {
                 if (temperature < 0 || temperature > 10) throw error(rulePath + ".temperature_level", "must be in [0,10]");
                 Map<AdventureWorldConfig.TemperatureType,Double> types = new java.util.EnumMap<>(AdventureWorldConfig.TemperatureType.class);
                 if(rule.has("temperatures")) {
-                    var ts=object(rule.get("temperatures"),rulePath+".temperatures",Set.of("cold","medium","hot"));
+                    var ts=object(rule.get("temperatures"),rulePath+".temperatures",Set.of("very_cold","cold","medium","hot"));
                     for(var e:ts.entrySet()) {
                         double weight=finiteNumber(e.getValue(),rulePath+".temperatures."+e.getKey());
                         if(weight<=0)throw error(rulePath+".temperatures", "preferences must be positive");
                         types.put(AdventureWorldConfig.TemperatureType.valueOf(e.getKey().toUpperCase(java.util.Locale.ROOT)),weight);
                     }
                     if(types.isEmpty())throw error(rulePath+".temperatures","must not be empty");
+                    if(types.containsKey(AdventureWorldConfig.TemperatureType.VERY_COLD)&&types.size()>1)
+                        throw conflict(rulePath+".temperatures","very_cold snowy biomes cannot also be non-snow temperature types");
                 } else types.put(AdventureWorldConfig.TemperatureType.fromLevel((int)temperature),1.0);
                 Double pmin=optionalNumber(rule,"preferred_min_height",rulePath),pmax=optionalNumber(rule,"preferred_max_height",rulePath);
                 if(pmin!=null&&pmax!=null&&pmin>pmax)throw conflict(rulePath,"preferred_min_height exceeds preferred_max_height");
@@ -262,8 +264,8 @@ public final class AdventureWorldConfigParser {
     private AreaRange area(JsonElement element, String path) {
         JsonObject object = object(element, path, AREA_FIELDS);
         long min = integer(required(object, "min", path), path + ".min");
-        long max = object.has("max") ? integer(object.get("max"), path + ".max")
-                : integer(required(object,"target",path),path+".target");
+        if(!object.has("max")&&!object.has("target"))throw error(path,"requires target or max");
+        long max = object.has("max") ? integer(object.get("max"), path + ".max") : Long.MAX_VALUE;
         long target=object.has("target")?integer(object.get("target"),path+".target"):max;
         if (min <= 0) {
             throw error(path + ".min", "must be greater than zero");

@@ -41,7 +41,14 @@ class PlanV2CodecTest {
                 List.of(patch),List.of(),GeneratedAdventurePlan.PlanDiagnostics.basic(coast,network),null,capacities);
         var codec=new PlanV2Codec(); var profile=new ContentId("adventureworldgen:default");
         byte[] encoded=codec.encode(profile,"sparse-input",original);
-        var restored=codec.decode(encoded,profile,"sparse-input",config);
+        var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.begin("reload-test");
+        GeneratedAdventurePlan restored;
+        try {
+            restored=codec.decode(encoded,profile,"sparse-input",config);
+            assertEquals(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,progress.snapshot().stage());
+            assertEquals(0,progress.snapshot().percent());
+        } finally {io.github.luoyan.adventureworldgen.runtime.PlanningProgress.clear();}
+        assertEquals(original.fillerSeedCount(),restored.fillerSeedCount());
         assertArrayEquals(encoded,codec.encode(profile,"sparse-input",restored));
         assertEquals(original.biomePatches(),restored.biomePatches());
         assertEquals(original.capacities().reservations(),restored.capacities().reservations());
@@ -60,7 +67,11 @@ class PlanV2CodecTest {
                 """));
         Coastline coast = new Coastline(List.of(new Vec2(-1000, -1000), new Vec2(1000, -1000),
                 new Vec2(1000, 1000), new Vec2(-1000, 1000)));
-        var network = new RiverNetwork(List.of(), List.of(), PlannerProfile.V2.hydrologyVersion());
+        var channel = new RiverNetwork.Channel("river/roundtrip", 0, null,
+                List.of(new Vec2(-800, 400), new Vec2(0, 300), new Vec2(800, 400)),
+                List.of(0.0, Math.hypot(800, 100), 2 * Math.hypot(800, 100)), List.of(70.0, 67.0, 64.0),
+                new io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile.RiverShape(8, 2, 6, 20, 30, 0.75), null);
+        var network = new RiverNetwork(List.of(channel), List.of(), PlannerProfile.V2.hydrologyVersion());
         var original = new GeneratedAdventurePlan(42, config, coast, network, 64, 128, 256, "terrain-v2", null);
         PlanV2Codec codec = new PlanV2Codec();
         ContentId profile = new ContentId("adventureworldgen:default");
@@ -69,6 +80,9 @@ class PlanV2CodecTest {
 
         assertArrayEquals(encoded, codec.encode(profile, "input", restored));
         assertEquals(original.spawnPosition(), restored.spawnPosition());
+        assertEquals(network, restored.riverNetwork());
+        for (int x = -750; x <= 750; x += 16) for (int z = 250; z <= 450; z += 4)
+            assertEquals(original.terrainAt(x, z), restored.terrainAt(x, z), "river shape changed after reload");
         assertEquals(original.terrainAt(37.5, -91.5), restored.terrainAt(37.5, -91.5));
     }
 

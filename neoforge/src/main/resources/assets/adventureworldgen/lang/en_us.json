@@ -15,5 +15,6 @@
   "adventureworldgen.planning.growth": "Required biome growth",
   "adventureworldgen.planning.filler": "Filling",
   "adventureworldgen.planning.transition": "Boundary transition",
-  "adventureworldgen.planning.validation": "Validation"
+  "adventureworldgen.planning.validation": "Validation",
+  "adventureworldgen.planning.structures": "Required structure placement"
 }

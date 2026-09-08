@@ -20,9 +20,26 @@ class RequirementExpanderTest {
         var expanded = new RequirementExpander().expandMinimum(config);
         assertEquals("patch/spawn", expanded.patches().getFirst().patchId());
         assertTrue(expanded.patches().getFirst().implicit());
+        assertEquals(2, expanded.patches().size());
+        var carrier=expanded.patches().get(1);
+        assertEquals(StableIds.carrierPatch(expanded.structures().getFirst().instanceId()),carrier.patchId());
+        assertEquals(config.structures().getFirst().allowedBiomes().area(),carrier.area());
+        assertEquals(config.biomes().filler(),carrier.allowedBiomes());
         assertEquals(1, expanded.structures().size());
         assertEquals("instance/minecraft:desert_pyramid/0", expanded.structures().getFirst().instanceId());
         assertTrue(expanded.structures().getFirst().spawnInstance());
+    }
+
+    @Test
+    void spawnStructureUsesTheExplicitSpawnBiomeAmongAllowedAlternatives() {
+        var config=new AdventureWorldConfigParser().parse("""
+          {"world":{"radius":512},"spawn":{"biome":"test:plains","structure":{"id":"test:keep","spawn_point":[0,1,0]}},
+           "biomes":{"filler":["test:plains"]},"structures":[{"id":"test:keep","adventure_level":0,
+           "count":{"min":0,"max":1},"allowed_biomes":{"id":["test:desert","test:plains"]},"entrance":[0,0,0]}]}
+          """);
+        var expanded=new RequirementExpander().expandMinimum(config);
+        var carrier=expanded.patches().stream().filter(d->d.patchId().startsWith("patch/carrier/")).findFirst().orElseThrow();
+        assertEquals(java.util.List.of(config.spawn().biome()),carrier.allowedBiomes());
     }
 
     @Test

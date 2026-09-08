@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
+import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import org.junit.jupiter.api.Test;
 
 import java.io.StringReader;
@@ -93,7 +94,7 @@ class JointPlannerTest {
         assertTrue(spawn.contains(0,0));
         assertEquals(0.5, plan.spawn().x());
         assertEquals(0.5, plan.spawn().z());
-        assertTrue(spawn.area() >= 65536 && spawn.area() <= 131072);
+        assertTrue(spawn.area() >= AdventureWorldConfig.AreaRange.DEFAULT.min());
         for (int z = spawn.minZ(); z < spawn.maxZExclusive(); z += 4)
             for (int x = spawn.minX(); x < spawn.maxXExclusive(); x += 4)
                 if (spawn.contains(x,z)) assertTrue(x + 2 <= 80, "spawn biome spills onto forbidden mountain terrain");
@@ -162,7 +163,7 @@ class JointPlannerTest {
         assertEquals(first, second);
         assertEquals(3, first.patches().stream().filter(p->!p.patchId().startsWith("filler/")).count()); // explicit, implicit spawn, and structure carrier
         assertEquals(1, first.structures().size());
-        assertTrue(first.patches().stream().filter(p->!p.patchId().startsWith("filler/")).allMatch(patch -> patch.area() >= 16_384 && patch.area() <= 196_608));
+        assertTrue(first.patches().stream().filter(p->!p.patchId().startsWith("filler/")).allMatch(patch -> patch.area() >= 16_384));
         assertTrue(first.patches().stream().allMatch(patch -> (patch.minX() & 3) == 0 && (patch.minZ() & 3) == 0));
     }
 

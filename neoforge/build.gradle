@@ -120,6 +120,8 @@ configurations {
 }
 
 tasks.named('test', Test) {
+    // Full-world determinism checks retain multiple uncapped biome plans at once.
+    maxHeapSize = '2g'
     useJUnitPlatform()
 }
 

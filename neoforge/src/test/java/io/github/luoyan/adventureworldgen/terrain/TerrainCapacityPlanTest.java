@@ -20,7 +20,7 @@ class TerrainCapacityPlanTest {
           """);
         var coast=new Coastline(List.of(new Vec2(-2000,-2000),new Vec2(2000,-2000),new Vec2(2000,2000),new Vec2(-2000,2000)));
         var plan=TerrainCapacityPlan.reserve(7331,config,coast,128);
-        assertEquals(49152,plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum());
+        assertEquals(65536,plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum());
         assertEquals(plan.reservations(),TerrainCapacityPlan.reserve(7331,config,coast,128).reservations());
         assertTrue(plan.reservations().stream().anyMatch(r->r.template()==RegionTerrain.Template.MOUNTAINS));
         var regions=new RegionTerrain(7331,PlannerProfile.V2,plan);

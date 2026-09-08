@@ -9,6 +9,11 @@ public interface BiomeAdapter {
     Compatibility compatibility(MacroSample terrain);
     SurfacePalette surface(MacroSample terrain);
 
+    /** Spatial surface patterns; existing third-party adapters keep their original policy. */
+    default SurfacePalette surface(MacroSample terrain, long seed, int blockX, int blockZ) {
+        return surface(terrain);
+    }
+
     record Compatibility(boolean allowed, double softPreference, String reason) {
         public Compatibility {
             if (!Double.isFinite(softPreference) || softPreference < 0.0 || softPreference > 1.0)

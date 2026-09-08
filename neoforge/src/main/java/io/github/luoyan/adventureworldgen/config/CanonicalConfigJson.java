@@ -106,7 +106,7 @@ public final class CanonicalConfigJson {
 
     private static void writeArea(JsonWriter json, AreaRange area) throws IOException {
         json.name("area").beginObject();
-        json.name("max").value(area.max());
+        if(area.max()!=Long.MAX_VALUE)json.name("max").value(area.max());
         json.name("min").value(area.min());
         json.name("target").value(area.target());
         json.endObject();

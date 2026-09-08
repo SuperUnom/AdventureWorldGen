@@ -11,6 +11,28 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class HydrologyGeneratorTest {
+    @Test void smallContinentsStillFitIndependentCatchments() throws java.io.IOException {
+        io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config;
+        try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(
+                "src/testmod/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
+            config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
+        }
+        for (long seed : new long[]{72362148366599L, 1, 7331}) {
+            var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, 1536, 185.6);
+            var capacities = io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.reserve(seed, config, coast.coastline(), coast.landBand());
+            var island = new io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain(coast.coastline(),
+                    new io.github.luoyan.adventureworldgen.terrain.RegionTerrain(seed, PlannerProfile.V2, capacities),
+                    seed, 64, coast.landBand(), coast.seaBand(), "test");
+            var erosion = new io.github.luoyan.adventureworldgen.erosion.ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
+                    .generate(seed, island, -1792, -1792, 8, 449, 449);
+            var base = new io.github.luoyan.adventureworldgen.erosion.ErodedTerrain(island, erosion, "test");
+            var network = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
+                    .generate(seed, 1536, 64, coast.coastline(), base);
+            assertEquals(8, network.channels().stream().filter(c -> c.parentId() == null).count());
+            assertTrue(network.channels().size() <= 96);
+        }
+    }
+
     @Test
     void fixedCommitRetainedSettingsMatchGoldenVector() {
         var value = HydrologyProfile.FTF_ADAPTED_V1;
@@ -42,6 +64,32 @@ class HydrologyGeneratorTest {
         assertEquals(first, second);
         assertEquals(8, first.channels().stream().filter(channel -> channel.order() == 0).count());
         assertTrue(first.channels().stream().anyMatch(channel -> channel.order() > 0));
+        var mains = first.channels().stream().filter(channel -> channel.order() == 0).toList();
+        assertTrue(mains.stream().mapToInt(c -> c.shape().bedWidth()).max().orElseThrow()
+                >= 2 * mains.stream().mapToInt(c -> c.shape().bedWidth()).min().orElseThrow(), "trunks have uniform widths");
+        double minimumSinuosity = Double.POSITIVE_INFINITY, maximumSinuosity = 0, totalSinuosity = 0;
+        int curved = 0;
+        for (var channel : mains) {
+            var source = channel.points().getFirst();
+            var mouth = channel.points().getLast();
+            double chord = source.distance(mouth);
+            double sinuosity = channel.length() / chord;
+            minimumSinuosity = Math.min(minimumSinuosity, sinuosity);
+            maximumSinuosity = Math.max(maximumSinuosity, sinuosity); totalSinuosity += sinuosity;
+            double oblique = Math.abs(source.x() * (mouth.z() - source.z()) - source.z() * (mouth.x() - source.x()))
+                    / (Math.hypot(source.x(), source.z()) * chord);
+            assertTrue(oblique > 0.45, "river still points radially from the center");
+            int left = 0, right = 0;
+            for (int i = 4; i < channel.points().size() - 4; i += 4) {
+                var a = channel.points().get(i - 4); var b = channel.points().get(i); var c = channel.points().get(i + 4);
+                double turn = (b.x() - a.x()) * (c.z() - b.z()) - (b.z() - a.z()) * (c.x() - b.x());
+                if (turn > 5) left++; if (turn < -5) right++;
+            }
+            if (left >= 3 || right >= 3) curved++;
+        }
+        assertTrue(curved >= 6 && totalSinuosity / mains.size() > 1.08, "network lacks developed bends");
+        assertTrue(maximumSinuosity - minimumSinuosity > 0.08, "river shapes are too uniform");
+        assertTrue(first.channels().stream().filter(c -> c.order() > 0).count() >= 12, "too few tributaries");
         for (var channel : first.channels()) {
             assertTrue(channel.order() <= 3);
             for (int i = 1; i < channel.waterSurfaces().size(); i++)

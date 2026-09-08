@@ -25,13 +25,14 @@ public final class HydrologyGenerator {
         List<RiverNetwork.Channel> channels = new ArrayList<>();
         List<RiverNetwork.Wetland> wetlands = new ArrayList<>();
         List<RiverNetwork.Channel> roots = new ArrayList<>();
-        // FTF generateRoots uses random bearings and independently varied headwater distances.
-        // Separate catchment anchors adapt that construction to this one finite continent.
-        for (int attempt = 0; roots.size() < profile.mainRiverCount() && attempt < 512; attempt++) {
+        // Spread headwaters across the interior. Independently oblique outlet bearings
+        // avoid a common central hub and leave space for separate coastal catchments.
+        for (int attempt = 0; roots.size() < profile.mainRiverCount() && attempt < 2048; attempt++) {
             String candidateId = "river/root-candidate/" + attempt;
-            double angle = random(seed, candidateId, 0) * StrictMath.PI * 2;
             double anchorAngle = random(seed, candidateId, 1) * StrictMath.PI * 2;
-            double anchorRadius = radius * 0.28 * StrictMath.sqrt(random(seed, candidateId, 2));
+            double angle = anchorAngle + (random(seed, candidateId, 0) < 0.5 ? -1 : 1)
+                    * (0.55 + 0.85 * random(seed, candidateId, 3));
+            double anchorRadius = radius * (0.24 + 0.53 * StrictMath.sqrt(random(seed, candidateId, 2)));
             Vec2 anchor = new Vec2(StrictMath.cos(anchorAngle) * anchorRadius, StrictMath.sin(anchorAngle) * anchorRadius);
             if (!coast.contains(anchor.x(), anchor.z())) continue;
             double dx = StrictMath.cos(angle), dz = StrictMath.sin(angle);
@@ -46,18 +47,21 @@ public final class HydrologyGenerator {
                 if (coast.contains(anchor.x() + dx * mid, anchor.z() + dz * mid)) low = mid; else high = mid;
             }
             Vec2 outlet = new Vec2(anchor.x() + dx * low, anchor.z() + dz * low);
-            double startDistance = StrictMath.max(StrictMath.min(400, radius * 0.22),
-                    (0.05 + 0.45 * random(seed, candidateId, 3)) * low);
-            if (low - startDistance < radius * 0.22) continue;
-            Vec2 source = new Vec2(anchor.x() + dx * startDistance, anchor.z() + dz * startDistance);
+            // If the long inland catchments fill the available terrain first, also
+            // consider short coastal catchments instead of failing the entire world.
+            double minimumLength = StrictMath.max(120, radius * (attempt < 512 ? 0.24 : 0.10));
+            if (low < minimumLength) continue;
+            Vec2 source = anchor;
             if (StrictMath.hypot(source.x(), source.z()) < StrictMath.min(320, radius * 0.18)) continue;
-            if (roots.stream().anyMatch(root -> root.points().getLast().distance(outlet) < radius * 0.18)) continue;
+            double mouthSpacing = radius * (attempt < 512 ? 0.18 : 0.10);
+            if (roots.stream().anyMatch(root -> root.points().getLast().distance(outlet) < mouthSpacing)) continue;
             String id = "river/main/" + roots.size();
-            List<Vec2> points = warpedLine(seed, candidateId, source, outlet, coast, 8.0, 125, 175);
+            var shape = variedShape(seed, id, 0, roots.isEmpty(), profile.main(), radius);
+            List<Vec2> points = RiverPath.grow(seed, candidateId, source, outlet, coast, baseTerrain, shape, seaSurface);
             if (points.isEmpty()) continue;
             double sourceWater = StrictMath.max(seaSurface + 2.0,
                     baseTerrain.sample(source.x(), source.z()).groundSurface() - profile.main().minimumBankHeight());
-            RiverNetwork.Channel main = channel(seed, id, 0, null, points, sourceWater, seaSurface, profile.main(), baseTerrain);
+            RiverNetwork.Channel main = channel(seed, id, 0, null, points, sourceWater, seaSurface, shape, baseTerrain, null);
             if (intersectsExisting(main, channels, null)) continue;
             channels.add(main); roots.add(main); maybeWetland(seed, main, wetlands, baseTerrain);
         }
@@ -71,38 +75,45 @@ public final class HydrologyGenerator {
     private void generateForks(long seed, double radius, Coastline coast, MacroTerrain terrain,
                                RiverNetwork.Channel parent, int depth,
                                List<RiverNetwork.Channel> channels, List<RiverNetwork.Wetland> wetlands) {
-        if (depth > profile.maximumForkDepth() || parent.length() * 0.44 < 300) return;
+        if (depth > profile.maximumForkDepth() || parent.length() < 280 || channels.size() >= 96) return;
         int forkIndex = 0;
-        for (double along = 0.25 + 0.08 * random(seed, parent.id() + "/first-fork", depth); along < 0.9;
-             along += 0.16 + 0.18 * random(seed, parent.id() + "/fork-spacing", forkIndex++)) {
+        for (double along = 0.18 + 0.06 * random(seed, parent.id() + "/first-fork", depth); along < 0.94 && channels.size() < 96;
+             along += 0.08 + 0.07 * random(seed, parent.id() + "/fork-spacing", forkIndex++)) {
             Vec2 join = pointAt(parent, along);
             Vec2 downstream = pointAt(parent, StrictMath.min(1.0, along + 0.01));
             double parentAngle = StrictMath.atan2(downstream.z() - join.z(), downstream.x() - join.x());
             String id = parent.id() + "/fork/" + forkIndex;
-            double sign = ((forkIndex + depth) & 1) == 0 ? 1 : -1;
-            double angle = parentAngle + StrictMath.PI + sign * (0.47 + 0.25 * random(seed, id, 0));
-            double length = parent.length() * 0.44;
-            Vec2 source = new Vec2(join.x() + StrictMath.cos(angle) * length,
-                    join.z() + StrictMath.sin(angle) * length);
-            if (!coast.contains(source.x(), source.z())) continue;
-            List<Vec2> points = warpedLine(seed, id, source, join, coast, 8.0,
-                    125 * StrictMath.pow(0.65, depth), 175 * StrictMath.pow(0.65, depth));
-            if (points.isEmpty()) continue;
-            double downstreamWater = waterAt(parent, along);
-            double sourceWater = StrictMath.max(downstreamWater,
-                    terrain.sample(source.x(), source.z()).groundSurface() - profile.branch().minimumBankHeight());
-            RiverNetwork.Channel fork = channel(seed, id, depth, parent.id(), points,
-                    sourceWater, downstreamWater, profile.branch(), terrain);
-            if (fork == null || intersectsExisting(fork, channels, join)) continue;
-            channels.add(fork);
-            maybeWetland(seed, fork, wetlands, terrain);
-            generateForks(seed, radius, coast, terrain, fork, depth + 1, channels, wetlands);
+            // A single bearing often encounters a low valley and eliminates every
+            // tributary. Try a small, stable set of local catchments before skipping it.
+            for (int attempt = 0; attempt < 16; attempt++) {
+                String candidate = id + "/candidate/" + attempt;
+                double sign = ((forkIndex + depth + attempt) & 1) == 0 ? 1 : -1;
+                double angle = parentAngle + StrictMath.PI + sign * (0.5 + 0.8 * random(seed, candidate, 0));
+                double length = StrictMath.max(110, parent.length() * (0.16 + 0.28 * random(seed, candidate, 1)));
+                Vec2 source = new Vec2(join.x() + StrictMath.cos(angle) * length,
+                        join.z() + StrictMath.sin(angle) * length);
+                if (!coast.contains(source.x(), source.z())) continue;
+                var shape = variedShape(seed, id, depth, false, profile.branch(), radius);
+                double downstreamWater = waterAt(parent, along);
+                if (terrain.sample(source.x(), source.z()).groundSurface() < downstreamWater + shape.minimumBankHeight()) continue;
+                List<Vec2> points = RiverPath.grow(seed, candidate, source, join, coast, terrain, shape, downstreamWater);
+                if (points.isEmpty()) continue;
+                double sourceWater = StrictMath.max(downstreamWater,
+                        terrain.sample(source.x(), source.z()).groundSurface() - profile.branch().minimumBankHeight());
+                RiverNetwork.Channel fork = channel(seed, id, depth, parent.id(), points,
+                        sourceWater, downstreamWater, shape, terrain, parent);
+                if (fork == null || intersectsExisting(fork, channels, join)) continue;
+                channels.add(fork);
+                maybeWetland(seed, fork, wetlands, terrain);
+                generateForks(seed, radius, coast, terrain, fork, depth + 1, channels, wetlands);
+                break;
+            }
         }
     }
 
     private RiverNetwork.Channel channel(long seed, String id, int order, String parentId, List<Vec2> points,
                                           double sourceWater, double outletWater,
-                                          HydrologyProfile.RiverShape shape, MacroTerrain terrain) {
+                                          HydrologyProfile.RiverShape shape, MacroTerrain terrain, RiverNetwork.Channel parent) {
         List<Double> lengths = cumulative(points);
         double total = lengths.getLast();
         List<Double> water = new ArrayList<>(points.size());
@@ -117,7 +128,7 @@ public final class HydrologyGenerator {
             double length = StrictMath.hypot(dx, dz);
             for (int step = 0; step <= 8; step++) {
                 Vec2 probe = previous.interpolate(point, step / 8.0);
-                double bankExtent = shape.bedWidth() + shape.bankWidth();
+                double bankExtent = RiverMorphology.maximumBedRadius(shape) + shape.bankWidth();
                 for (double side = -bankExtent; side <= bankExtent; side += 4) {
                     double ground = terrain.sample(probe.x() - dz / length * side,
                             probe.z() + dx / length * side).groundSurface();
@@ -126,6 +137,15 @@ public final class HydrologyGenerator {
             }
             if (parentId != null && cap < outletWater) return null;
             water.add(StrictMath.max(outletWater, cap));
+        }
+        if (parent != null) for (int i = 0; i < points.size() - 1; i++) {
+            var nearby = nearestWater(parent, points.get(i));
+            double influence = fadeRadius(shape) + RiverMorphology.maximumBedRadius(parent.shape());
+            if (nearby.distance < influence) {
+                double shared = RiverMorphology.maximumBedRadius(shape) + RiverMorphology.maximumBedRadius(parent.shape()) + 8;
+                water.set(i, StrictMath.min(water.get(i), StrictMath.max(outletWater,
+                        nearby.water + StrictMath.max(0, nearby.distance - shared) * 0.02)));
+            }
         }
         water.set(water.size() - 1, outletWater);
         for (int i = water.size() - 2; i >= 0; i--)
@@ -187,45 +207,36 @@ public final class HydrologyGenerator {
         return true;
     }
 
-    private List<Vec2> warpedLine(long seed, String id, Vec2 start, Vec2 end, Coastline coast,
-                                  double spacing, double minimumScale, double maximumScale) {
-        double length = start.distance(end);
-        int divisions = StrictMath.max(2, (int) StrictMath.ceil(length / spacing));
-        var broad = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, id + "/warp/broad",
-                1000 + 1000 * random(seed, id + "/warp-frequency", 0));
-        var fine = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, id + "/warp/fine", 95);
-        double dx = (end.x() - start.x()) / length, dz = (end.z() - start.z()) / length;
-        double nx = dz, nz = -dx;
-        double scale = minimumScale + random(seed, id + "/warp", 0) * (maximumScale - minimumScale);
-        List<Vec2> result = new ArrayList<>(divisions + 1);
-        for (int i = 0; i <= divisions; i++) {
-            double t = i / (double) divisions;
-            double fade = smooth(StrictMath.min(1.0, t / 0.15)) * smooth(StrictMath.min(1.0, (1.0 - t) / 0.25));
-            double x = start.x() + (end.x() - start.x()) * t;
-            double z = start.z() + (end.z() - start.z()) * t;
-            double bend = broad.sample(x, z);
-            double lengthFactor = length * 4.0e-4;
-            double wiggle = StrictMath.min(45, 25 * lengthFactor);
-            double offset = fade * (bend * scale + fine.sample(x, z) * 12.5
-                    + StrictMath.sin(bend + t * StrictMath.PI * 2 * 8 * lengthFactor) * wiggle);
-            Vec2 point = (i == 0) ? start : (i == divisions) ? end : new Vec2(x + nx * offset, z + nz * offset);
-            if (!coast.contains(point.x(), point.z()) && i != divisions) return List.of();
-            result.add(point);
-        }
-        return List.copyOf(result);
+    private HydrologyProfile.RiverShape variedShape(long seed, String id, int order, boolean broad,
+                                                    HydrologyProfile.RiverShape base, double radius) {
+        double size = random(seed, id + "/size", 0);
+        // One broad trunk per continent, with occasional additional large catchments.
+        double factor = order == 0 ? (broad || size > 0.88 ? 2.8 + size : 0.9 + size * 0.9)
+                : (0.8 + size * 0.6) * StrictMath.pow(0.76, order - 1);
+        double continentScale = StrictMath.max(0.4, StrictMath.min(1, radius / 3000));
+        return new HydrologyProfile.RiverShape(
+                StrictMath.max(2, (int) StrictMath.round(base.bedDepth() * StrictMath.sqrt(factor * continentScale))),
+                base.minimumBankHeight(), base.maximumBankHeight(),
+                StrictMath.max(6, (int) StrictMath.round(base.bankWidth() * continentScale)),
+                StrictMath.max(3, (int) StrictMath.round(base.bedWidth() * factor * continentScale)), base.fade());
     }
 
     private static boolean intersectsExisting(RiverNetwork.Channel candidate,
                                               List<RiverNetwork.Channel> existing, Vec2 allowedJoin) {
+        Bounds candidateBounds = bounds(candidate);
         for (RiverNetwork.Channel other : existing) {
+            double clearance = StrictMath.max(fadeRadius(candidate.shape()) + RiverMorphology.maximumBedRadius(other.shape()),
+                    fadeRadius(other.shape()) + RiverMorphology.maximumBedRadius(candidate.shape())) + 8;
+            Bounds otherBounds = bounds(other);
+            if (!candidateBounds.overlaps(otherBounds, clearance)) continue;
             for (int a = 1; a < candidate.points().size(); a++) {
                 Vec2 a0 = candidate.points().get(a - 1), a1 = candidate.points().get(a);
+                if (!new Bounds(StrictMath.min(a0.x(), a1.x()), StrictMath.min(a0.z(), a1.z()),
+                        StrictMath.max(a0.x(), a1.x()), StrictMath.max(a0.z(), a1.z())).overlaps(otherBounds, clearance)) continue;
                 for (int b = 1; b < other.points().size(); b++) {
                     Vec2 b0 = other.points().get(b - 1), b1 = other.points().get(b);
                     // Two channels can miss as polylines while their valleys still overlap.
                     // Reject incompatible water datums before carving creates an aqueduct/water wall.
-                    double clearance = StrictMath.max(fadeRadius(candidate.shape()) + other.shape().bedWidth(),
-                            fadeRadius(other.shape()) + candidate.shape().bedWidth()) + 8;
                     if (StrictMath.max(a0.x(), a1.x()) + clearance >= StrictMath.min(b0.x(), b1.x())
                             && StrictMath.max(b0.x(), b1.x()) + clearance >= StrictMath.min(a0.x(), a1.x())
                             && StrictMath.max(a0.z(), a1.z()) + clearance >= StrictMath.min(b0.z(), b1.z())
@@ -235,7 +246,14 @@ public final class HydrologyGenerator {
                                 distanceToLineSegment(b1, a0, a1)));
                         double difference = StrictMath.abs((candidate.waterSurfaces().get(a - 1) + candidate.waterSurfaces().get(a)
                                 - other.waterSurfaces().get(b - 1) - other.waterSurfaces().get(b)) * 0.5);
-                        if (distance < clearance && difference > 0.5 + distance * 0.04) return true;
+                        double tolerance = 0.5 + distance * 0.04;
+                        if (other.id().equals(candidate.parentId())) {
+                            double wetExtent = RiverMorphology.maximumBedRadius(candidate.shape())
+                                    + RiverMorphology.maximumBedRadius(other.shape()) + 4;
+                            if (distance > wetExtent) tolerance = StrictMath.max(tolerance,
+                                    StrictMath.min(candidate.shape().maximumBankHeight(), other.shape().maximumBankHeight()));
+                        }
+                        if (distance < clearance && difference > tolerance) return true;
                     }
                     if (segmentsIntersect(a0, a1, b0, b1)) {
                         if (allowedJoin != null && (a0.distanceSquared(allowedJoin) < 1e-12
@@ -249,8 +267,37 @@ public final class HydrologyGenerator {
         return false;
     }
 
+    private static Bounds bounds(RiverNetwork.Channel channel) {
+        double minX = Double.POSITIVE_INFINITY, minZ = minX, maxX = -minX, maxZ = -minX;
+        for (Vec2 point : channel.points()) {
+            minX = StrictMath.min(minX, point.x()); minZ = StrictMath.min(minZ, point.z());
+            maxX = StrictMath.max(maxX, point.x()); maxZ = StrictMath.max(maxZ, point.z());
+        }
+        return new Bounds(minX, minZ, maxX, maxZ);
+    }
+    private record Bounds(double minX, double minZ, double maxX, double maxZ) {
+        boolean overlaps(Bounds other, double margin) {
+            return maxX + margin >= other.minX && other.maxX + margin >= minX
+                    && maxZ + margin >= other.minZ && other.maxZ + margin >= minZ;
+        }
+    }
+
+    private static NearbyWater nearestWater(RiverNetwork.Channel channel, Vec2 point) {
+        double distance = Double.POSITIVE_INFINITY, water = 0;
+        for (int i = 1; i < channel.points().size(); i++) {
+            Vec2 a = channel.points().get(i - 1), b = channel.points().get(i);
+            double dx = b.x() - a.x(), dz = b.z() - a.z();
+            double t = StrictMath.max(0, StrictMath.min(1, ((point.x() - a.x()) * dx + (point.z() - a.z()) * dz) / a.distanceSquared(b)));
+            double d = point.distance(a.interpolate(b, t));
+            if (d < distance) { distance = d; water = channel.waterSurfaces().get(i - 1)
+                    + t * (channel.waterSurfaces().get(i) - channel.waterSurfaces().get(i - 1)); }
+        }
+        return new NearbyWater(distance, water);
+    }
+    private record NearbyWater(double distance, double water) {}
+
     private static double fadeRadius(HydrologyProfile.RiverShape shape) {
-        return shape.bedWidth() + StrictMath.max(4, shape.minimumBankHeight() * 2) + shape.bankWidth() * 5.0;
+        return RiverMorphology.maximumBedRadius(shape) + StrictMath.max(4, shape.minimumBankHeight() * 2) + shape.bankWidth() * 5.0;
     }
 
     private static double distanceToLineSegment(Vec2 p, Vec2 a, Vec2 b) {
@@ -308,7 +355,6 @@ public final class HydrologyGenerator {
     private double random(long seed, String id, long operation) {
         return DeterministicRandom.sample(seed, planner.algorithmVersion(), "hydrology", id, operation);
     }
-    private static double smooth(double t) { return t * t * (3.0 - 2.0 * t); }
     private static PlanningFailure rejected(String id, String reason) {
         return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "hydrology", reason,
                 Map.of("river_id", id));

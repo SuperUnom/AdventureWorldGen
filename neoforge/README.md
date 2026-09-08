@@ -2,7 +2,7 @@
 
 [项目文档](../README.md) · [实施与验收指南](../docs/实施与验收指南.md)
 
-Minecraft 1.21.1 / NeoForge 21.1.249 的可游玩 v1 模组工程。实现包括严格 profile、`planner-v2` 联合规划、`ftf-hydrology-adapted-v1`、原子 `plan-v2`、普通世界自动启用、自定义 ChunkGenerator、群系表层适配、受控结构抑制与冻结注入，以及隔离的测试伴生模组。
+Minecraft 1.21.1 / NeoForge 21.1.249 的可游玩 v1 模组工程。实现包括严格 profile、`planner-v2` 联合规划、`ftf-hydrology-adapted-v2`、原子 `plan-v2`、普通世界自动启用、自定义 ChunkGenerator、群系表层适配、受控结构抑制与冻结注入，以及隔离的测试伴生模组。
 
 | 信息 | 值 |
 |---|---|

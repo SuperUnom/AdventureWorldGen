@@ -24,14 +24,27 @@ public final class FillerLayout {
     private final long worldSeed;
     private final double[] levels;
     private int visited,assigned,total;
+    private int restoredSeedCount=-1;
+    public record State(int extent,int[] labels,int seedCount) {}
+    public State snapshot(){return new State(extent,labels.clone(),seedCount());}
     private final java.util.function.DoubleConsumer progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.FILLER);
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate) {
+        this(seed,config,terrain,patches,climate,null);
+    }
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,State frozen) {
         this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
         warpX=new ValueNoise(seed,"filler/boundary-x",80);warpZ=new ValueNoise(seed,"filler/boundary-z",80);
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
         long size=(long)width*width;
         if(size>PlannerProfile.V2.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,"filler","grid exceeds budget",Map.of("cells",size));
+        if(frozen!=null) {
+            if(frozen.extent()!=extent || frozen.labels().length!=size || frozen.seedCount()<0)
+                throw new IllegalArgumentException("invalid frozen filler dimensions");
+            for(int label:frozen.labels())if(label< -2||label>=pool.size())throw new IllegalArgumentException("invalid frozen filler label");
+            labels=frozen.labels().clone();restoredSeedCount=frozen.seedCount();
+            environment=new MacroSample[0];levels=new double[0];return;
+        }
         labels=new int[(int)size];Arrays.fill(labels,-1);environment=new MacroSample[labels.length];
         levels=new double[pool.size()];
         for(int b=0;b<pool.size();b++) {
@@ -71,8 +84,8 @@ public final class FillerLayout {
         candidates.sort(Comparator.comparingLong(i->PlacementIndex.mix(seed^i)));
         Map<Long,List<Integer>> buckets=new HashMap<>();
         for(int i:candidates) {
-            int bx=Math.floorDiv(x(i),256),bz=Math.floorDiv(z(i),256);
-            double spacing=128+112*(.5+.5*shape.sample(x(i),z(i)));
+            int bx=Math.floorDiv(x(i),768),bz=Math.floorDiv(z(i),768);
+            double spacing=384+256*(.5+.5*shape.sample(x(i),z(i)));
             boolean close=false;
             for(int dx=-1;dx<=1&&!close;dx++)for(int dz=-1;dz<=1&&!close;dz++)
                 for(int j:buckets.getOrDefault(CellMask.key((bx+dx)*4,(bz+dz)*4),List.of()))
@@ -91,14 +104,18 @@ public final class FillerLayout {
         int biome=choose(cell);int number=seeds.size();seeds.add(new Seed(cell,biome));
         frontier.add(new Edge(cell,number,0));
     }
+    private boolean allows(ContentId id,int cell){return allows(id,x(cell),z(cell),environment[cell]);}
+    private boolean allows(ContentId id,int x,int z,MacroSample sample) {
+        return config.biomes().allows(id,sample)&&climate.allowsSnowClass(id,x,z,sample);
+    }
     private int choose(int cell) {
         int best=-1;double score=Double.POSITIVE_INFINITY;
         for(int b=0;b<pool.size();b++) {
-            ContentId id=pool.get(b);if(!config.biomes().allows(id,environment[cell]))continue;
+            ContentId id=pool.get(b);if(!allows(id,cell))continue;
             double density=0;
             for(var s:seeds)if(s.biome==b)density+=Math.exp(-Math.pow(Math.hypot(x(cell)-x(s.cell),z(cell)-z(s.cell))/384,2));
             double u=Math.max(1e-12,(PlacementIndex.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
-            double value=climate.cost(id,x(cell),z(cell),environment[cell])*3+density*.9
+            double value=climate.cost(id,x(cell),z(cell),environment[cell])*7+density*.12
                     +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,id));
             if(value<score){score=value;best=b;}
         }
@@ -115,11 +132,11 @@ public final class FillerLayout {
             if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"filler","frontier budget exhausted");
             if(labels[i]!=-1)continue;
             Seed seed=seeds.get(edge.seed);ContentId id=pool.get(seed.biome);
-            if(!config.biomes().allows(id,environment[i]))continue;
+            if(!allows(id,i))continue;
             labels[i]=seed.biome;assigned++;
             if((assigned&511)==0)progress.accept(.4+.55*assigned/Math.max(1.0,total));
-            for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1&&config.biomes().allows(id,environment[n])) {
-                double step=STEP*(1+climate.cost(id,x(n),z(n),environment[n])*.3+adventure(seed.biome,n)*.08)
+            for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1&&allows(id,n)) {
+                double step=STEP*(1+climate.cost(id,x(n),z(n),environment[n])*.3+adventure(seed.biome,n)*.02)
                         +Math.abs(environment[i].groundSurface()-environment[n].groundSurface())*.5
                         +4*(1+shape.sample(x(n),z(n)));
                 frontier.add(new Edge(n,edge.seed,edge.cost+step));
@@ -135,7 +152,7 @@ public final class FillerLayout {
                 int own=0;Map<Integer,Integer> support=new TreeMap<>();
                 for(int n:neighbors(i))if(n>=0&&labels[n]>=0){support.merge(labels[n],1,Integer::sum);if(labels[n]==labels[i])own++;}
                 if(own>1)continue;
-                for(var e:support.entrySet())if(e.getValue()>=3&&config.biomes().allows(pool.get(e.getKey()),environment[i])){next[i]=e.getKey();break;}
+                for(var e:support.entrySet())if(e.getValue()>=3&&allows(pool.get(e.getKey()),i)){next[i]=e.getKey();break;}
             }
             System.arraycopy(next,0,labels,0,labels.length);
         }
@@ -146,18 +163,18 @@ public final class FillerLayout {
         int best=-1;double score=Double.POSITIVE_INFINITY;
         for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++) {
             int nx=gx+dx,nz=gz+dz;if(nx<0||nz<0||nx>=width||nz>=width)continue;
-            int i=nz*width+nx,b=labels[i];if(b<0||!config.biomes().allows(pool.get(b),sample))continue;
+            int i=nz*width+nx,b=labels[i];if(b<0||!allows(pool.get(b),x,z,sample))continue;
             double d=Math.hypot(x-x(i)-7*warpX.sample(x,z),z-z(i)-7*warpZ.sample(x,z));
             if(d<score){score=d;best=b;}
         }
-        if(best<0)for(int b=0;b<pool.size();b++)if(config.biomes().allows(pool.get(b),sample)) {
+        if(best<0)for(int b=0;b<pool.size();b++)if(allows(pool.get(b),x,z,sample)) {
             double cost=climate.cost(pool.get(b),x,z,sample)-Math.log(ClimatePlan.weight(config,pool.get(b)))*.1;
             if(cost<score){score=cost;best=b;}
         }
         if(best<0)throw new IllegalStateException("No legal filler at "+x+","+z);
         return pool.get(best);
     }
-    public int seedCount(){return seeds.size();}
+    public int seedCount(){return restoredSeedCount>=0?restoredSeedCount:seeds.size();}
     private int x(int i){return (i%width-extent)*STEP;}
     private int z(int i){return (i/width-extent)*STEP;}
 }

@@ -9,8 +9,8 @@ import java.util.function.DoubleConsumer;
 /** Connected competitive growth. Memory contains ownership and active frontiers, never all biome/cell edges. */
 public final class BiomeAllocationPlanner {
     private static final int[][] DIR={{4,0},{-4,0},{0,4},{0,-4}};
-    private static final long BUDGET=8_000_000;
-    private record Ranked(PlacementIndex.Point point,double score) {}
+    private static final long BUDGET=12_000_000;
+    private record Ranked(PlacementIndex.Point point,ContentId biome,double score) {}
     private record Edge(long cell,double path,double score) {}
     public record Result(List<PlannedBiomePatch> patches,long operations) {}
     private long operations;
@@ -24,7 +24,7 @@ public final class BiomeAllocationPlanner {
     private int requiredCount;
     private static final class Region {
         final RequirementExpander.PatchDemand demand;
-        final ContentId biome;
+        ContentId biome;
         final ValueNoise noise;
         final Set<Long> cells=new HashSet<>(),queued=new HashSet<>();
         final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingDouble(Edge::score).thenComparingLong(Edge::cell));
@@ -33,10 +33,11 @@ public final class BiomeAllocationPlanner {
         OrganicGrowth shape;
         boolean filler;
         Region(long seed,RequirementExpander.PatchDemand d) {
-            demand=d;biome=d.allowedBiomes().getFirst();noise=new ValueNoise(seed,"growth/"+d.patchId(),96);
+            demand=d;biome=d.allowedBiomes().getFirst();noise=new ValueNoise(seed,"growth/"+d.patchId(),192);
         }
         long minimum(){return demand.area().inCells(4).min();}
         long target(){return Math.max(minimum(),demand.area().target()/16);}
+        long maximum(){return demand.area().inCells(4).max();}
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations) {
@@ -49,8 +50,12 @@ public final class BiomeAllocationPlanner {
         operations=0;owner.clear();regions.clear();
         String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
+        if(!config.spawn().hasBiome()&&config.spawn().hasStructure())
+            spawn=StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0));
+        final String spawnId=spawn;
+        String spawnCarrier=config.spawn().hasStructure()?StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)):null;
         var ordered=new ArrayList<>(demands);
-        ordered.sort(Comparator.comparingInt((RequirementExpander.PatchDemand d)->d.patchId().equals(spawn)?-1:d.adventureLevel())
+        ordered.sort(Comparator.comparingInt((RequirementExpander.PatchDemand d)->d.patchId().equals(spawnId)?-2:d.patchId().equals(spawnCarrier)?-1:d.adventureLevel())
                 .thenComparing(Comparator.comparingLong((RequirementExpander.PatchDemand d)->d.area().target()).reversed())
                 .thenComparing(RequirementExpander.PatchDemand::patchId));
         for(var demand:ordered) {
@@ -63,7 +68,7 @@ public final class BiomeAllocationPlanner {
         // Stable connected spawn core before any competitor can surround it.
         if(spawn!=null) {
             Region r=regions.getFirst();
-            double clearance=regions.stream().skip(1).mapToDouble(other->Math.hypot(other.anchor.x(),other.anchor.z())/3).min().orElse(32);
+            double clearance=regions.stream().skip(1).mapToDouble(other->Math.hypot(other.anchor.x()-r.anchor.x(),other.anchor.z()-r.anchor.z())/3).min().orElse(32);
             int limit=(int)Math.min(r.minimum(),Math.PI*Math.pow(Math.min(32,clearance),2)/16);
             while(r.cells.size()<limit&&grow(0)){}
         }
@@ -110,16 +115,20 @@ public final class BiomeAllocationPlanner {
         progress.accept(1);return new Result(List.copyOf(patches),operations);
     }
     private PlacementIndex.Point selectSeed(long seed,Region r,boolean spawn) {
-        if(spawn) {
+        if(spawn&&config.spawn().hasBiome()) {
             var p=new PlacementIndex.Point(0,0);
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
             throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core","spawn cell is not legal dry land",Map.of("biome",r.biome));
         }
+        boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
+                StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
         double scale=Math.sqrt(r.demand.area().target()/Math.PI);
         long salt=DeterministicRandom.seed(seed,PlannerProfile.V2.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
         for(int step:new int[]{16,8,4}) {
             var ranked=new ArrayList<Ranked>();
-            for(var p:index.candidates(r.demand.adventureLevel(),step)) {
+            for(var biome:r.demand.allowedBiomes())for(var p:index.candidates(r.demand.adventureLevel(),step)) {
+                r.biome=biome;
+                if(central&&Math.hypot(p.x(),p.z())>Math.min(256,config.world().radius()/10)*.8)continue;
                 if(owner.containsKey(p.cell())||!legal(r,p.x(),p.z()))continue;
                 double crowd=0,capacity=0;
                 for(var other:regions)if(other!=r&&other.anchor!=null) {
@@ -133,10 +142,13 @@ public final class BiomeAllocationPlanner {
                 // Exponential race selects proportionally from high suitability scores.
                 double score=climate.cost(r.biome,p.x(),p.z(),index.sample(p.x(),p.z()))*3
                         +4*index.penalty(r.demand.adventureLevel(),p)+crowd+capacity+Math.log(-Math.log(u))*.35;
-                ranked.add(new Ranked(p,score));
+                ranked.add(new Ranked(p,biome,score));
             }
-            ranked.sort(Comparator.comparingDouble(Ranked::score).thenComparingLong(v->v.point.cell()));
+            ranked.sort(Comparator.comparingDouble(Ranked::score).thenComparingLong(v->v.point.cell()).thenComparing(Ranked::biome));
+            int prepared=0;
             for(var candidate:ranked)if(index.accepts(r.demand.adventureLevel(),candidate.point)) {
+                r.biome=candidate.biome;
+                if(++prepared>4096)break;
                 // Probe reachable legal space without counting another region's occupied land twice.
                 if(capacity(r,candidate.point,(int)Math.min(r.minimum(),4096))>=Math.min(r.minimum(),4096))return candidate.point;
             }
@@ -155,7 +167,7 @@ public final class BiomeAllocationPlanner {
     }
     /** Introduce filler competitors after the minimum round; retain their claimed cells in the frozen plan. */
     private void seedFillers(long seed) {
-        if(regions.stream().allMatch(r->r.cells.size()>=r.target()))return;
+        if(regions.stream().allMatch(r->r.cells.size()>=r.maximum()))return;
         var points=new ArrayList<>(index.candidates(0));
         points.sort(Comparator.comparingLong(p->PlacementIndex.mix(seed^p.cell())));
         for(var point:points) {
@@ -168,30 +180,30 @@ public final class BiomeAllocationPlanner {
                 if(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())<Math.sqrt(r.demand.area().target()/Math.PI)*2.5+128){nearby=true;break;}
             }
             if(!nearby)continue;
-            double spacing=160+96*((PlacementIndex.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
+            double spacing=320+192*((PlacementIndex.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
             boolean close=false;
             for(var r:regions) {
-                double separation=r.filler?spacing:Math.sqrt(r.demand.area().target()/Math.PI)*.9;
+                double separation=r.filler?spacing:Math.sqrt(r.demand.area().target()/Math.PI)*2.0;
                 if(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())<separation){close=true;break;}
             }
             if(close)continue;
             ContentId best=null;double score=Double.POSITIVE_INFINITY;
             for(var biome:config.biomes().filler()) {
-                if(!index.allows(biome,point.x(),point.z()))continue;
+                if(!index.allows(biome,point.x(),point.z())||!climate.allowsSnowClass(biome,point.x(),point.z(),index.sample(point.x(),point.z())))continue;
                 double density=0;
                 for(var r:regions)if(r.biome.equals(biome))density+=Math.exp(-Math.pow(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())/384,2));
                 var rule=config.biomes().terrainRules().get(biome);
                 double level=rule!=null&&rule.adventureLevel()!=null?rule.adventureLevel():config.biomes().required().stream()
                         .filter(r->r.id().equals(biome)).mapToInt(AdventureWorldConfig.RequiredBiome::adventureLevel).average().orElse(5);
                 double u=Math.max(1e-12,(PlacementIndex.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
-                double cost=climate.cost(biome,point.x(),point.z(),index.sample(point.x(),point.z()))*3+density
+                double cost=climate.cost(biome,point.x(),point.z(),index.sample(point.x(),point.z()))*6+density*.15
                         +Math.pow((level-10*Math.hypot(point.x(),point.z())/config.world().radius())/5,2)
                         +Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,biome));
                 if(cost<score){score=cost;best=biome;}
             }
             if(best==null)continue;
             var demand=new RequirementExpander.PatchDemand("filler/"+(regions.size()-requiredCount),List.of(best),0,
-                    new AdventureWorldConfig.AreaRange(16,196608,131072),"filler",true);
+                    new AdventureWorldConfig.AreaRange(16,Long.MAX_VALUE,524288),"filler",true);
             var r=new Region(seed,demand);r.filler=true;r.anchor=point;
             r.shape=new OrganicGrowth(seed,demand.patchId(),point.x(),point.z(),demand.area().target(),index.sample(point.x(),point.z()).groundSurface());
             if(!legal(r,point.x(),point.z()))continue;
@@ -201,13 +213,17 @@ public final class BiomeAllocationPlanner {
 
     private record Scheduled(int region,double priority) {}
     private Scheduled schedule(int i,boolean target) {
-        var r=regions.get(i);long goal=target?r.target():r.minimum();
+        var r=regions.get(i);long goal=target?r.maximum():r.minimum();
         if(r.cells.size()>=goal)return null;
         while(!r.frontier.isEmpty()&&owner.containsKey(r.frontier.peek().cell))r.frontier.remove();
         if(r.frontier.isEmpty())return null;
-        double fraction=r.cells.size()/(double)goal;
-        return new Scheduled(i,r.frontier.peek().score/Math.max(32,Math.sqrt(r.demand.area().target()))
-                -(r.filler?1.2:target?6:40)*(1-fraction));
+        double fraction=r.cells.size()/(double)(target?r.target():r.minimum());
+        double pressure=target?areaPressure(fraction,r.filler):40*(1-fraction);
+        return new Scheduled(i,r.frontier.peek().score/256.0-pressure);
+    }
+    /** The target changes willingness continuously; only an explicit maximum stops growth. */
+    static double areaPressure(double fraction,boolean filler) {
+        return fraction<=1?(filler?1.0:7.0)*(1-fraction):-2.0*Math.log(fraction);
     }
     private void growTo(boolean target) {
         long total=regions.stream().filter(r->!r.filler).mapToLong(r->target?r.target():r.minimum()).sum();
@@ -249,11 +265,12 @@ public final class BiomeAllocationPlanner {
             int nx=x+d[0],nz=z+d[1];long n=CellMask.key(nx,nz);
             if(owner.containsKey(n)||r.queued.contains(n)||!legal(r,nx,nz))continue;
             r.queued.add(n);var sample=index.sample(nx,nz);
-            double next=path+4+Math.abs(height-sample.groundSurface())*.45;
+            double environment=climate.cost(r.biome,nx,nz,sample);
+            double next=path+4*(1+.35*(1+r.noise.sample(nx,nz))+.3*environment)
+                    +Math.abs(height-sample.groundSurface())*.65;
             int support=0;for(int[] side:DIR)if(Objects.equals(owner.get(CellMask.key(nx+side[0],nz+side[1])),i))support++;
-            double distance=Math.hypot(nx-r.anchor.x(),nz-r.anchor.z());
-            double cost=next*.06+r.shape.score(nx,nz,sample.groundSurface())*.94+climate.cost(r.biome,nx,nz,sample)*12
-                    +r.noise.sample(nx,nz)*32-support*5;
+            double cost=next*.65+r.shape.score(nx,nz,sample.groundSurface())*.15+environment*64
+                    +r.noise.sample(nx,nz)*72-support*9;
             r.frontier.add(new Edge(n,next,cost));
         }
     }
@@ -262,6 +279,6 @@ public final class BiomeAllocationPlanner {
                 "active frontier/search operation budget exhausted",Map.of("biome",r.biome,"operations",operations,"budget",BUDGET));
         if(Math.hypot(x,z)>config.world().radius())return false;
         for(var p:reservations)if(p.contains(x,z))return false;
-        return index.sample(x,z).waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE&&index.allows(r.biome,x,z);
+        return index.sample(x,z).waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE&&index.allows(r.biome,x,z)&&climate.allowsSnowClass(r.biome,x,z,index.sample(x,z));
     }
 }

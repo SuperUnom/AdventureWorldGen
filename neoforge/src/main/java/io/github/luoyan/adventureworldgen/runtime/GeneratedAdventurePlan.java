@@ -58,6 +58,20 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities) {
+        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+                biomePatches,structures,diagnostics,erosion,capacities,null);
+    }
+    public record BiomeLayout(io.github.luoyan.adventureworldgen.planner.ClimatePlan.State climate,
+                              io.github.luoyan.adventureworldgen.planner.FillerLayout.State filler,
+                              List<String> protectedPatches) {}
+    public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
+    public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
+                                  RiverNetwork riverNetwork, double seaSurface, double landBand,
+                                  double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  PlanDiagnostics diagnostics, ErosionDeltaField erosion,
+                                  io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
+                                  BiomeLayout frozenLayout) {
         this.capacities=capacities;
         this.seed = seed;
         this.blockBlend=new io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend(seed,config.biomes().blendRadius());
@@ -77,13 +91,20 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this.islandTerrain = island;
         MacroTerrain eroded = erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v1");
         this.terrain = new HydrologyTerrain(eroded, riverNetwork);
-        climate=new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain);
-        PlanningProgress.stageCurrent(PlanningProgress.Stage.FILLER);
-        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate);
-        PlanningProgress.stageCurrent(PlanningProgress.Stage.TRANSITION);
+        if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
+            throw new IllegalArgumentException("incomplete frozen biome layout");
+        climate=new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},frozenLayout==null?null:frozenLayout.climate());
+        if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.FILLER);
+        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate,frozenLayout==null?null:frozenLayout.filler());
+        if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.TRANSITION);
         double y = terrain.sample(0, 0).groundSurface() + 1.0;
         this.spawn = frozenSpawn == null ? new SpawnPosition(0.5, StrictMath.ceil(y), 0.5, 0) : frozenSpawn;
-        protectMinimumAreas();
+        if(frozenLayout==null)protectMinimumAreas();
+        else {
+            var ids=this.biomePatches.stream().map(PlannedBiomePatch::patchId).collect(java.util.stream.Collectors.toSet());
+            if(!ids.containsAll(frozenLayout.protectedPatches()))throw new IllegalArgumentException("unknown blend protection patch");
+            blendProtectedPatches.addAll(frozenLayout.protectedPatches());
+        }
     }
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
@@ -123,7 +144,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             int qx=Math.floorDiv(nx,4)*4+2,qz=Math.floorDiv(nz,4)*4+2;
             var nearby=terrain.sample(qx,qz);
             return nearby.waterKind()==WaterKind.NONE?landBiomeAt(qx,qz,nearby):fallback;
-        },id->config.biomes().allows(id,sample),fallback);
+        },id->config.biomes().allows(id,sample)&&climate.allowsSnowClass(id,x,z,sample),fallback);
     }
 
     private double spawnPositionX(){return spawn==null?0:spawn.x();}

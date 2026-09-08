@@ -42,6 +42,12 @@ public final class RequirementExpander {
                         structure.allowedBiomes().area(), structure.entrance(), spawn && sequence == 0, true));
             }
         }
+        for(var instance:instances) {
+            var allowed=instance.allowedBiomes().isEmpty()?config.biomes().filler():instance.allowedBiomes();
+            if(instance.spawnInstance()&&config.spawn().hasBiome())allowed=List.of(config.spawn().biome());
+            patches.add(new PatchDemand(StableIds.carrierPatch(instance.instanceId()),allowed,instance.adventureLevel(),
+                    instance.carrierArea(),instance.instanceId(),true));
+        }
         return new ExpandedRequirements(patches, instances);
     }
 

@@ -116,7 +116,7 @@ class AdventureWorldConfigParserTest {
 
         assertEquals(first, second);
         assertTrue(first.startsWith("{\"biomes\":"));
-        assertTrue(first.contains("\"area\":{\"max\":196608,\"min\":16384,\"target\":131072}"));
+        assertTrue(first.contains("\"area\":{\"min\":32768,\"target\":393216}"));
         assertTrue(first.contains("\"placement_mode\":\"scattered\""));
         assertTrue(first.contains("\"spacing\":{\"min\":0.0}"));
     }
