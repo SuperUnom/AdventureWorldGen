@@ -11,8 +11,8 @@ import java.util.function.DoubleConsumer;
 public final class HumidityPlan {
     public static final int STEP=32;
     private static final double REACH=512;
-    private static final double FRESHWATER_DECAY=48;
-    private static final double RIPARIAN_MINIMUM_REACH=64;
+    private static final double FRESHWATER_DECAY=24;
+    private static final double RIPARIAN_MINIMUM_REACH=48;
     private final AdventureWorldConfig config;
     private final ClimatePlan temperature;
     private final ValueNoise regional,detail,shore;
