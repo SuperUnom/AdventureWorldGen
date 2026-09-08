@@ -33,6 +33,9 @@ class HumidityPlanTest {
         var c=config();var temperature=new ClimatePlan(7331,c,TERRAIN);var h=temperature.humidity();
         var dry=new ClimatePlan(7331,c,(x,z)->land(66)).humidity();
         assertTrue(h.valueAt(246,300,land(66))>dry.valueAt(246,300,land(66))+.2);
+        double nearBoost=h.valueAt(246,300,land(66))-dry.valueAt(246,300,land(66));
+        double outerBoost=h.valueAt(180,300,land(66))-dry.valueAt(180,300,land(66));
+        assertTrue(outerBoost<nearBoost*.35,"freshwater moisture should stay close to the river");
         assertTrue(h.valueAt(630,300,land(66))>dry.valueAt(630,300,land(66))+.1);
         // Outside the protected riparian minimum, higher terrain loses moisture.
         assertTrue(h.valueAt(200,300,land(66))>h.valueAt(200,300,land(300)));
