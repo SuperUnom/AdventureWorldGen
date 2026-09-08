@@ -44,6 +44,33 @@ class ErosionGeneratorTest {
         assertEquals(238,new ErodedTerrain(peak,zero,"test").sample(0,0).groundSurface());
     }
 
+    @Test void tiledStencilSurvivesEvictionAndConcurrentReplacement() throws Exception {
+        MacroTerrain base=(x,z)->new MacroSample(100+Math.sin(x*.11)+Math.cos(z*.07),
+                Double.NaN,WaterKind.NONE,false,"r","hills","test");
+        var zero=new ErosionDeltaField(-32,-32,8,9,9,new float[81]);
+        var shared=new ErodedTerrain(base,zero,"test");
+        var reference=new ErodedTerrain(base,zero,"test");
+        var points=new java.util.ArrayList<io.github.luoyan.adventureworldgen.spatial.Vec2>();
+        for(int i=0;i<128;i++)points.add(new io.github.luoyan.adventureworldgen.spatial.Vec2(i*16-.5,-i*16+.5));
+        var expected=points.stream().map(p->reference.sample(p.x(),p.z())).toList();
+        // More than the 32,768 tile limit, including negative coordinates.
+        for(int i=0;i<33000;i++)shared.sample((i%200-100)*16+2,(i/200-100)*16+2);
+        try(var workers=java.util.concurrent.Executors.newFixedThreadPool(4)) {
+            var tasks=new java.util.ArrayList<java.util.concurrent.Callable<Void>>();
+            for(int worker=0;worker<4;worker++) {
+                int offset=worker;
+                tasks.add(()-> {
+                    for(int j=0;j<points.size();j++) {
+                        int i=(j*37+offset)%points.size();var p=points.get(i);
+                        assertEquals(expected.get(i),shared.sample(p.x(),p.z()));
+                    }
+                    return null;
+                });
+            }
+            for(var result:workers.invokeAll(tasks))result.get();
+        }
+    }
+
     @Test
     void producesDeterministicWorldAlignedDeltaAndKeepsQueriesInsideBoundary() {
         MacroTerrain slope = (x, z) -> new MacroSample(100 + x * 0.05 + z * 0.02,

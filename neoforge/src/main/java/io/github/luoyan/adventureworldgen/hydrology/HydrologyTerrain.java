@@ -41,8 +41,8 @@ public final class HydrologyTerrain implements MacroTerrain {
         MacroSample original = base.sample(x, z);
         if (original.waterKind() == WaterKind.LAVA) return original;
         Result best = null;
-        long bucket = bucketKey(Math.floorDiv((int) StrictMath.floor(x), BUCKET_SIDE),
-                Math.floorDiv((int) StrictMath.floor(z), BUCKET_SIDE));
+        long bucket = bucketKey(Math.floorDiv((int) Math.floor(x), BUCKET_SIDE),
+                Math.floorDiv((int) Math.floor(z), BUCKET_SIDE));
         // Evaluate one cross-section per channel. Taking the deepest of ALL nearby segments
         // lets downstream end caps cut through the banks of an upstream cross-section.
         for (ChannelSegments references : segmentBuckets.getOrDefault(bucket, List.of())) {
@@ -88,9 +88,9 @@ public final class HydrologyTerrain implements MacroTerrain {
     /** Conservative bank rasterization: retain the edge voxel where floor rounding would open
      * a one-block leak beside a descending water step. Larger defects must be fixed in the graph. */
     public int solidSurfaceAt(int x, int z, MacroSample current) {
-        int ground = (int) StrictMath.floor(current.groundSurface());
+        int ground = (int) Math.floor(current.groundSurface());
         if (current.waterKind() == WaterKind.OCEAN || (current.wet()
-                && StrictMath.floor(current.waterSurface()) > ground)) return ground;
+                && Math.floor(current.waterSurface()) > ground)) return ground;
         long key = bucketKey(Math.floorDiv(x, BUCKET_SIDE), Math.floorDiv(z, BUCKET_SIDE));
         if (!segmentBuckets.containsKey(key) && !lakeBuckets.containsKey(key) && !wetlandBuckets.containsKey(key)) return ground;
         int result = ground;
@@ -99,8 +99,8 @@ public final class HydrologyTerrain implements MacroTerrain {
             int dz = side == 2 ? 1 : side == 3 ? -1 : 0;
             MacroSample neighbour = sample(x + dx + 0.5, z + dz + 0.5);
             if (neighbour.wet() && neighbour.waterKind() != WaterKind.OCEAN
-                    && StrictMath.floor(neighbour.waterSurface()) > StrictMath.floor(neighbour.groundSurface())) {
-                int water = (int) StrictMath.floor(neighbour.waterSurface());
+                    && Math.floor(neighbour.waterSurface()) > Math.floor(neighbour.groundSurface())) {
+                int water = (int) Math.floor(neighbour.waterSurface());
                 if (water == ground + 1) result = water;
             }
         }
@@ -257,10 +257,10 @@ public final class HydrologyTerrain implements MacroTerrain {
 
     private static <T> void addToBuckets(Map<Long, List<T>> index, T value,
                                          double minX, double minZ, double maxX, double maxZ) {
-        int minBucketX = Math.floorDiv((int) StrictMath.floor(minX), BUCKET_SIDE);
-        int maxBucketX = Math.floorDiv((int) StrictMath.floor(maxX), BUCKET_SIDE);
-        int minBucketZ = Math.floorDiv((int) StrictMath.floor(minZ), BUCKET_SIDE);
-        int maxBucketZ = Math.floorDiv((int) StrictMath.floor(maxZ), BUCKET_SIDE);
+        int minBucketX = Math.floorDiv((int) Math.floor(minX), BUCKET_SIDE);
+        int maxBucketX = Math.floorDiv((int) Math.floor(maxX), BUCKET_SIDE);
+        int minBucketZ = Math.floorDiv((int) Math.floor(minZ), BUCKET_SIDE);
+        int maxBucketZ = Math.floorDiv((int) Math.floor(maxZ), BUCKET_SIDE);
         for (int bx = minBucketX; bx <= maxBucketX; bx++) for (int bz = minBucketZ; bz <= maxBucketZ; bz++)
             index.computeIfAbsent(bucketKey(bx, bz), ignored -> new ArrayList<>()).add(value);
     }

@@ -15,6 +15,7 @@ public final class BiomeAllocationPlanner {
     private record Ranked(PlacementIndex.Point point,ContentId biome,double score) {}
     private record Edge(long cell,double path,double score) {}
     public record Result(List<PlannedBiomePatch> patches,long operations) {}
+    private final Map<ContentId,it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap> environments=new HashMap<>();
     private long operations;
     private AdventureWorldConfig config;
     private PlacementIndex index;
@@ -49,7 +50,7 @@ public final class BiomeAllocationPlanner {
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
                            ClimatePlan climate,DoubleConsumer progress) {
         this.config=config;this.index=index;this.reservations=reservations;this.climate=climate;this.progress=progress;
-        operations=0;owner.clear();owner.defaultReturnValue(-1);regions.clear();
+        operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
         String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
         if(!config.spawn().hasBiome()&&config.spawn().hasStructure())
@@ -307,6 +308,12 @@ public final class BiomeAllocationPlanner {
                 "active frontier/search operation budget exhausted",Map.of("biome",r.biome,"operations",operations,"budget",BUDGET));
         if(Math.hypot(x,z)>config.world().radius())return false;
         for(var p:reservations)if(p.contains(x,z))return false;
-        return index.sample(x,z).waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE&&index.allows(r.biome,x,z)&&climate.allowsEnvironment(r.biome,x,z,index.sample(x,z));
+        if(index.sample(x,z).waterKind()!=io.github.luoyan.adventureworldgen.api.WaterKind.NONE||!index.allows(r.biome,x,z))return false;
+        var cache=environments.computeIfAbsent(r.biome,ignored->new it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap());
+        long cell=CellMask.key(x,z);byte allowed=cache.get(cell);
+        if(allowed==0) {
+            allowed=(byte)(climate.allowsEnvironment(r.biome,x,z,index.sample(x,z))?1:2);cache.put(cell,allowed);
+        }
+        return allowed==1;
     }
 }

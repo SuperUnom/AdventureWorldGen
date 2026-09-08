@@ -14,7 +14,7 @@ public final class TerrainMorphology implements MacroTerrain {
     @Override public MacroSample sample(double x,double z) {
         var sample=finalSurface.sample(x,z);
         if(sample.wet()||sample.mountainInfluence()<.15)return sample;
-        int gx=(int)StrictMath.floor(x/32),gz=(int)StrictMath.floor(z/32);
+        int gx=(int)Math.floor(x/32),gz=(int)Math.floor(z/32);
         double tx=x/32-gx,tz=z/32-gz;
         var a=at(gx,gz);var b=at(gx+1,gz);var c=at(gx,gz+1);var d=at(gx+1,gz+1);
         return sample.withMorphology(interpolate(a.slope,b.slope,c.slope,d.slope,tx,tz),

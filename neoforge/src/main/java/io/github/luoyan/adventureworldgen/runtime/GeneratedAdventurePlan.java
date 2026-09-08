@@ -69,6 +69,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                               io.github.luoyan.adventureworldgen.planner.FillerLayout.State filler,
                               List<String> protectedPatches) {}
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
+    /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
+    record PlanningInputs(RegionTerrain regions,MacroTerrain island,HydrologyTerrain water,
+                          MacroTerrain terrain,io.github.luoyan.adventureworldgen.planner.ClimatePlan climate) {}
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
@@ -76,6 +79,16 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout) {
+        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null);
+    }
+    GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
+                                  RiverNetwork riverNetwork, double seaSurface, double landBand,
+                                  double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  PlanDiagnostics diagnostics, ErosionDeltaField erosion,
+                                  io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
+                                  BiomeLayout frozenLayout, PlanningInputs prepared) {
         this.capacities=capacities;
         this.seed = seed;
         this.blockBlend=new io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend(seed,config.biomes().blendRadius());
@@ -90,16 +103,21 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this.structures = List.copyOf(structures);
         this.diagnostics = diagnostics;
         this.erosion = erosion;
-        this.regions=new RegionTerrain(seed, PlannerProfile.V2,capacities,config.world().terrain(),config);
-        MacroTerrain island = new IslandMacroTerrain(coastline, regions, seed,
-                seaSurface, landBand, seaBand, terrainVersion);
-        this.islandTerrain = island;
-        MacroTerrain eroded = erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v2");
-        this.waterTerrain = new HydrologyTerrain(eroded, riverNetwork);
-        this.terrain = new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain);
+        if(prepared==null) {
+            this.regions=new RegionTerrain(seed, PlannerProfile.V2,capacities,config.world().terrain(),config);
+            MacroTerrain island = new IslandMacroTerrain(coastline, regions, seed,
+                    seaSurface, landBand, seaBand, terrainVersion);
+            this.islandTerrain = island;
+            MacroTerrain eroded = erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v2");
+            this.waterTerrain = new HydrologyTerrain(eroded, riverNetwork);
+            this.terrain = new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain);
+        } else {
+            this.regions=prepared.regions();this.islandTerrain=prepared.island();
+            this.waterTerrain=prepared.water();this.terrain=prepared.terrain();
+        }
         if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
             throw new IllegalArgumentException("incomplete frozen biome layout");
-        climate=new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},frozenLayout==null?null:frozenLayout.climate());
+        climate=prepared!=null?prepared.climate():new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},frozenLayout==null?null:frozenLayout.climate());
         if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.FILLER);
         filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate,frozenLayout==null?null:frozenLayout.filler());
         if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.TRANSITION);

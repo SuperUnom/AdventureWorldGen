@@ -22,6 +22,9 @@ public final class JointPlanner {
 
     public JointPlanner(PlannerProfile profile) { this.profile = profile; }
 
+    /** Frozen climate from the latest plan, reused immediately by runtime publication. */
+    public ClimatePlan climate() { return java.util.Objects.requireNonNull(climate,"plan has not built climate"); }
+
     public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer) {
         return plan(seed, config, terrain, freezer, (level, x, z) -> true, (biome, x, z) -> true);
     }

@@ -9,7 +9,7 @@ final class TerraForgedNoise {
     private TerraForgedNoise() {}
 
     static double perlin(double x,double z,int seed) {
-        int ix=(int)StrictMath.floor(x),iz=(int)StrictMath.floor(z);
+        int ix=(int)Math.floor(x),iz=(int)Math.floor(z);
         double dx=x-ix,dz=z-iz,u=dx*dx*(3-2*dx),v=dz*dz*(3-2*dz);
         double a=lerp(gradient(seed,ix,iz,dx,dz),gradient(seed,ix+1,iz,dx-1,dz),u);
         double b=lerp(gradient(seed,ix,iz+1,dx,dz-1),gradient(seed,ix+1,iz+1,dx-1,dz-1),u);

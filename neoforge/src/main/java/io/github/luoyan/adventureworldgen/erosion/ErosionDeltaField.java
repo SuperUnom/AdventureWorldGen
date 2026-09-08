@@ -23,8 +23,8 @@ public final class ErosionDeltaField {
 
     public double sample(double x, double z) {
         double gx = (x - originX) / spacing, gz = (z - originZ) / spacing;
-        int x0 = clamp((int) StrictMath.floor(gx), 0, width - 2);
-        int z0 = clamp((int) StrictMath.floor(gz), 0, height - 2);
+        int x0 = clamp((int) Math.floor(gx), 0, width - 2);
+        int z0 = clamp((int) Math.floor(gz), 0, height - 2);
         double tx = clamp(gx - x0, 0.0, 1.0), tz = clamp(gz - z0, 0.0, 1.0);
         double a = lerp(get(x0, z0), get(x0 + 1, z0), tx);
         double b = lerp(get(x0, z0 + 1), get(x0 + 1, z0 + 1), tx);

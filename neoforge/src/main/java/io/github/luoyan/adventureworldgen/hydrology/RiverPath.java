@@ -47,17 +47,21 @@ final class RiverPath {
                 Vec2 next = new Vec2(current.x() + StrictMath.cos(bearing) * step,
                         current.z() + StrictMath.sin(bearing) * step);
                 if (!coast.contains(next.x(), next.z()) || next.distance(source) > remaining + step * 0.55) continue;
+                double directionScore = 3 * (turn - preferred) * (turn - preferred)
+                        + 0.07 * (1 - StrictMath.cos(target - bearing));
+                if(directionScore>=bestScore)continue;
                 double ground = terrain.sample(next.x(), next.z()).groundSurface();
+                double terrainScore = directionScore + 0.012 * StrictMath.abs(ground - groundHere)
+                        + 0.006 * StrictMath.max(0, ground - groundHere);
+                // Flood cost is nonnegative. A candidate already worse cannot win.
+                if(terrainScore>=bestScore)continue;
                 double lowBank = ground;
                 double bankExtent = shape.bedWidth() + shape.bankWidth();
                 for (int side : new int[]{-1, 1}) lowBank = StrictMath.min(lowBank, terrain.sample(
                         next.x() - StrictMath.sin(bearing) * bankExtent * side,
                         next.z() + StrictMath.cos(bearing) * bankExtent * side).groundSurface());
                 double floodPenalty = StrictMath.max(0, minimumWater + shape.minimumBankHeight() - lowBank);
-                double score = 3 * (turn - preferred) * (turn - preferred)
-                        + 0.07 * (1 - StrictMath.cos(target - bearing))
-                        + 0.012 * StrictMath.abs(ground - groundHere) + 0.006 * StrictMath.max(0, ground - groundHere)
-                        + floodPenalty * 2;
+                double score = terrainScore + floodPenalty * 2;
                 if (score < bestScore) { best = next; bestScore = score; bestHeading = bearing; }
             }
             if (best == null) return List.of();

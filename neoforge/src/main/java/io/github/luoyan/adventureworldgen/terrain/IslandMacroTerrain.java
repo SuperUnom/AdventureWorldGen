@@ -15,6 +15,27 @@ public final class IslandMacroTerrain implements MacroTerrain {
     private final double seaBand;
     private final ValueNoise deepOcean;
     private final String version;
+    private final io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<Byte> coastTiles =
+            new io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<>(16384);
+    private record CoastTile(int x,int z,byte saturation) {}
+    private final ThreadLocal<CoastTile> lastCoastTile=new ThreadLocal<>();
+
+    private double coastDistance(double x,double z) {
+        if(!(landBand>0&&seaBand>0))return coastline.signedDistance(x,z);
+        int tx=(int)Math.floor(x/64),tz=(int)Math.floor(z/64);
+        CoastTile tile=lastCoastTile.get();
+        if(tile==null||tile.x!=tx||tile.z!=tz) {
+            byte saturated=coastTiles.get(tx,tz,(gx,gz)-> {
+                double distance=coastline.signedDistance(gx*64.0+32,gz*64.0+32);
+                // Distance to a closed boundary is 1-Lipschitz. The extra margin
+                // keeps floating-point boundary cases on the exact-query path.
+                double reach=StrictMath.sqrt(2)*32+1e-8;
+                return (byte)(distance>landBand+reach?1:distance< -seaBand-reach?-1:0);
+            });
+            tile=new CoastTile(tx,tz,saturated);lastCoastTile.set(tile);
+        }
+        return tile.saturation>0?landBand:tile.saturation<0?-seaBand:coastline.signedDistance(x,z);
+    }
 
     public IslandMacroTerrain(Coastline coastline, RegionTerrain regions, long seed, double seaSurface,
                               double landBand, double seaBand, String version) {
@@ -29,7 +50,7 @@ public final class IslandMacroTerrain implements MacroTerrain {
 
     @Override
     public MacroSample sample(double x, double z) {
-        double signedDistance = coastline.signedDistance(x, z);
+        double signedDistance = coastDistance(x, z);
         RegionTerrain.Sample region = regions.sample(x, z);
         if (signedDistance >= 0.0) {
             double blend = smooth(clamp(signedDistance / landBand));

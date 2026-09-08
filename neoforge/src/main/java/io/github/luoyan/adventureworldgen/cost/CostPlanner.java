@@ -9,7 +9,7 @@ import io.github.luoyan.adventureworldgen.terrain.Coastline;
 
 /** Builds the complete 16-block global cost field used before bounded 8-block candidate refinement. */
 public final class CostPlanner {
-    private static final int SAMPLE_CACHE_CAPACITY = 65_536;
+    private static final int SAMPLE_CACHE_CAPACITY = 262_144;
     private final PlannerProfile profile;
     public CostPlanner(PlannerProfile profile) { this.profile = profile; }
 

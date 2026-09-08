@@ -58,7 +58,7 @@ public final class HydrologyGenerator {
             String id = "river/main/" + roots.size();
             var shape = variedShape(seed, id, 0, roots.isEmpty(), profile.main(), radius);
             List<Vec2> points = RiverPath.grow(seed, candidateId, source, outlet, coast, baseTerrain, shape, seaSurface);
-            if (points.isEmpty()) continue;
+            if (points.isEmpty() || intersectsGeometry(points,shape,channels,null)) continue;
             double sourceWater = StrictMath.max(seaSurface + 2.0,
                     baseTerrain.sample(source.x(), source.z()).groundSurface() - profile.main().minimumBankHeight());
             RiverNetwork.Channel main = channel(seed, id, 0, null, points, sourceWater, seaSurface, shape, baseTerrain, null);
@@ -97,7 +97,7 @@ public final class HydrologyGenerator {
                 double downstreamWater = waterAt(parent, along);
                 if (terrain.sample(source.x(), source.z()).groundSurface() < downstreamWater + shape.minimumBankHeight()) continue;
                 List<Vec2> points = RiverPath.grow(seed, candidate, source, join, coast, terrain, shape, downstreamWater);
-                if (points.isEmpty()) continue;
+                if (points.isEmpty() || intersectsGeometry(points,shape,channels,join)) continue;
                 double sourceWater = StrictMath.max(downstreamWater,
                         terrain.sample(source.x(), source.z()).groundSurface() - profile.branch().minimumBankHeight());
                 RiverNetwork.Channel fork = channel(seed, id, depth, parent.id(), points,
@@ -126,13 +126,17 @@ public final class HydrologyGenerator {
             Vec2 next = points.get(StrictMath.min(points.size() - 1, i + 1));
             double dx = next.x() - previous.x(), dz = next.z() - previous.z();
             double length = StrictMath.hypot(dx, dz);
-            for (int step = 0; step <= 8; step++) {
+            bankProbes: for (int step = 0; step <= 8; step++) {
                 Vec2 probe = previous.interpolate(point, step / 8.0);
                 double bankExtent = RiverMorphology.maximumBedRadius(shape) + shape.bankWidth();
                 for (double side = -bankExtent; side <= bankExtent; side += 4) {
                     double ground = terrain.sample(probe.x() - dz / length * side,
                             probe.z() + dx / length * side).groundSurface();
                     cap = StrictMath.min(cap, ground - shape.minimumBankHeight());
+                    if(parentId!=null&&cap<outletWater)return null;
+                    // A main river's final cap is clamped to the outlet. Further
+                    // lowering cannot change its water profile or lake decisions.
+                    if(parentId==null&&cap<=outletWater)break bankProbes;
                 }
             }
             if (parentId != null && cap < outletWater) return null;
@@ -221,6 +225,32 @@ public final class HydrologyGenerator {
                 StrictMath.max(3, (int) StrictMath.round(base.bedWidth() * factor * continentScale)), base.fade());
     }
 
+    /** Reject certain polyline crossings before the expensive bank-height envelope.
+     * Keep the same broad-phase bounds and confluence exception as the final check. */
+    private static boolean intersectsGeometry(List<Vec2> points,HydrologyProfile.RiverShape shape,
+                                              List<RiverNetwork.Channel> existing,Vec2 allowedJoin) {
+        Bounds candidateBounds=bounds(points);
+        for(var other:existing) {
+            double clearance=StrictMath.max(fadeRadius(shape)+RiverMorphology.maximumBedRadius(other.shape()),
+                    fadeRadius(other.shape())+RiverMorphology.maximumBedRadius(shape))+8;
+            Bounds otherBounds=bounds(other);
+            if(!candidateBounds.overlaps(otherBounds,clearance))continue;
+            for(int a=1;a<points.size();a++) {
+                Vec2 a0=points.get(a-1),a1=points.get(a);
+                if(!new Bounds(StrictMath.min(a0.x(),a1.x()),StrictMath.min(a0.z(),a1.z()),
+                        StrictMath.max(a0.x(),a1.x()),StrictMath.max(a0.z(),a1.z())).overlaps(otherBounds,clearance))continue;
+                for(int b=1;b<other.points().size();b++) {
+                    Vec2 b0=other.points().get(b-1),b1=other.points().get(b);
+                    if(!segmentsIntersect(a0,a1,b0,b1))continue;
+                    if(allowedJoin!=null&&(a0.distanceSquared(allowedJoin)<1e-12||a1.distanceSquared(allowedJoin)<1e-12)
+                            &&distanceToLineSegment(allowedJoin,b0,b1)<1e-6)continue;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private static boolean intersectsExisting(RiverNetwork.Channel candidate,
                                               List<RiverNetwork.Channel> existing, Vec2 allowedJoin) {
         Bounds candidateBounds = bounds(candidate);
@@ -267,9 +297,10 @@ public final class HydrologyGenerator {
         return false;
     }
 
-    private static Bounds bounds(RiverNetwork.Channel channel) {
+    private static Bounds bounds(RiverNetwork.Channel channel) { return bounds(channel.points()); }
+    private static Bounds bounds(List<Vec2> points) {
         double minX = Double.POSITIVE_INFINITY, minZ = minX, maxX = -minX, maxZ = -minX;
-        for (Vec2 point : channel.points()) {
+        for (Vec2 point : points) {
             minX = StrictMath.min(minX, point.x()); minZ = StrictMath.min(minZ, point.z());
             maxX = StrictMath.max(maxX, point.x()); maxZ = StrictMath.max(maxZ, point.z());
         }

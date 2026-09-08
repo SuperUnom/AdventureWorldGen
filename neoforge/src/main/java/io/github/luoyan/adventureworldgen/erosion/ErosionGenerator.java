@@ -28,6 +28,7 @@ public final class ErosionGenerator {
 
     public ErosionDeltaField generate(long seed, MacroTerrain terrain, int originX, int originZ,
                                       int spacing, int width, int height, java.util.function.DoubleConsumer progress) {
+        Brush brush = new Brush(StrictMath.max(1.01, 4.0 / spacing));
         int size = Math.multiplyExact(width, height);
         double[] heights = new double[size];
         float[] delta = new float[size];
@@ -73,7 +74,7 @@ public final class ErosionGenerator {
                         double worldX = originX + task.chunkX * 16.0 + sequence.nextDouble() * 16.0;
                         double worldZ = originZ + task.chunkZ * 16.0 + sequence.nextDouble() * 16.0;
                         erodeDroplet(worldX, worldZ, originX, originZ, spacing, width, height,
-                                heights, delta, erosion);
+                                heights, delta, erosion, brush);
                     }
                     return null;
                 });
@@ -101,6 +102,13 @@ public final class ErosionGenerator {
     static void erodeDroplet(double worldX, double worldZ, int originX, int originZ, int spacing,
                                      int width, int height, double[] heights, float[] delta,
                                      HydrologyProfile.Erosion profile) {
+        erodeDroplet(worldX, worldZ, originX, originZ, spacing, width, height, heights, delta,
+                profile, new Brush(StrictMath.max(1.01, 4.0 / spacing)));
+    }
+
+    private static void erodeDroplet(double worldX, double worldZ, int originX, int originZ, int spacing,
+                                     int width, int height, double[] heights, float[] delta,
+                                     HydrologyProfile.Erosion profile, Brush brush) {
         double x = (worldX - originX) / spacing, z = (worldZ - originZ) / spacing;
         double dirX = 0, dirZ = 0, speed = profile.velocity(), water = profile.volume(), sediment = 0;
         // FTF droplets move one BLOCK per step and carry normalized Levels units.
@@ -108,7 +116,7 @@ public final class ErosionGenerator {
         // volume explicitly instead of treating an 8-block cell as one block.
         double step=1.0/spacing, cellArea=(double)spacing*spacing;
         for (int life = 0; life < profile.lifetime(); life++) {
-            int ix = (int) StrictMath.floor(x), iz = (int) StrictMath.floor(z);
+            int ix = (int) Math.floor(x), iz = (int) Math.floor(z);
             if (ix < 1 || iz < 1 || ix >= width - 2 || iz >= height - 2) break;
             double oldHeight = sampleHeight(x, z, heights, delta, height);
             double gradX = (sampleHeight(x + 0.5, z, heights, delta, height)
@@ -134,7 +142,7 @@ public final class ErosionGenerator {
                 double amount = StrictMath.min((capacity - sediment) * profile.erosionRate(),
                         StrictMath.max(0.0, -heightChange));
                 amount = StrictMath.max(0.0, amount);
-                erode(delta, width, height, ix, iz, amount / cellArea, StrictMath.max(1.01, 4.0 / spacing));
+                erode(delta, width, height, ix, iz, amount / cellArea, brush);
                 sediment += amount;
             }
             speed = StrictMath.sqrt(StrictMath.max(0.0, speed * speed + heightChange * (3.0 / 256.0)));
@@ -143,24 +151,49 @@ public final class ErosionGenerator {
         }
     }
 
-    private static void erode(float[] delta, int width, int height, int centerX, int centerZ,
-                              double amount, double radius) {
-        double total = 0;
-        int extent=(int)StrictMath.ceil(radius);
-        for (int x = centerX - extent; x <= centerX + extent; x++) for (int z = centerZ - extent; z <= centerZ + extent; z++) {
-            if (x < 0 || z < 0 || x >= width || z >= height) continue;
-            total += StrictMath.max(0.0, radius - StrictMath.hypot(x - centerX, z - centerZ));
+    /** Preserve the original dx/dz accumulation order and floating-point operations. */
+    private static final class Brush {
+        final int[] dx, dz;
+        final double[] weights;
+        final double total;
+        final int extent;
+        Brush(double radius) {
+            extent=(int)StrictMath.ceil(radius);
+            int size=(2*extent+1)*(2*extent+1), count=0;
+            int[] xs=new int[size],zs=new int[size];double[] ws=new double[size];
+            double sum=0;
+            for(int x=-extent;x<=extent;x++)for(int z=-extent;z<=extent;z++) {
+                double w=StrictMath.max(0.0,radius-StrictMath.hypot(x,z));
+                sum+=w;
+                if(w>0){xs[count]=x;zs[count]=z;ws[count++]=w;}
+            }
+            dx=java.util.Arrays.copyOf(xs,count);dz=java.util.Arrays.copyOf(zs,count);
+            weights=java.util.Arrays.copyOf(ws,count);total=sum;
         }
-        if (total == 0) return;
-        for (int x = centerX - extent; x <= centerX + extent; x++) for (int z = centerZ - extent; z <= centerZ + extent; z++) {
-            if (x < 0 || z < 0 || x >= width || z >= height) continue;
-            double weight = StrictMath.max(0.0, radius - StrictMath.hypot(x - centerX, z - centerZ));
-            accumulate(delta, index(x, z, height), -amount * weight / total);
+    }
+
+    private static void erode(float[] delta, int width, int height, int centerX, int centerZ,
+                              double amount, Brush brush) {
+        double total=brush.total;
+        boolean interior=centerX>=brush.extent&&centerZ>=brush.extent
+                &&centerX+brush.extent<width&&centerZ+brush.extent<height;
+        if(!interior) {
+            total=0;
+            for(int i=0;i<brush.weights.length;i++) {
+                int x=centerX+brush.dx[i],z=centerZ+brush.dz[i];
+                if(x>=0&&z>=0&&x<width&&z<height)total+=brush.weights[i];
+            }
+        }
+        if(total==0)return;
+        for(int i=0;i<brush.weights.length;i++) {
+            int x=centerX+brush.dx[i],z=centerZ+brush.dz[i];
+            if(interior||(x>=0&&z>=0&&x<width&&z<height))
+                accumulate(delta,index(x,z,height),-amount*brush.weights[i]/total);
         }
     }
 
     private static void deposit(float[] delta, int width, int height, double x, double z, double amount) {
-        int ix = (int) StrictMath.floor(x), iz = (int) StrictMath.floor(z);
+        int ix = (int) Math.floor(x), iz = (int) Math.floor(z);
         double tx = x - ix, tz = z - iz;
         add(delta, width, height, ix, iz, amount * (1 - tx) * (1 - tz));
         add(delta, width, height, ix + 1, iz, amount * tx * (1 - tz));
@@ -174,8 +207,8 @@ public final class ErosionGenerator {
 
     private static double sampleHeight(double x, double z, double[] heights, float[] delta, int rowHeight) {
         int width = heights.length / rowHeight;
-        int x0 = StrictMath.max(0, StrictMath.min(width - 2, (int) StrictMath.floor(x)));
-        int z0 = StrictMath.max(0, StrictMath.min(rowHeight - 2, (int) StrictMath.floor(z)));
+        int x0 = StrictMath.max(0, StrictMath.min(width - 2, (int) Math.floor(x)));
+        int z0 = StrictMath.max(0, StrictMath.min(rowHeight - 2, (int) Math.floor(z)));
         double tx = StrictMath.max(0, StrictMath.min(1, x - x0));
         double tz = StrictMath.max(0, StrictMath.min(1, z - z0));
         double a = lerp(value(heights, delta, x0, z0, rowHeight), value(heights, delta, x0 + 1, z0, rowHeight), tx);

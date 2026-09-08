@@ -25,6 +25,13 @@ public final class RegionTerrain {
     private final Map<GridKey, Region> regions = new ConcurrentHashMap<>();
     private record Neighborhood(long x, long z, Region[] regions) {}
     private final ThreadLocal<Neighborhood> neighborhoodCache = new ThreadLocal<>();
+    private static final class SampleWorkspace {
+        final double[] regionDistances=new double[25];
+        final double[] recipeDistances=new double[TerrainTemplate.values().length];
+        final Region[] owners=new Region[recipeDistances.length];
+        final int[] nearby=new int[25];
+    }
+    private final ThreadLocal<SampleWorkspace> sampleWorkspace=ThreadLocal.withInitial(SampleWorkspace::new);
     private final GridKey centralRegion;
     private final TerrainCapacityPlan capacities;
 
@@ -55,40 +62,52 @@ public final class RegionTerrain {
         Vec2 query = warped(x, z);
         // The blend already visits this 5x5 neighborhood. Reuse those exact distances
         // for nearest-region selection instead of searching the same regions twice.
-        Candidate[] neighborhood = new Candidate[25];
-        Candidate nearest = null, second = null;
+        var workspace=sampleWorkspace.get();
+        double[] regionDistances=workspace.regionDistances;
         long gx = fastFloor(query.x() / profile.regionSpacing()), gz = fastFloor(query.z() / profile.regionSpacing());
-        int n = 0;
-        for (Region region : neighborhood(gx, gz)) {
-            Candidate candidate = new Candidate(region.key, region, query.distance(region.center));
-            neighborhood[n++] = candidate;
-            if (nearest == null || ORDER.compare(candidate, nearest) < 0) {
-                second = nearest; nearest = candidate;
-            } else if (second == null || ORDER.compare(candidate, second) < 0) second = candidate;
+        Region[] neighborhood=neighborhood(gx,gz);
+        int first=-1, runnerUp=-1;
+        java.util.Arrays.fill(regionDistances,Double.POSITIVE_INFINITY);
+        // Establish an exact near-pair bound in the central 3x3 window first.
+        // Remaining sites beyond both that pair and the widest (200-block) blend
+        // cannot affect height, recipe selection (48 blocks), or internal weight.
+        for(int pass=0;pass<2;pass++)for(int i=0;i<neighborhood.length;i++) {
+            boolean central=i/5>=1&&i/5<=3&&i%5>=1&&i%5<=3;
+            if(central!=(pass==0))continue;
+            if(pass==1) {
+                double bound=Math.nextUp(Math.max(regionDistances[runnerUp],regionDistances[first]+200));
+                if(Math.abs(query.x()-neighborhood[i].center.x())>bound
+                        ||Math.abs(query.z()-neighborhood[i].center.z())>bound)continue;
+            }
+            double distance=query.distance(neighborhood[i].center);regionDistances[i]=distance;
+            if(first<0||compare(distance,neighborhood[i],regionDistances[first],neighborhood[first])<0) {
+                runnerUp=first;first=i;
+            } else if(runnerUp<0||compare(distance,neighborhood[i],regionDistances[runnerUp],neighborhood[runnerUp])<0)runnerUp=i;
         }
         double unsearchedLowerBound = (2 - profile.maximumRegionJitterFraction()) * profile.regionSpacing();
-        Pair pair = second.distance < unsearchedLowerBound ? new Pair(nearest, second) : nearestPair(query);
+        Pair pair = regionDistances[runnerUp] < unsearchedLowerBound
+                ? new Pair(new Candidate(neighborhood[first].key,neighborhood[first],regionDistances[first]),
+                           new Candidate(neighborhood[runnerUp].key,neighborhood[runnerUp],regionDistances[runnerUp]))
+                : nearestPair(query);
         double ratio = pair.nearest.distance / pair.second.distance;
         double t = clamp((1.0 - ratio) / 0.35);
         double internalWeight = smooth(t);
         double sum = 0, weights = 0, mountain = 0, detailSum=0, detailWeights=0;
-        double[] distances=new double[TerrainTemplate.values().length];java.util.Arrays.fill(distances,Double.POSITIVE_INFINITY);
-        Region[] owners=new Region[distances.length];
-        Candidate[] nearby=new Candidate[25];int count=0;
-        for (Candidate candidate : neighborhood) {
-            Region region = candidate.region;
-            double distance = candidate.distance;
+        double[] distances=workspace.recipeDistances;java.util.Arrays.fill(distances,Double.POSITIVE_INFINITY);
+        Region[] owners=workspace.owners;
+        int[] nearby=workspace.nearby;int count=0;
+        for(int i=0;i<neighborhood.length;i++) {
+            Region region=neighborhood[i];double distance=regionDistances[i];
             if(distance<distances[region.recipe.ordinal()]){distances[region.recipe.ordinal()]=distance;owners[region.recipe.ordinal()]=region;}
-            if(distance-pair.nearest.distance<200)nearby[count++]=candidate;
+            if(distance-pair.nearest.distance<200)nearby[count++]=i;
         }
         for(int i=0;i<count;i++) {
-            var candidate=nearby[i];var region=candidate.region;
+            int candidate=nearby[i];var region=neighborhood[candidate];
             double w=1,dw=1;
-            // Pairwise weights stay continuous at three-region junctions. Selecting transition
-            // widths from only the nearest label would jump when that nearest label changes.
+            // Preserve pairwise weighting and the original neighborhood summation order.
             for(int j=0;j<count;j++)if(i!=j) {
-                double difference=Math.max(0,candidate.distance-nearby[j].distance);
-                w*=smooth(clamp(1-difference/transitionWidth(region.recipe,nearby[j].region.recipe)));
+                double difference=Math.max(0,regionDistances[candidate]-regionDistances[nearby[j]]);
+                w*=smooth(clamp(1-difference/transitionWidth(region.recipe,neighborhood[nearby[j]].recipe)));
                 dw*=smooth(clamp(1-difference/32));
             }
             if(w<=0)continue;
@@ -97,12 +116,23 @@ public final class RegionTerrain {
             detailSum+=dw*height.detail;detailWeights+=dw;
             if(region.recipe.mountain())mountain+=w*height.envelope;
         }
-        Region owner=owners[EcotoneSelector.select(distances,recipeEcotone.threshold(x,z),48)];
+        int primary=-1,secondary=-1;
+        for(int i=0;i<distances.length;i++)if(Double.isFinite(distances[i])) {
+            if(primary<0||distances[i]<distances[primary]){secondary=primary;primary=i;}
+            else if(secondary<0||distances[i]<distances[secondary])secondary=i;
+        }
+        int selected=secondary<0||distances[secondary]-distances[primary]>=48?primary
+                :EcotoneSelector.select(distances,recipeEcotone.threshold(x,z),48);
+        Region owner=owners[selected];
         double blend=compositeWeight(owner,x,z);
         // A narrow ecotone selects one of the actual contributing recipes. Both composite ingredients are exposed
         // and both checked by biome rules. Height blending never changes recipe permissions.
         return new Sample(sum/weights+detailSum/detailWeights,owner.id,owner.template,internalWeight,pair.nearest.distance,
                 pair.second.distance,owner.recipe,owner.secondary,blend,mountain/weights);
+    }
+
+    private static int compare(double a,Region ar,double b,Region br) {
+        int order=Double.compare(a,b);return order!=0?order:ar.id.compareTo(br.id);
     }
 
     public static double transitionWidth(TerrainTemplate a,TerrainTemplate b) {

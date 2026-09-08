@@ -22,7 +22,7 @@ public final class TerrainRecipes {
         for(var t:TerrainTemplate.values()) {
             prefix="recipe-r21/"+t.id(); sequence=0;
             buildingDetailStrength=settings.get(t).detailStrength();
-            shapes.put(t,build(t));
+            shapes.put(t,memoize(build(t)));
             // Populators adds this surface layer ONLY to plateau, after its terraces.
             details.put(t,t==TerrainTemplate.PLATEAU?warp(perlin(20,3),40,2,20):(x,z)->0);
         }
@@ -46,15 +46,15 @@ public final class TerrainRecipes {
                 yield warp(map(blend(selector,a,b,.4,.75),v->StrictMath.pow(v,1.125)),300,1,100);
             }
             case PLATEAU -> {
-                Noise valley=warp(warp(map(ridge(500,1,2,.975),v->1-v),100,1,150),20,1,15);
+                Noise valley=memoize(warp(warp(map(ridge(500,1,2,.975),v->1-v),100,1,150),20,1,15));
                 Noise top=mul(map(warp(warp(ridge(150,3,2.45,.975),300,1,150),40,2,20),v->.15*v),map(valley,v->unit(v,.02,.1)));
                 Noise h=add(mul(valley,map(cubic(500,1),v->.3+.6*v)),top);
                 yield map(h,v->plateauTerrace(v/1.05));
             }
             case BADLANDS -> {
                 Noise mask=map(perlin(270,3),v->unit(v,.35,.65));
-                Noise hills=mul(warp(warp(ridge(275,4,2,.975),400,2,100),18,1,20),mask);
-                Noise mod=map(warp(hills,100,1,50),v->.4*v);
+                Noise hills=memoize(mul(warp(warp(ridge(275,4,2,.975),400,2,100),18,1,20),mask));
+                Noise mod=memoize(map(warp(hills,100,1,50),v->.4*v));
                 Noise low=add(map(hills,v->.6*steps(v,4,.6,.7,false)),mod);
                 Noise high=add(map(hills,v->.6*steps(v,10,.6,.7,false)),mod);
                 Noise detail=map(add(low,high),v->.5+.5*v);
@@ -100,38 +100,49 @@ public final class TerrainRecipes {
         int salt=noiseSeed(); double detail=buildingDetailStrength;
         double[] signals={1,.9,.83,.75,.64,.62,.61};
         double signal=signals[Math.min(octaves,signals.length-1)];
-        return (x,z)-> { double sum=0,weight=1,total=0,frequency=1/scale;
-            for(int i=0;i<octaves;i++) {
-                double w=weight*(i==0?1:detail);
-                sum+=w*TerraForgedNoise.perlin(x*frequency,z*frequency,salt+i);total+=w;
-                frequency*=lacunarity;weight*=.5;
-            }
-            return clamp(.5+.5*sum/(total*signal));
+        double[] frequencies=new double[octaves],weights=new double[octaves];
+        double weight=1,total=0,frequency=1/scale;
+        for(int i=0;i<octaves;i++) {
+            frequencies[i]=frequency;weights[i]=weight*(i==0?1:detail);total+=weights[i];
+            frequency*=lacunarity;weight*=.5;
+        }
+        double normalization=total*signal;
+        return (x,z)-> {
+            double sum=0;
+            for(int i=0;i<octaves;i++)sum+=weights[i]*TerraForgedNoise.perlin(x*frequencies[i],z*frequencies[i],salt+i);
+            return clamp(.5+.5*sum/normalization);
         };
     }
+
     private int noiseSeed() { return (int)DeterministicRandom.seed(seed,"terrain-r21","ftf-noise",field(),0); }
     private Noise ridge(double scale,int octaves,double lacunarity,double gain) {
         int salt=noiseSeed(); double detail=buildingDetailStrength;
+        double[] frequencies=new double[octaves],weights=new double[octaves],amps=new double[octaves];
+        double spectral=1,amp=2,boundWeight=1,total=0,frequency=1/scale;
+        for(int i=0;i<octaves;i++) {
+            frequencies[i]=frequency;amps[i]=amp;weights[i]=spectral*(i==0?1:detail);
+            total+=boundWeight*weights[i];boundWeight=clamp(boundWeight*amp);
+            spectral/=lacunarity;frequency*=lacunarity;amp*=gain;
+        }
+        double normalization=total;
         return (x,z)-> {
-            double value=0,weight=1,amp=2,spectral=1,total=0,frequency=1/scale;
-            double boundWeight=1;
+            double value=0,weight=1;
             for(int i=0;i<octaves;i++) {
-                double signal=1-StrictMath.abs(TerraForgedNoise.perlin(x*frequency,z*frequency,salt+i));
-                signal=signal*signal*weight;weight=clamp(signal*amp);
-                double w=spectral*(i==0?1:detail);
-                value+=signal*w;total+=boundWeight*w;boundWeight=clamp(boundWeight*amp);
-                spectral/=lacunarity;frequency*=lacunarity;amp*=gain;
+                double signal=1-StrictMath.abs(TerraForgedNoise.perlin(x*frequencies[i],z*frequencies[i],salt+i));
+                signal=signal*signal*weight;weight=clamp(signal*amps[i]);
+                value+=signal*weights[i];
             }
-            return clamp(value/total);
+            return clamp(value/normalization);
         };
     }
+
     private Noise billow(double scale,int octaves,double lacunarity,double gain) { return map(ridge(scale,octaves,lacunarity,gain),v->1-v); }
     private Noise cubic(double scale,int octaves) {
         long salt=DeterministicRandom.seed(seed,"terrain-r21","cubic",field(),0);
         return (x,z)-> {
             double sum=0,total=0,weight=1;
             for(int o=0;o<octaves;o++) {
-                double px=x/scale* (1<<o),pz=z/scale*(1<<o); long ix=(long)StrictMath.floor(px),iz=(long)StrictMath.floor(pz);
+                double px=x/scale* (1<<o),pz=z/scale*(1<<o); long ix=(long)Math.floor(px),iz=(long)Math.floor(pz);
                 double tx=px-ix,tz=pz-iz; double[] row=new double[4];
                 for(int k=-1;k<=2;k++)row[k+1]=cubicLerp(hash(salt+o,ix-1,iz+k),hash(salt+o,ix,iz+k),hash(salt+o,ix+1,iz+k),hash(salt+o,ix+2,iz+k),tx);
                 sum+=weight*cubicLerp(row[0],row[1],row[2],row[3],tz)/2.25;total+=weight;weight*=.5;
@@ -142,26 +153,55 @@ public final class TerrainRecipes {
     private Noise worley(double scale,boolean ratio) {
         return worley(scale,ratio,DeterministicRandom.seed(seed,"terrain-r21","worley",field(),0));
     }
+    private record CellularWindow(long x,long z,double[] xs,double[] zs) {}
+    private static CellularWindow cellularWindow(ThreadLocal<CellularWindow> cache,long salt,long gx,long gz) {
+        var window=cache.get();
+        if(window!=null&&window.x==gx&&window.z==gz)return window;
+        double[] xs=new double[25],zs=new double[25];int i=0;
+        for(long iz=gz-2;iz<=gz+2;iz++)for(long ix=gx-2;ix<=gx+2;ix++) {
+            xs[i]=ix+.5+.45*hash(salt,ix,iz);zs[i++]=iz+.5+.45*hash(salt+1,ix,iz);
+        }
+        window=new CellularWindow(gx,gz,xs,zs);cache.set(window);return window;
+    }
     private Noise worley(double scale,boolean ratio,long salt) {
+        ThreadLocal<CellularWindow> cache=new ThreadLocal<>();
         return (x,z)-> {
-            double px=x/scale,pz=z/scale;long gx=(long)StrictMath.floor(px),gz=(long)StrictMath.floor(pz);
+            double px=x/scale,pz=z/scale;long gx=(long)Math.floor(px),gz=(long)Math.floor(pz);
+            var window=cellularWindow(cache,salt,gx,gz);
             double d1=Double.POSITIVE_INFINITY,d2=d1;
-            for(long iz=gz-2;iz<=gz+2;iz++)for(long ix=gx-2;ix<=gx+2;ix++) {
-                double dx=ix+.5+.45*hash(salt,ix,iz)-px,dz=iz+.5+.45*hash(salt+1,ix,iz)-pz,d=dx*dx+dz*dz;
+            for(int i=0;i<25;i++) {
+                double dx=window.xs[i]-px,dz=window.zs[i]-pz,d=dx*dx+dz*dz;
                 if(d<d1){d2=d1;d1=d;}else if(d<d2)d2=d;
             }
             return ratio?d1/d2:clamp(d2/2);
         };
     }
     private Noise worleyLookup(double scale,long salt,Noise lookup) {
+        ThreadLocal<CellularWindow> cache=new ThreadLocal<>();
         return (x,z)-> {
             double px=x/scale,pz=z/scale,best=Double.POSITIVE_INFINITY,nearestX=0,nearestZ=0;
-            long gx=(long)StrictMath.floor(px),gz=(long)StrictMath.floor(pz);
-            for(long iz=gz-2;iz<=gz+2;iz++)for(long ix=gx-2;ix<=gx+2;ix++) {
-                double cx=ix+.5+.45*hash(salt,ix,iz),cz=iz+.5+.45*hash(salt+1,ix,iz),dx=cx-px,dz=cz-pz,d=dx*dx+dz*dz;
+            long gx=(long)Math.floor(px),gz=(long)Math.floor(pz);
+            var window=cellularWindow(cache,salt,gx,gz);
+            for(int i=0;i<25;i++) {
+                double cx=window.xs[i],cz=window.zs[i],dx=cx-px,dz=cz-pz,d=dx*dx+dz*dz;
                 if(d<best){best=d;nearestX=cx;nearestZ=cz;}
             }
             return .45+.2*lookup.at(nearestX,nearestZ);
+        };
+    }
+    /** Shared nodes in the recipe DAG are evaluated once for each exact coordinate.
+     * Four recent entries cover both the original and nested warped evaluations. */
+    private static Noise memoize(Noise noise) {
+        class Recent {
+            final long[] xs=new long[4],zs=new long[4];final double[] values=new double[4];int count,next;
+        }
+        ThreadLocal<Recent> cache=ThreadLocal.withInitial(Recent::new);
+        return (x,z)-> {
+            var recent=cache.get();long bx=Double.doubleToRawLongBits(x),bz=Double.doubleToRawLongBits(z);
+            for(int i=0;i<recent.count;i++)if(recent.xs[i]==bx&&recent.zs[i]==bz)return recent.values[i];
+            double value=noise.at(x,z);int i=recent.next;
+            recent.xs[i]=bx;recent.zs[i]=bz;recent.values[i]=value;
+            recent.next=(i+1)&3;recent.count=Math.min(4,recent.count+1);return value;
         };
     }
     private Noise warp(Noise h,double scale,int octaves,double amplitude) { return warp(h,perlin(scale,octaves),perlin(scale,octaves),amplitude); }
@@ -178,20 +218,20 @@ public final class TerrainRecipes {
             double v=h.at(x,z),t=mask.at(x,z)*unit(v,lo,hi);
             // Upstream rounds before applying slope and additive modulation. A narrow continuous
             // rounding window avoids instantaneous block-height jumps while retaining the terraces.
-            double scaled=v*steps,lower=StrictMath.floor(scaled),fraction=scaled-lower;
+            double scaled=v*steps,lower=Math.floor(scaled),fraction=scaled-lower;
             double stepped=(lower+smooth(unit(fraction,.4,.6)))/steps;
             double result=(stepped+(v-stepped)*slope+modulation.at(x,z))/(1+modulationMax);
             return lerp(v,result,t);
         };
     }
     private static double steps(double v,int count,double lo,double hi,boolean curve) {
-        double inverted=1-v,lower=StrictMath.floor(inverted*count)/count;
+        double inverted=1-v,lower=Math.floor(inverted*count)/count;
         double alpha=unit((inverted-lower)*count,lo,hi);
         return 1-lerp(lower,inverted,curve?smooth(alpha):alpha);
     }
     private static double plateauTerrace(double v) {
         // Four levels, with independent ramp, cliff and ramp-height controls from makePlateau.
-        double scaled=v*3,lower=StrictMath.floor(scaled),fraction=scaled-lower;
+        double scaled=v*3,lower=Math.floor(scaled),fraction=scaled-lower;
         double blendRange=.4;
         double alpha=unit(fraction,blendRange/2,1-blendRange/2),ramp=1-.9*.5,cliff=1-.15*.5;
         double value=lower/3,next=(lower+1)/3;

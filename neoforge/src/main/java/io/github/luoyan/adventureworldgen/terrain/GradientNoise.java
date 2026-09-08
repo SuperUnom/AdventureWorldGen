@@ -16,7 +16,7 @@ public final class GradientNoise {
 
     public double sample(double x, double z) {
         x = x / scale + offsetX; z = z / scale + offsetZ;
-        long ix = (long) StrictMath.floor(x), iz = (long) StrictMath.floor(z);
+        long ix = (long) Math.floor(x), iz = (long) Math.floor(z);
         double tx = x - ix, tz = z - iz, u = fade(tx), v = fade(tz);
         double a = lerp(dot(ix, iz, tx, tz), dot(ix + 1, iz, tx - 1, tz), u);
         double b = lerp(dot(ix, iz + 1, tx, tz - 1), dot(ix + 1, iz + 1, tx - 1, tz - 1), u);
