@@ -1,0 +1,10 @@
+// Use a fresh directory to verify planning rather than a previous READY cache.
+allprojects {
+ afterEvaluate {
+  def forge = extensions.findByName('neoForge')
+  if (forge != null) {
+   forge.runs.gameTestServer.gameDirectory = file(providers.gradleProperty('terrainAuditWorld').getOrElse('run-capacity-7993'))
+   forge.runs.gameTestServer.systemProperty 'neoforge.enabledGameTestNamespaces', 'testcompanion_capacity'
+  }
+ }
+}

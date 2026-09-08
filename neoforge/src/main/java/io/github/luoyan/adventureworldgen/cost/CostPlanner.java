@@ -72,12 +72,12 @@ public final class CostPlanner {
                 coastline.equalArcSamples(profile.coast().targetArcSampleSpacing(), profile.coast().maximumArcSamples()),
                 profile.levelTolerance());
         progress.accept(1);
-        return new Result(distances, levels, cache.stats(), spacing, bounds.nodeCount(), terrain, coastBoundaries, new java.util.concurrent.ConcurrentHashMap<>());
+        return new Result(distances, levels, cache.stats(), spacing, bounds.nodeCount(), terrain, coastBoundaries, new java.util.concurrent.ConcurrentHashMap<>(), new java.util.concurrent.ConcurrentHashMap<>());
     }
 
     public record Result(CostDistanceMap distances, AdventureLevels levels, AdjacentEdgeCache.Stats edgeStats,
                          int spacing, long nodeCount, MacroTerrain terrain, BoundaryIntersector boundaries,
-                         java.util.Map<Long, long[]> refinements) {
+                         java.util.Map<Long, long[]> refinements, java.util.Map<Long,Long> exactCosts) {
         public boolean accepts(int level, int x, int z) { return levels.contains(level, refinedCostAt(x, z)); }
 
         public double normalizedPreferenceAt(int x,int z,double radius) {
@@ -86,7 +86,11 @@ public final class CostPlanner {
         }
 
         /** A deterministic 256-square 8-grid seeded at coarse nodes and its perimeter from the complete 16-grid. */
-        public long refinedCostAt(int x, int z) {
+        public long refinedCostAt(int x,int z) {
+            long key=((long)x<<32)^(z&0xffffffffL);
+            return exactCosts.computeIfAbsent(key,ignored->computeRefinedCostAt(x,z));
+        }
+        private long computeRefinedCostAt(int x, int z) {
             final int fine = 8, half = 128;
             int originX = Math.floorDiv(x + half, 256) * 256 - half;
             int originZ = Math.floorDiv(z + half, 256) * 256 - half;

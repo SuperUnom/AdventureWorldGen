@@ -19,7 +19,11 @@ public final class PlacementIndex {
     private final Map<ContentId, Long2ByteOpenHashMap> compatibility = new HashMap<>();
     private final Map<Integer, List<Point>> candidates = new HashMap<>();
     private final List<Point> land = new ArrayList<>();
+    private final Map<List<ContentId>,Long> terrainCapacity=new HashMap<>();
     private final Map<Integer,List<Point>> finerLand = new HashMap<>();
+    private final Long2ObjectOpenHashMap<MacroSample> exactSamples=new Long2ObjectOpenHashMap<>();
+    private final Map<Integer,Long2ByteOpenHashMap> accepted=new HashMap<>();
+    private final Map<Integer,it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap> penalties=new HashMap<>();
     private long queries;
 
     public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
@@ -41,7 +45,13 @@ public final class PlacementIndex {
             if (sample.waterKind() == WaterKind.NONE && !sample.hazardous()) land.add(new Point(x,z));
         }
     }
-    public MacroSample sampleAt(double x,double z) { return terrain.sample(x,z); }
+    public MacroSample sampleAt(double x,double z) {
+        if(x!=(int)x||z!=(int)z)return terrain.sample(x,z);
+        int ix=(int)x,iz=(int)z;
+        if(Math.floorMod(ix,4)==2&&Math.floorMod(iz,4)==2)return sample(ix-2,iz-2);
+        long key=((long)ix<<32)^(iz&0xffffffffL);
+        return exactSamples.computeIfAbsent(key,ignored->terrain.sample(x,z));
+    }
     public MacroSample sample(int x, int z) {
         long cell = CellMask.key(x,z);
         MacroSample result = samples.get(cell);
@@ -65,6 +75,12 @@ public final class PlacementIndex {
         }
         return result == 1;
     }
+    /** Coarse frozen legal terrain supply; independent of temperature and adventure preference. */
+    public long terrainCapacity(List<ContentId> biomes) {
+        var key=biomes.stream().distinct().sorted().toList();
+        return terrainCapacity.computeIfAbsent(key,ignored->land.stream()
+                .filter(p->key.stream().anyMatch(id->allows(id,p.x,p.z))).count()*256);
+    }
     public List<Point> candidates(int level) {
         return candidates.computeIfAbsent(level, ignored -> land.stream().filter(p -> levels.mightAccept(level,p.x,p.z)).toList());
     }
@@ -85,8 +101,16 @@ public final class PlacementIndex {
             return List.copyOf(points);
         });
     }
-    public boolean accepts(int level, Point p) { return levels.accepts(level,p.x,p.z); }
-    public double penalty(int level, Point p) { return levels.penalty(level,p.x,p.z); }
+    public boolean accepts(int level, Point p) {
+        var cache=accepted.computeIfAbsent(level,ignored->new Long2ByteOpenHashMap());
+        byte value=cache.get(p.cell());
+        if(value==0){value=(byte)(levels.accepts(level,p.x,p.z)?1:2);cache.put(p.cell(),value);}
+        return value==1;
+    }
+    public double penalty(int level, Point p) {
+        var cache=penalties.computeIfAbsent(level,ignored->new it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap());
+        return cache.computeIfAbsent(p.cell(),ignored->levels.penalty(level,p.x,p.z));
+    }
     public long queries() { return queries; }
     public static long mix(long x) {
         x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;

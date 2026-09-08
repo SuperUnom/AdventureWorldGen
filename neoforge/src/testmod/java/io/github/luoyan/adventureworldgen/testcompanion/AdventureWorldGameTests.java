@@ -197,14 +197,10 @@ public final class AdventureWorldGameTests {
             var biome = plan.landBiomeAt(x,z);
             helper.assertTrue(config.biomes().allows(biome,terrain), "filler violates terrain rule: " + biome + " at " + x + "," + z);
             if(terrain.waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE) {
-                var nativeBiome=helper.getLevel().registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BIOME)
-                        .get(net.minecraft.resources.ResourceLocation.parse(biome.value()));
-                var position=new net.minecraft.core.BlockPos(x+2,(int)Math.ceil(terrain.groundSurface())+1,z+2);
-                var type=plan.climate().typeAt(x+2,z+2,terrain);
-                if(type==io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType.VERY_COLD)
-                    helper.assertTrue(nativeBiome.hasPrecipitation()&&nativeBiome.coldEnoughToSnow(position),"very cold land has no native snow: "+biome);
-                if(type==io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType.COLD)
-                    helper.assertTrue(!nativeBiome.coldEnoughToSnow(position),"cold land unexpectedly snows: "+biome+" at "+position);
+                // Temperature preferences can fall back across bands. Native snowfall does not
+                // override author configuration; frozen moisture and shore rules remain mandatory.
+                helper.assertTrue(plan.climate().allowsEnvironment(biome,x+2,z+2,terrain),
+                        "biome violates frozen environment: "+biome+" at "+x+","+z);
             }
             if (terrain.terrainTemplate().equals("mountains")) mountains++;
             if (biome.value().equals("minecraft:desert")||biome.value().equals("minecraft:savanna")) openHotLand++;
@@ -273,6 +269,10 @@ public final class AdventureWorldGameTests {
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
     public static void productionProfilePlansIrregularContinentAtRadius3000(GameTestHelper helper) {
+        productionProfilePlansAndReloads(helper,7331,"production-profile-r6");
+    }
+
+    static void productionProfilePlansAndReloads(GameTestHelper helper,long seed,String directory) {
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
@@ -281,9 +281,9 @@ public final class AdventureWorldGameTests {
             var loaded = new ProfileManager.LoadedProfile(ProfileManager.DEFAULT_ID, config, canonical,
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(
                             canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "production-profile-test");
-            var generated = RuntimePlanner.plan(7331, loaded, java.nio.file.Path.of("production-profile-r6"), MinecraftAdapters.builtIn());
+            var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
-            var reloaded=RuntimePlanner.plan(7331,loaded,java.nio.file.Path.of("production-profile-r6"),MinecraftAdapters.builtIn());
+            var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn());
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
                     && progress.stage()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,

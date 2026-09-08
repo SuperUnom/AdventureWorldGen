@@ -7,6 +7,15 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
 class CostPlannerTest {
+    @Test void repeatedExactDifficultyQueriesDoNotReintegrateTerrainEdges() {
+        var calls=new java.util.concurrent.atomic.AtomicInteger();
+        MacroTerrain terrain=(x,z)->{calls.incrementAndGet();return new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");};
+        var coast=new Coastline(List.of(new Vec2(-64,-64),new Vec2(64,-64),new Vec2(64,64),new Vec2(-64,64)));
+        var costs=new CostPlanner(PlannerProfile.V2).build(terrain,coast,new Vec2(0,0));
+        long expected=costs.refinedCostAt(-5,7);int prepared=calls.get();
+        for(int i=0;i<5;i++)assertEquals(expected,costs.refinedCostAt(-5,7));
+        assertEquals(prepared,calls.get());
+    }
     @Test void cachedSamplingPreservesDirectedCostsAtIntegerAndFractionalCoordinates() {
         var coast=new Coastline(List.of(new Vec2(-64,-64),new Vec2(64,-64),new Vec2(64,64),new Vec2(-64,64)));
         MacroTerrain terrain=(x,z)-> {

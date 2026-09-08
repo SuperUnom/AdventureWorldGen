@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class VanillaAltitudeSnowTest {
-    @Test void highWindsweptLandRequiresSnowClimateAndLowLandDoesNot() {
+    @Test void nativeSnowDoesNotOverrideConfiguredTemperature() {
         var config=new AdventureWorldConfigParser().parse("""
                 {"world":{"radius":256},"spawn":{"biome":"minecraft:plains"},
                  "biomes":{"filler":["minecraft:plains","minecraft:windswept_hills"],
@@ -19,8 +19,9 @@ class VanillaAltitudeSnowTest {
             var climate=new ClimatePlan(7331,config,terrain);
             for(int x=-200;x<=200;x+=32)for(int z=-200;z<=200;z+=32) {
                 var sample=terrain.sample(x+2,z+2);
-                boolean snow=climate.typeAt(x+2,z+2,sample)==AdventureWorldConfig.TemperatureType.VERY_COLD;
-                assertEquals(height==180?snow:!snow,climate.allowsSnowClass(id,x+2,z+2,sample));
+                assertTrue(climate.allowsSnowClass(id,x+2,z+2,sample));
+                assertEquals(climate.typeAt(x+2,z+2,sample)==AdventureWorldConfig.TemperatureType.COLD,
+                        climate.prefersType(id,x+2,z+2,sample));
             }
         }
     }

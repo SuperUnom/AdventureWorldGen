@@ -18,7 +18,8 @@ public final class HumidityPlan {
     private final double weatherOffset;
     private final double[] freshDistance,oceanDistance,freshLevel,oceanLevel;
     private final double[] actual=new double[3];
-    private record SupplyKey(String category,String recipe,String secondary,String landform,boolean snowy,int altitudeSnow) {}
+    private final FrozenQuartField frozenValues;
+    private record SupplyKey(String category,String recipe,String secondary,String landform) {}
     private final Map<SupplyKey,Integer> moistureSupply=new java.util.concurrent.ConcurrentHashMap<>();
 
     public record State(int extent,double[] freshDistance,double[] oceanDistance,
@@ -30,6 +31,7 @@ public final class HumidityPlan {
                         DoubleConsumer progress,State frozen) {
         this.config=config;this.temperature=temperature;
         double radius=config.world().radius();
+        frozenValues=new FrozenQuartField(radius+128);
         regional=new ValueNoise(seed,"humidity/region",Math.max(160,radius*.35));
         detail=new ValueNoise(seed,"humidity/detail",Math.max(96,radius*.1));
         shore=new ValueNoise(seed,"humidity/shore",112);
@@ -124,6 +126,9 @@ public final class HumidityPlan {
     private double weather(double x,double z){return .36*regional.sample(x,z)+.13*detail.sample(x,z);}
     /** 0..1 moisture: broad weather, evaporation, elevation and nearby fresh/salt water. */
     public double valueAt(double x,double z,MacroSample s) {
+        return frozenValues.get(x,z,()->computeValue(x,z,s));
+    }
+    private double computeValue(double x,double z,MacroSample s) {
         double fresh=freshDistanceAt(x,z),ocean=oceanDistanceAt(x,z);
         double freshwater=s.waterKind()==WaterKind.RIVER||s.waterKind()==WaterKind.LAKE||s.waterKind()==WaterKind.WETLAND?1:
                 Math.exp(-fresh/100)*Math.exp(-Math.max(0,s.groundSurface()-sample(freshLevel,x,z)-8)/60);
@@ -137,19 +142,16 @@ public final class HumidityPlan {
         if(s.wet()&&s.waterKind()!=WaterKind.LAVA)value=Math.max(value,.8);
         value=Math.clamp(value,0,1);
         if(s.wet())return value;
-        // Plan moisture inside the feasible template/landform/snow domain before assigning biomes.
+        // Plan moisture inside the feasible template/landform domain before assigning biomes.
         // This never changes a biome's allowed humidity set, nor the final terrain or water geometry.
-        var key=new SupplyKey(s.terrainTemplate(),s.recipe(),s.secondaryWeight()>0?s.secondaryRecipe():"",s.landform(),
-                temperature.typeAt(x,z,s)==AdventureWorldConfig.TemperatureType.VERY_COLD,temperature.altitudeSnowAt(x,z,s));
+        var key=new SupplyKey(s.terrainTemplate(),s.recipe(),s.secondaryWeight()>0?s.secondaryRecipe():"",s.landform());
         int mask=moistureSupply.computeIfAbsent(key,ignored->{
             int result=0;
             for(var id:config.biomes().filler()) {
                 var rule=config.biomes().terrainRules().get(id);
-                if(!temperature.allowsSnowClass(id,x,z,s))continue;
-                if(rule==null)return 7;
-                if(rule.shoreOnly()||rule.minHeight()!=null||rule.maxHeight()!=null||!rule.accepts(s))continue;
-                if(rule.humidities().isEmpty())return 7;
-                for(var type:rule.humidities().keySet())result|=1<<type.ordinal();
+                if(rule!=null&&(rule.shoreOnly()||rule.minHeight()!=null||rule.maxHeight()!=null||!rule.accepts(s)))continue;
+                if(rule==null||rule.humidities().isEmpty())result=7;
+                else for(var type:rule.humidities().keySet())result|=1<<type.ordinal();
             }
             return result;
         });

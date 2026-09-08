@@ -43,7 +43,9 @@ public final class TerrainCapacityPlan {
     public List<Reservation> reservations() { return reservations; }
     public MountainRangePlan ranges() { return ranges; }
     public Reservation at(RegionTerrain.GridKey key) { return lookup.get(key); }
-    private record Request(String id,ContentId biome,int level,long area) {}
+    private record Request(String id,List<ContentId> biomes,int level,long minimum,long target) {}
+    private record Choice(Bin bin,ContentId biome,TerrainTemplate recipe,TerrainTemplate secondary,
+                          Set<String> allowed,Double min,Double max,Fit fit,double score) {}
     private static final class Bin {
         final RegionTerrain.GridKey key;
         long area,used; double x,z;
@@ -70,61 +72,79 @@ public final class TerrainCapacityPlan {
         for(var b:bins.values()){b.x/=b.area;b.z/=b.area;}
         var expanded=new RequirementExpander().expandMinimum(config);
         List<Request> requests=new ArrayList<>();
-        for(var d:expanded.patches())requests.add(new Request(d.patchId(),d.allowedBiomes().getFirst(),d.adventureLevel(),d.area().inCells(4).min()*16));
-        requests.sort(Comparator.comparingInt((Request r)->r.level==0?-1:allowed(config,r.biome).size()).thenComparing(Request::id));
+        for(var d:expanded.patches())requests.add(new Request(d.patchId(),d.allowedBiomes(),d.adventureLevel(),
+                d.area().inCells(4).min()*16,d.area().target()));
+        requests.sort(Comparator.comparingInt((Request r)->r.level==0?-1:
+                r.biomes.stream().flatMap(id->allowed(config,id).stream()).distinct().toList().size()).thenComparing(Request::id));
         var central=geometry.regionKeyAt(0,0);
-        for(var request:requests) {
-            var rule=config.biomes().terrainRules().get(request.biome);
-            Double min=rule==null?null:rule.minHeight(),max=rule==null?null:rule.maxHeight();
-            long remaining=request.area;
-            var choices=new ArrayList<>(bins.values());
-            choices.sort(Comparator.comparingDouble((Bin b)-> {
-                double target=config.world().radius()*request.level/10.0;
-                double score=Math.abs(StrictMath.hypot(b.x,b.z)-target);
-                if(request.level==0&&b.key.equals(central))score-=10000;
-                return score;
-            }).thenComparingLong(b->b.key.x()).thenComparingLong(b->b.key.z()));
-            int incompatible=0,heightFailures=0;
-            // Prefer naturally legal envelopes anywhere, then fit allowed recipes, then isolated lowland.
-            for(int pass=0;pass<3&&remaining>0;pass++)for(var bin:choices) {
+        Map<String,ContentId> selected=new HashMap<>();
+        Map<String,Long> allocated=new HashMap<>();
+        // Commit every minimum first. Targets and erosion/climate headroom use only spare capacity.
+        for(int round=0;round<2;round++)for(var request:requests) {
+            long desired=round==0?request.minimum:Math.max(request.minimum,
+                    (long)Math.ceil(Math.min((double)Long.MAX_VALUE,request.target*1.25)));
+            long remaining=desired-allocated.getOrDefault(request.id,0L);
+            if(remaining<=0)continue;
+            var choices=new ArrayList<Choice>();
+            for(var bin:bins.values()) {
                 if(bin.used>=bin.area)continue;
-                var possible=new TreeSet<>(allowed(config,request.biome));
-                if(bin.allowed!=null)possible.retainAll(bin.allowed);
-                if(possible.isEmpty()){incompatible++;continue;}
-                Double lo=maxNullable(bin.min,min),hi=minNullable(bin.max,max);
                 var natural=geometry.region(bin.key.x(),bin.key.z());
-                var recipe=bin.recipe!=null?bin.recipe:natural.recipe();
-                var secondary=bin.recipe!=null?bin.secondary:natural.secondary();
-                boolean naturalAllowed=possible.contains(recipe.id())&&(secondary==null||possible.contains(secondary.id()));
-                if(pass==0&&!naturalAllowed)continue;
-                if(pass>0&&!naturalAllowed) {
-                    // The bin can be reassigned only before anyone has reserved it.
-                    if(bin.used>0)continue;
-                    recipe=possible.stream().map(TerrainTemplate::byId)
-                        .min(Comparator.comparingDouble(t->settings.get(t).verticalAmplitude())).orElseThrow();
-                    secondary=null;
+                for(var biome:request.biomes) {
+                    if(selected.containsKey(request.id)&&!selected.get(request.id).equals(biome))continue;
+                    var rule=config.biomes().terrainRules().get(biome);
+                    var possible=new TreeSet<>(allowed(config,biome));
+                    if(bin.allowed!=null)possible.retainAll(bin.allowed);
+                    if(possible.isEmpty())continue;
+                    Double lo=maxNullable(bin.min,rule==null?null:rule.minHeight());
+                    Double hi=minNullable(bin.max,rule==null?null:rule.maxHeight());
+                    var recipe=bin.recipe!=null?bin.recipe:natural.recipe();
+                    var secondary=bin.recipe!=null?bin.secondary:natural.secondary();
+                    boolean naturalAllowed=possible.contains(recipe.id())&&(secondary==null||possible.contains(secondary.id()));
+                    if(!naturalAllowed) {
+                        if(bin.used>0)continue;
+                        recipe=possible.stream().map(TerrainTemplate::byId)
+                                .min(Comparator.comparingDouble((TerrainTemplate t)->settings.get(t).verticalAmplitude())
+                                        .thenComparing(TerrainTemplate::id)).orElseThrow();
+                        secondary=null;
+                    }
+                    double amplitude=settings.get(recipe).verticalAmplitude();
+                    if(secondary!=null)amplitude=Math.max(amplitude,settings.get(secondary).verticalAmplitude());
+                    double shape=settings.maximumShape(recipe,secondary);
+                    var fitted=bin.fit!=null?bin.fit:new Fit(natural.baseElevation(),amplitude,shape);
+                    boolean naturalFit=naturalAllowed&&acceptsEnvelope(fitted,lo,hi);
+                    if(!naturalFit)fitted=fit(amplitude,lo,hi,shape);
+                    if(fitted==null)continue;
+                    double target=config.world().radius()*request.level/10.0;
+                    double score=Math.abs(StrictMath.hypot(bin.x,bin.z)-target)
+                            +(naturalFit?0:96)+Math.max(0,remaining-(bin.area-bin.used))/1024.0;
+                    if(request.level==0&&bin.key.equals(central))score-=10000;
+                    choices.add(new Choice(bin,biome,recipe,secondary,Set.copyOf(possible),lo,hi,fitted,score));
                 }
-                double amplitude=settings.get(recipe).verticalAmplitude();
-                if(secondary!=null)amplitude=Math.max(amplitude,settings.get(secondary).verticalAmplitude());
-                double maximumShape=settings.maximumShape(recipe,secondary);
-                var fitted=bin.fit!=null?bin.fit:new Fit(natural.baseElevation(),amplitude,maximumShape);
-                if(pass==0&&!acceptsEnvelope(fitted,lo,hi))continue;
-                if(pass>0) {
-                    if(pass==1&&lo!=null&&hi!=null&&hi-lo<20)continue;
-                    if(pass==2&&(hi==null||hi>90||bin.used>0||recipe.mountain()))continue;
-                    fitted=fit(amplitude,lo,hi,maximumShape);
-                    if(fitted==null){heightFailures++;continue;}
+            }
+            choices.sort(Comparator.comparingDouble(Choice::score).thenComparingLong(c->c.bin.key.x())
+                    .thenComparingLong(c->c.bin.key.z()).thenComparing(Choice::biome));
+            // Select one feasible carrier biome, then greedily reserve nearby compatible regions.
+            // Test aggregate capacity before committing, so an undersupplied first alternative cannot win.
+            if(round==0) {
+                Map<ContentId,Long> capacity=new HashMap<>();
+                for(var choice:choices)capacity.merge(choice.biome,choice.bin.area-choice.bin.used,Long::sum);
+                for(var choice:choices)if(capacity.get(choice.biome)>=remaining) {
+                    selected.put(request.id,choice.biome);break;
                 }
-                bin.recipe=recipe;bin.secondary=secondary;bin.allowed=Set.copyOf(possible);
-                bin.min=lo;bin.max=hi;bin.fit=fitted;
-                bin.strategy=pass==0?"natural":pass==1?"fitted-envelope":"isolated-lowland";
-                long allocated=Math.min(remaining,bin.area-bin.used);bin.used+=allocated;remaining-=allocated;
+            }
+            for(var choice:choices) {
+                if(!choice.biome.equals(selected.get(request.id)))continue;
+                var bin=choice.bin;
+                bin.recipe=choice.recipe;bin.secondary=choice.secondary;bin.allowed=choice.allowed;
+                bin.min=choice.min;bin.max=choice.max;bin.fit=choice.fit;bin.strategy="demand-greedy";
+                long amount=Math.min(remaining,bin.area-bin.used);bin.used+=amount;remaining-=amount;
+                allocated.merge(request.id,amount,Long::sum);
                 if(remaining==0)break;
             }
-            if(remaining>0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"terrain-capacity",
-                "no location can satisfy template intersection, height envelope and remaining interior capacity",
-                Map.of("request",request.id,"biome",request.biome,"missing_area",remaining,"interior_regions",bins.size(),
-                       "template_rejections",incompatible,"height_rejections",heightFailures,"allowed_templates",allowed(config,request.biome),"seed",seed));
+            if(round==0&&remaining>0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"terrain-capacity",
+                    "no allowed biome has sufficient template, height envelope and interior capacity",
+                    Map.of("request",request.id,"biomes",request.biomes,"missing_area",remaining,
+                            "interior_regions",bins.size(),"seed",seed));
         }
         return new TerrainCapacityPlan(bins.values().stream().filter(b->b.used>0).map(b->new Reservation(
             b.key.x(),b.key.z(),b.recipe.planningCategory(),b.min,b.max,b.used,b.recipe,b.secondary,b.allowed,b.fit.base,b.fit.amplitude,b.strategy)).toList(),ranges);

@@ -226,8 +226,6 @@ public final class AdventureWorldConfigParser {
                         types.put(AdventureWorldConfig.TemperatureType.valueOf(e.getKey().toUpperCase(java.util.Locale.ROOT)),weight);
                     }
                     if(types.isEmpty())throw error(rulePath+".temperatures","must not be empty");
-                    if(types.containsKey(AdventureWorldConfig.TemperatureType.VERY_COLD)&&types.size()>1)
-                        throw conflict(rulePath+".temperatures","very_cold snowy biomes cannot also be non-snow temperature types");
                 } else types.put(AdventureWorldConfig.TemperatureType.fromLevel((int)temperature),1.0);
                 Map<AdventureWorldConfig.HumidityType,Double> humidities = new java.util.EnumMap<>(AdventureWorldConfig.HumidityType.class);
                 if(rule.has("humidities")) {

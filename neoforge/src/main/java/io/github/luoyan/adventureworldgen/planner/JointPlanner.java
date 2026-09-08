@@ -56,7 +56,7 @@ public final class JointPlanner {
         placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, value -> progress.accept(value * 0.2));
         checkpoint.accept("index");
         io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE);
-        climate=new ClimatePlan(seed,config,terrain,io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE));
+        climate=new ClimatePlan(seed,config,placementIndex::sampleAt,io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE));
         checkpoint.accept("climate");
         io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS);
         BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsEnvironment(biome,x,z,placementIndex.sample(x,z));

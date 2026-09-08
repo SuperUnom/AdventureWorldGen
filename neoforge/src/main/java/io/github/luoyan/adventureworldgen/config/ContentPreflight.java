@@ -25,14 +25,6 @@ public final class ContentPreflight {
 
         for (ContentId id : biomeIds) {
             if (!registries.biomeExists(id)) missing("biome", id);
-            var rule=config.biomes().terrainRules().get(id);
-            if(rule!=null) {
-                Boolean snow=registries.snowyAtSeaLevel(id);
-                if(snow!=null && rule.temperatures().containsKey(AdventureWorldConfig.TemperatureType.VERY_COLD) && !snow)
-                    unsupported("biome",id,"very_cold requires a biome with native snowfall");
-                if(Boolean.TRUE.equals(snow) && rule.temperatures().containsKey(AdventureWorldConfig.TemperatureType.COLD))
-                    unsupported("biome",id,"cold requires a non-snowy biome; use very_cold for native snowfall");
-            }
             if (adapters.biome(id) == null) unsupported("biome", id, "no biome adapter or generic fallback");
         }
 

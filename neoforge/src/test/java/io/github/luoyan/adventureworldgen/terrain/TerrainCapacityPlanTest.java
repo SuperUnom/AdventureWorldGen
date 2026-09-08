@@ -8,6 +8,24 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class TerrainCapacityPlanTest {
+    @Test void structureAlternativesReserveFeasibleTemplateAndOversizedTargetsFallBackToMinimum() {
+        var config=new AdventureWorldConfigParser().parse("""
+          {"world":{"radius":1536},"spawn":{"biome":"test:spawn"},"biomes":{
+           "filler":["test:spawn"],"terrain_rules":{
+             "test:impossible":{"min_height":319},"test:badlands":{"allowed_templates":["badlands"]}}},
+           "structures":[{"id":"test:keep","adventure_level":7,"count":{"min":1,"max":1},
+             "allowed_biomes":{"id":["test:impossible","test:badlands"],
+             "area":{"min":4096,"target":100000000}},"entrance":[0,0,0]}]}
+          """);
+        var coast=new Coastline(List.of(new Vec2(-1300,-1300),new Vec2(1300,-1300),new Vec2(1300,1300),new Vec2(-1300,1300)));
+        var plan=TerrainCapacityPlan.reserve(7331,config,coast,64);
+        assertTrue(plan.reservations().stream().anyMatch(r->r.recipe()==TerrainTemplate.BADLANDS));
+        assertTrue(plan.reservations().stream().noneMatch(r->r.minHeight()!=null&&r.minHeight()==319));
+        long area=plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum();
+        assertTrue(area>=4096+32768);
+        assertTrue(area<100000000,"soft target should yield to finite terrain capacity");
+    }
+
     @Test void reservesSharedAreaOnceAndKeepsLowlandHeadroomForErosion() {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":3000},"spawn":{"biome":"minecraft:plains"},
@@ -20,7 +38,9 @@ class TerrainCapacityPlanTest {
           """);
         var coast=new Coastline(List.of(new Vec2(-2000,-2000),new Vec2(2000,-2000),new Vec2(2000,2000),new Vec2(-2000,2000)));
         var plan=TerrainCapacityPlan.reserve(7331,config,coast,128);
-        assertEquals(65536,plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum());
+        long target=new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(config).patches()
+                .stream().mapToLong(d->(long)Math.ceil(d.area().target()*1.25)).sum();
+        assertEquals(target,plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum());
         assertEquals(plan.reservations(),TerrainCapacityPlan.reserve(7331,config,coast,128).reservations());
         assertTrue(plan.reservations().stream().anyMatch(r->r.template()==RegionTerrain.Template.MOUNTAINS));
         var regions=new RegionTerrain(7331,PlannerProfile.V2,plan);

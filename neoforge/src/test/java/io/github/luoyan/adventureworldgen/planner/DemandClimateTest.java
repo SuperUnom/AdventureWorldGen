@@ -58,7 +58,7 @@ class DemandClimateTest {
         assertTrue(BiomeAllocationPlanner.areaPressure(1.001,false)>-.01);
         assertTrue(BiomeAllocationPlanner.areaPressure(2,false)>-2);
     }
-    @Test void snowIsASeparateFourthBand() {
+    @Test void veryColdIsAConfiguredFourthBandWithSoftFallback() {
         var parser=new AdventureWorldConfigParser();
         var c=parser.parse("""
           {"world":{"radius":512},"spawn":{"biome":"test:temperate"},"biomes":{
@@ -72,12 +72,11 @@ class DemandClimateTest {
         for(int x=-500;x<500;x+=16)for(int z=-500;z<500;z+=16) {
             var t=climate.typeAt(x+2,z+2,FLAT.sample(x,z));types.add(t);
             assertEquals(t==AdventureWorldConfig.TemperatureType.VERY_COLD,
-                climate.allowsSnowClass(new ContentId("test:snow"),x,z,FLAT.sample(x,z)));
-            assertEquals(t!=AdventureWorldConfig.TemperatureType.VERY_COLD,
-                climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
+                climate.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
+            assertTrue(climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
         }
         assertEquals(4,types.size());
-        assertThrows(ConfigException.class,()->parser.parse(CanonicalConfigJson.write(c).replace("\"very_cold\":1.0","\"very_cold\":1.0,\"cold\":1.0")));
+        assertDoesNotThrow(()->parser.parse(CanonicalConfigJson.write(c).replace("\"very_cold\":1.0","\"very_cold\":1.0,\"cold\":1.0")));
     }
     @Test void mountainMassCoolsContinuouslyAndValleysRemainWarmer() {
         var config=config(131072);

@@ -19,8 +19,8 @@ public final class ClimatePlan {
     private double angle, low, high;
     private final double[] thresholds=new double[3];
     private boolean snowBoundary;
-    private final List<ContentId> snowFillers,warmFillers;
-    private final boolean altitudeSnowBiomes;
+    private final FrozenQuartField frozenValues;
+    private boolean frozen;
     private final TemperatureType spawnType;
     private final double[] ratios=new double[4], actual=new double[4];
     private final List<Site> sites=new ArrayList<>();
@@ -47,13 +47,8 @@ public final class ClimatePlan {
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,State frozen) {
         shores=config.biomes().filler().stream().filter(id->{var r=config.biomes().terrainRules().get(id);return r!=null&&r.shoreOnly();}).toList();
         this.config=config;
-        altitudeSnowBiomes=config.biomes().filler().stream().anyMatch(VanillaAltitudeSnow::applies)
-                ||config.biomes().required().stream().anyMatch(r->VanillaAltitudeSnow.applies(r.id()))
-                ||config.biomes().terrainRules().keySet().stream().anyMatch(VanillaAltitudeSnow::applies)
-                ||config.structures().stream().flatMap(s->s.allowedBiomes().ids().stream()).anyMatch(VanillaAltitudeSnow::applies);
-        snowFillers=config.biomes().filler().stream().filter(id->VanillaAltitudeSnow.applies(id)||preferences(config,id).containsKey(TemperatureType.VERY_COLD)).toList();
-        warmFillers=config.biomes().filler().stream().filter(id->VanillaAltitudeSnow.applies(id)||!preferences(config,id).containsKey(TemperatureType.VERY_COLD)).toList();
         radius=config.world().radius();core=Math.min(64,radius/8);
+        frozenValues=new FrozenQuartField(radius+128);
         regional=new ValueNoise(seed,"climate/region",Math.max(128,radius*.48));
         detail=new ValueNoise(seed,"climate/detail",Math.max(96,radius*.13));
         warpX=new ValueNoise(seed,"climate/warp-x",Math.max(192,radius*.32));
@@ -80,6 +75,7 @@ public final class ClimatePlan {
             for(var c:frozen.corrections())if(!Double.isFinite(c.x())||!Double.isFinite(c.z())||!Double.isFinite(c.radius())
                     ||!Double.isFinite(c.delta())||c.radius()<=0)throw new IllegalArgumentException("invalid climate correction");
             corrections.addAll(frozen.corrections());supply.addAll(frozen.supply());
+            this.frozen=true;
             humidity=new HumidityPlan(seed,config,terrain,this,ignored->{},Objects.requireNonNull(frozen.humidity(),"missing frozen humidity"));
             return;
         }
@@ -111,12 +107,10 @@ public final class ClimatePlan {
         for(var id:config.biomes().filler())distribute(id,weight(config,id),filler);
         double rt=Arrays.stream(required).sum(),ft=Arrays.stream(filler).sum();
         for(int i=0;i<4;i++)ratios[i]=.8*(rt>0?required[i]/rt:1.0/4)+.2*(ft>0?filler[i]/ft:1.0/4);
-        // Only request snow land when the profile actually supplies snowy content.
         for(int i=1;i<4;i++)ratios[i]=Math.max(.04,ratios[i]);
-        if(required[0]+filler[0]>0||altitudeSnowBiomes)ratios[0]=Math.max(.04,ratios[0]);
-        snowBoundary=filler[0]>0||altitudeSnowBiomes;
-        if(required[0]>0&&!snowBoundary)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"climate-supply",
-                "very_cold requirements need a snowy filler for remaining snow land");
+        if(required[0]+filler[0]>0)ratios[0]=Math.max(.04,ratios[0]);
+        // Kept in the serialized state for compatibility; temperature is configured, not a snow test.
+        snowBoundary=false;
         double sum=Arrays.stream(ratios).sum();for(int i=0;i<4;i++)ratios[i]/=sum;
         double start=(PlacementIndex.mix(seed)>>>11)*0x1.0p-53*Math.PI*2,best=Double.POSITIVE_INFINITY,bestAngle=start;
         for(int trial=0;trial<8;trial++) {
@@ -137,6 +131,7 @@ public final class ClimatePlan {
             double value=raw(center.x,center.z,center.sample),target=rawCenter(t);
             corrections.add(new Correction(center.x,center.z,Math.max(96,Math.sqrt(d.area().target()/Math.PI)*1.8),target-value));
         }
+        this.frozen=true;
         for(var s:sites)actual[typeAt(s.x,s.z,s.sample).ordinal()]++;
         for(int i=0;i<4;i++)actual[i]/=sites.size();
         for(var d:new RequirementExpander().expandMinimum(config).patches()) {
@@ -222,18 +217,15 @@ public final class ClimatePlan {
                 +(.035+.055*relief)*foothills.sample(x,z)-elevationCooling(x,z,s);
     }
     private double raw(double x,double z,MacroSample s) {
+        return frozen?frozenValues.get(x,z,()->computeRaw(x,z,s)):computeRaw(x,z,s);
+    }
+    private double computeRaw(double x,double z,MacroSample s) {
         double value=base(x,z,s);
         for(var c:corrections)value+=c.delta*Math.exp(-Math.pow(Math.hypot(x-c.x,z-c.z)/c.radius,2)*2);
         double d=Math.hypot(x,z),influence=1-Math.clamp((d-core)/(core*3),0,1);
         influence=influence*influence*(3-2*influence);
         double target=rawCenter(spawnType);
         value=value*(1-influence)+target*influence;
-        // Climate layout respects terrain supply: never freeze badlands into a snow band without
-        // a legal snowy filler, or expose a snow-only slope as warm bare ground.
-        if(snowBoundary) {
-            if(value<thresholds[0]&&snowFillers.stream().noneMatch(id->config.biomes().allows(id,s)&&snowyBiomeAt(id,x,z,s)))value=thresholds[0]+.001;
-            else if(value>=thresholds[0]&&warmFillers.stream().noneMatch(id->config.biomes().allows(id,s)&&!snowyBiomeAt(id,x,z,s)))value=thresholds[0]-.001;
-        }
         return value;
     }
     private double rawCenter(TemperatureType type) {
@@ -251,22 +243,15 @@ public final class ClimatePlan {
         double from=band==0?low:thresholds[band-1],to=band==3?high:thresholds[band];
         return Math.clamp(2.5*(band+(v-from)/Math.max(.01,to-from)),0,10);
     }
-    /** Snow and non-snow ownership never cross the snow band; the other climate preferences stay soft. */
-    public boolean allowsSnowClass(ContentId id,double x,double z,MacroSample sample) {
-        double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
-        return !snowBoundary || snowyBiomeAt(id,qx,qz,sample)
-                == (typeAt(qx,qz,sample)==TemperatureType.VERY_COLD);
-    }
-    int altitudeSnowAt(double x,double z,MacroSample s) {
-        return altitudeSnowBiomes?VanillaAltitudeSnow.bands((int)(Math.floor(x/4)*4+2),
-                (int)Math.ceil(s.groundSurface())+1,(int)(Math.floor(z/4)*4+2)):0;
-    }
-    private boolean snowyBiomeAt(ContentId id,double x,double z,MacroSample sample) {
-        return VanillaAltitudeSnow.applies(id)?(altitudeSnowAt(x,z,sample)&(1<<VanillaAltitudeSnow.band(id)))!=0
-                :preferences(config,id).containsKey(TemperatureType.VERY_COLD);
+    /** Legacy API: native snowfall never restricts configured biome ownership. */
+    public boolean allowsSnowClass(ContentId id,double x,double z,MacroSample sample) { return true; }
+    public int temperatureDistance(ContentId id,double x,double z,MacroSample sample) {
+        int band=typeAt(x,z,sample).ordinal(),best=3;
+        for(var type:preferences(config,id).keySet())best=Math.min(best,Math.abs(type.ordinal()-band));
+        return best;
     }
     public HumidityPlan humidity(){return humidity;}
-    /** Every ownership path shares moisture, snow and intermittent shore constraints. */
+    /** Every ownership path shares moisture and intermittent shore constraints. */
     public boolean allowsEnvironment(ContentId id,double x,double z,MacroSample sample) {
         double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
         if(!allowsSnowClass(id,qx,qz,sample)||!humidity.allows(id,qx,qz,sample))return false;
