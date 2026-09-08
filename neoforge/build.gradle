@@ -1,0 +1,132 @@
+plugins {
+    id 'java-library'
+    id 'net.neoforged.moddev' version '2.0.146'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets {
+    testmod {
+        compileClasspath += sourceSets.main.output
+        runtimeClasspath += sourceSets.main.output
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neo_version
+
+    mods {
+        "${mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+        testcompanion {
+            sourceSet(sourceSets.testmod)
+        }
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = project.file('run-client')
+            loadedMods = [mods.getByName(mod_id)]
+        }
+        server {
+            server()
+            gameDirectory = project.file('run-production-server')
+            loadedMods = [mods.getByName(mod_id)]
+            programArgument '--nogui'
+        }
+        gameTestServer {
+            type = 'gameTestServer'
+            gameDirectory = project.file('run-gametest')
+            sourceSet = sourceSets.testmod
+            loadedMods = [mods.getByName(mod_id), mods.getByName('testcompanion')]
+            // The companion tests deliberately reuse Mojang's tiny empty test structure.
+            systemProperty 'neoforge.enabledGameTestNamespaces', 'minecraft,adventureworldgen,testcompanion'
+        }
+        planningSmokeClient {
+            client()
+            gameDirectory = project.file('run-planning-smoke')
+            sourceSet = sourceSets.testmod
+            loadedMods = [mods.getByName(mod_id), mods.getByName('testcompanion')]
+            systemProperty 'adventureworldgen.planningSmoke', 'true'
+            programArguments.addAll '--quickPlaySingleplayer', 'progress-r8'
+        }
+        testCompanionServer {
+            server()
+            gameDirectory = project.file('run-testcompanion-server')
+            sourceSet = sourceSets.testmod
+            loadedMods = [mods.getByName(mod_id), mods.getByName('testcompanion')]
+            programArgument '--nogui'
+        }
+        data {
+            data()
+            loadedMods = [mods.getByName(mod_id)]
+            programArguments.addAll '--mod', mod_id,
+                    '--output', file('src/generated/resources').absolutePath,
+                    '--existing', file('src/main/resources').absolutePath
+        }
+    }
+
+    addModdingDependenciesTo sourceSets.testmod
+}
+
+var generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {
+    var properties = [
+        minecraft_version_range: minecraft_version_range,
+        neo_version: neo_version,
+        loader_version_range: loader_version_range,
+        mod_id: mod_id,
+        mod_name: mod_name,
+        mod_version: mod_version,
+        mod_license: mod_license,
+        mod_authors: mod_authors,
+        mod_description: mod_description
+    ]
+    inputs.properties properties
+    filteringCharset = 'UTF-8'
+    expand properties
+    from 'src/main/templates'
+    into layout.buildDirectory.dir('generated/sources/modMetadata')
+}
+
+sourceSets.main.resources.srcDir generateModMetadata
+neoForge.ideSyncTask generateModMetadata
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+dependencies {
+    implementation 'com.google.code.gson:gson:2.10.1'
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.11.4'
+}
+
+configurations {
+    testmodImplementation.extendsFrom implementation
+    testmodRuntimeOnly.extendsFrom runtimeOnly
+}
+
+tasks.named('test', Test) {
+    useJUnitPlatform()
+}
+
+// Keep the dedicated-server console interactive for local end-to-end verification.
+tasks.named('runServer', JavaExec) {
+    standardInput = System.in
+}
+tasks.named('runTestCompanionServer', JavaExec) {
+    standardInput = System.in
+}

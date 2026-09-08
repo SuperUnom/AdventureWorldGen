@@ -1,0 +1,19 @@
+{
+  "adventureworldgen.planning.title": "Planning your adventure world",
+  "adventureworldgen.planning.cache": "Reading saved plan",
+  "adventureworldgen.planning.coast": "Shaping continent and coastline",
+  "adventureworldgen.planning.erosion": "Simulating terrain erosion",
+  "adventureworldgen.planning.rivers": "Planning rivers and lakes",
+  "adventureworldgen.planning.costs": "Calculating terrain travel costs",
+  "adventureworldgen.planning.placement": "Placing biomes and structures",
+  "adventureworldgen.planning.save": "Saving world plan",
+  "adventureworldgen.planning.progress": "Overall stage progress: %s%%",
+  "adventureworldgen.planning.elapsed": "Elapsed: %s s",
+  "adventureworldgen.planning.failed": "Planning failed. See the log for details.",
+  "adventureworldgen.planning.temperature": "Temperature bands",
+  "adventureworldgen.planning.seeds": "Seed placement",
+  "adventureworldgen.planning.growth": "Required biome growth",
+  "adventureworldgen.planning.filler": "Filling",
+  "adventureworldgen.planning.transition": "Boundary transition",
+  "adventureworldgen.planning.validation": "Validation"
+}

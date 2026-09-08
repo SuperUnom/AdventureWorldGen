@@ -1,0 +1,30 @@
+# AdventureWorldGen NeoForge 工程
+
+[项目文档](../README.md) · [实施与验收指南](../docs/实施与验收指南.md)
+
+Minecraft 1.21.1 / NeoForge 21.1.249 的可游玩 v1 模组工程。实现包括严格 profile、`planner-v2` 联合规划、`ftf-hydrology-adapted-v1`、原子 `plan-v2`、普通世界自动启用、自定义 ChunkGenerator、群系表层适配、受控结构抑制与冻结注入，以及隔离的测试伴生模组。
+
+| 信息 | 值 |
+|---|---|
+| 名称 | AdventureWorldGen |
+| Mod ID | `adventureworldgen` |
+| 模组版本 | `0.1.0` |
+| Minecraft | `1.21.1` |
+| NeoForge | `21.1.249` |
+| Java | `21` |
+| 作者 | 罗言 |
+| 许可证 | All Rights Reserved |
+
+基础信息在 `gradle.properties` 中配置；修改 Mod ID 时同步修改 Java 入口中的 `MOD_ID`。作者使用 Java properties 的 Unicode 转义表示，生成后的元数据为中文。
+
+在此目录运行：
+
+```sh
+./gradlew clean build
+./gradlew runGameTestServer
+./gradlew runClient
+```
+
+Windows 使用 `gradlew.bat`。首次构建需要联网下载 Gradle 和 NeoForge 等依赖；本机需安装 JDK 21。构建产物为 `build/libs/adventureworldgen-0.1.0.jar`。
+
+工程依据 [NeoForge 官方 1.21.1 ModDevGradle MDK](https://github.com/NeoForgeMDKs/MDK-1.21.1-ModDevGradle) 精简。`runGameTestServer` 会带上不进入生产 JAR 的 `testcompanion` source set；`runTestCompanionServer` 用于真实普通世界的第三方群系、跨区块结构和原生候选抑制验收。详细结果见[实现状态与验收报告](../docs/实现状态与验收报告.md)。

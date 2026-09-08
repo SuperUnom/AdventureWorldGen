@@ -1,0 +1,83 @@
+package io.github.luoyan.adventureworldgen.planner;
+
+import io.github.luoyan.adventureworldgen.api.*;
+import io.github.luoyan.adventureworldgen.config.*;
+import java.util.*;
+
+/** One coarse candidate catalog and lazily cached exact quart samples for a frozen terrain. */
+public final class PlacementIndex {
+    public record Point(int x, int z) { public long cell() { return CellMask.key(x,z); } }
+    private final MacroTerrain terrain;
+    private final JointPlanner.LevelConstraint levels;
+    private final JointPlanner.BiomeConstraint adapters;
+    private final AdventureWorldConfig config;
+    private final Map<Long, MacroSample> samples = new HashMap<>();
+    private final Map<ContentId, Map<Long, Boolean>> compatibility = new HashMap<>();
+    private final Map<Integer, List<Point>> candidates = new HashMap<>();
+    private final List<Point> land = new ArrayList<>();
+    private final Map<Integer,List<Point>> finerLand = new HashMap<>();
+    private long queries;
+
+    public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
+                          JointPlanner.BiomeConstraint adapters) {
+        this(config,terrain,levels,adapters,ignored -> {});
+    }
+    public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
+                          JointPlanner.BiomeConstraint adapters,java.util.function.DoubleConsumer progress) {
+        this.config = config; this.terrain = terrain; this.levels = levels; this.adapters = adapters;
+        int extent = (int) StrictMath.ceil(config.world().radius() / 16);
+        long nodes = (2L * extent + 1) * (2L * extent + 1);
+        if (nodes > PlannerProfile.V2.maximumCostNodes()) throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,
+                "placement-index", "candidate grid exceeds node budget", Map.of("nodes", nodes));
+        for (int gz = -extent; gz <= extent; gz++) for (int gx = -extent; gx <= extent; gx++) {
+            if(gx==-extent) progress.accept((gz+extent)/(double)(2*extent+1));
+            int x = gx * 16, z = gz * 16;
+            if (StrictMath.hypot(x,z) > config.world().radius()) continue;
+            MacroSample sample = sample(x,z);
+            if (sample.waterKind() == WaterKind.NONE && !sample.hazardous()) land.add(new Point(x,z));
+        }
+    }
+    public MacroSample sampleAt(double x,double z) { return terrain.sample(x,z); }
+    public MacroSample sample(int x, int z) {
+        long cell = CellMask.key(x,z);
+        return samples.computeIfAbsent(cell, ignored -> {
+            queries++;
+            return terrain.sample(CellMask.x(cell) + 2, CellMask.z(cell) + 2);
+        });
+    }
+    public boolean allows(ContentId biome, int x, int z) {
+        return compatibility.computeIfAbsent(biome, ignored -> new HashMap<>()).computeIfAbsent(CellMask.key(x,z), cell -> {
+            MacroSample s = sample(x,z);
+            return s.waterKind() == WaterKind.NONE && !s.hazardous()
+                    && config.biomes().allows(biome,s) && adapters.accepts(biome,CellMask.x(cell)+2,CellMask.z(cell)+2);
+        });
+    }
+    public List<Point> candidates(int level) {
+        return candidates.computeIfAbsent(level, ignored -> land.stream().filter(p -> levels.mightAccept(level,p.x,p.z)).toList());
+    }
+    public List<Point> candidates(int level,int step) {
+        if(step==16)return candidates(level);
+        if(step!=8&&step!=4)throw new IllegalArgumentException("unsupported candidate spacing");
+        // Finer fallback deliberately bypasses the coarse cost filter: a coarse graph can miss a narrow route.
+        return finerLand.computeIfAbsent(step,ignored -> {
+            List<Point> points=new ArrayList<>(); int extent=(int)StrictMath.ceil(config.world().radius()/step);
+            long visits=0;
+            for(int gz=-extent;gz<=extent;gz++)for(int gx=-extent;gx<=extent;gx++) {
+                int x=gx*step,z=gz*step;
+                if(StrictMath.hypot(x,z)>config.world().radius())continue;
+                if(++visits>2_000_000)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"candidate-refinement",
+                        "fine candidate catalog exceeded cell budget",Map.of("spacing",step,"visits",visits));
+                var s=sample(x,z); if(s.waterKind()==WaterKind.NONE&&!s.hazardous())points.add(new Point(x,z));
+            }
+            return List.copyOf(points);
+        });
+    }
+    public boolean accepts(int level, Point p) { return levels.accepts(level,p.x,p.z); }
+    public double penalty(int level, Point p) { return levels.penalty(level,p.x,p.z); }
+    public long queries() { return queries; }
+    public static long mix(long x) {
+        x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
+        x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
+        return x ^ (x >>> 31);
+    }
+}

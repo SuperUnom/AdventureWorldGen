@@ -1,0 +1,31 @@
+{
+  "world": { "radius": 1536 },
+  "spawn": { "biome": "minecraft:plains" },
+  "biomes": {
+    "required": [
+      { "id": "minecraft:forest", "adventure_level": 2, "area": { "min": 4096, "max": 8192 } },
+      { "id": "minecraft:desert", "adventure_level": 4, "area": { "min": 4096, "max": 8192 } },
+      { "id": "minecraft:snowy_plains", "adventure_level": 6, "area": { "min": 4096, "max": 8192 } },
+      { "id": "testcompanion:ashen_grove", "adventure_level": 8, "area": { "min": 4096, "max": 8192 } }
+    ],
+    "filler": ["minecraft:plains", "minecraft:forest", "minecraft:desert", "minecraft:snowy_plains", "testcompanion:ashen_grove"]
+  },
+  "structures": [
+    {
+      "id": "minecraft:desert_pyramid",
+      "adventure_level": 4,
+      "count": { "min": 1, "max": 1 },
+      "allowed_biomes": { "id": ["minecraft:desert"], "area": { "min": 4096, "max": 8192 } },
+      "placement_mode": "scattered",
+      "entrance": [0, 1, -11]
+    },
+    {
+      "id": "testcompanion:waystation",
+      "adventure_level": 8,
+      "count": { "min": 1, "max": 1 },
+      "allowed_biomes": { "id": ["testcompanion:ashen_grove"], "area": { "min": 4096, "max": 8192 } },
+      "placement_mode": "scattered",
+      "entrance": [0, 1, -7]
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="All Rights Reserved"
+
+[[mods]]
+modId="testcompanion"
+version="1.0.0"
+displayName="AdventureWorldGen Test Companion"
+description='''Development-only cross-mod adapter and GameTest coverage.'''
+
+[[dependencies.testcompanion]]
+modId="adventureworldgen"
+type="required"
+versionRange="[0.1.0,)"
+ordering="AFTER"
+side="BOTH"

@@ -1,0 +1,11 @@
+{
+  "placement": {
+    "type": "minecraft:random_spread",
+    "salt": 17290341,
+    "separation": 8,
+    "spacing": 16
+  },
+  "structures": [
+    {"structure": "testcompanion:waystation", "weight": 1}
+  ]
+}

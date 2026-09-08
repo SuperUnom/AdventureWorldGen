@@ -1,0 +1,19 @@
+{
+  "adventureworldgen.planning.title": "正在规划冒险世界",
+  "adventureworldgen.planning.cache": "读取已有规划",
+  "adventureworldgen.planning.coast": "生成大陆与海岸",
+  "adventureworldgen.planning.erosion": "模拟地形侵蚀",
+  "adventureworldgen.planning.rivers": "规划河流与湖泊",
+  "adventureworldgen.planning.costs": "计算地形通行成本",
+  "adventureworldgen.planning.placement": "安排群系与结构",
+  "adventureworldgen.planning.save": "保存世界规划",
+  "adventureworldgen.planning.progress": "阶段总进度：%s%%",
+  "adventureworldgen.planning.elapsed": "已用时 %s 秒",
+  "adventureworldgen.planning.failed": "规划失败，请查看日志中的原因",
+  "adventureworldgen.planning.temperature": "温度带",
+  "adventureworldgen.planning.seeds": "种子选址",
+  "adventureworldgen.planning.growth": "必要群系生长",
+  "adventureworldgen.planning.filler": "填充",
+  "adventureworldgen.planning.transition": "过渡",
+  "adventureworldgen.planning.validation": "验证"
+}
