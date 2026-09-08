@@ -255,14 +255,23 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public int fillerSeedCount(){return filler.seedCount();}
     public long effectiveArea(PlannedBiomePatch patch) {
         long cells=0;
+        if(patch.mask()!=null) {
+            // Disconnected regions may span the continent; visit ownership, not empty bounds.
+            for(long cell:patch.mask().cells()) {
+                int x=io.github.luoyan.adventureworldgen.planner.CellMask.x(cell)+2;
+                int z=io.github.luoyan.adventureworldgen.planner.CellMask.z(cell)+2;
+                if(terrain.sample(x,z).waterKind()==WaterKind.NONE&&biomeAt(x,64,z).equals(patch.biomeId()))cells++;
+            }
+            return cells*16;
+        }
         for(int z=patch.minZ()+2;z<patch.maxZExclusive();z+=4)for(int x=patch.minX()+2;x<patch.maxXExclusive();x+=4)
             if(patch.contains(x,z)&&terrain.sample(x,z).waterKind()==WaterKind.NONE&&biomeAt(x,64,z).equals(patch.biomeId()))cells++;
         return cells*16;
     }
     private void protectMinimumAreas() {
-        // Repairs only a deficient patch's mixing, retaining natural boundaries and minimum dry area.
+        // Protect the achieved quota when legal supply cannot reach the configured minimum.
         var demands=new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(config);
-        for(var d:demands.patches())for(var p:biomePatches)if(p.patchId().equals(d.patchId())&&effectiveArea(p)<d.area().min())
+        for(var d:demands.patches())for(var p:biomePatches)if(p.patchId().equals(d.patchId())&&effectiveArea(p)<Math.min(d.area().min(),p.area()))
             blendProtectedPatches.add(p.patchId());
     }
 

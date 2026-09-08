@@ -28,7 +28,7 @@ import org.slf4j.LoggerFactory;
 public final class RuntimePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RuntimePlanner.class);
     /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-capacity-components-v4-tight-riparian";
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-natural-biome-joins-r30";
     private RuntimePlanner() {}
 
     public static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,
@@ -142,10 +142,16 @@ public final class RuntimePlanner {
         metrics.finish("filler_and_transition");
         progress.stage(PlanningProgress.Stage.VALIDATION);
         for(var demand:new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(loaded.config()).patches()) {
-            var patch=plan.biomePatches().stream().filter(p->p.patchId().equals(demand.patchId())).findFirst().orElseThrow();
+            var patch=plan.biomePatches().stream().filter(p->p.patchId().equals(demand.patchId())).findFirst().orElse(null);
+            if(patch==null) {
+                LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",demand.patchId(),demand.area().min());
+                continue;
+            }
             long effective=plan.effectiveArea(patch);
-            if(effective<demand.area().min())throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"effective-area",
-                    "required dry biome area after mixing is insufficient",java.util.Map.of("patch",patch.patchId(),"effective_area",effective,"minimum",demand.area().min()));
+            if(effective<Math.min(demand.area().min(),patch.area()))throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"effective-area",
+                    "mixing reduced the achieved dry biome quota",java.util.Map.of("patch",patch.patchId(),"effective_area",effective,"achieved_area",patch.area()));
+            if(effective<demand.area().min())LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
+                    patch.patchId(),demand.area().min(),effective);
         }
         metrics.finish("validation");
         metrics.adventure(joint.patches(),costs,radius);

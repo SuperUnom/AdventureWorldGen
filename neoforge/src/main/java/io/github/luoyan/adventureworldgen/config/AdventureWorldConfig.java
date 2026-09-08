@@ -68,6 +68,9 @@ public record AdventureWorldConfig(
     public enum TemperatureType {
         VERY_COLD, COLD, MEDIUM, HOT;
         public static TemperatureType fromLevel(int level) { return level <= 1 ? VERY_COLD : level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
+        public static Map<TemperatureType, Double> unrestricted() {
+            return Map.of(VERY_COLD,1.0,COLD,1.0,MEDIUM,1.0,HOT,1.0);
+        }
     }
 
     public enum HumidityType { DRY, MEDIUM, WET }
@@ -94,7 +97,7 @@ public record AdventureWorldConfig(
             this(allowed,min,max,temperature,Map.of(TemperatureType.fromLevel(temperature),1.0),null,null,1,1,null);
         }
         public TerrainRule(Set<String> allowedTerrain, Double minHeight, Double maxHeight) {
-            this(allowedTerrain, minHeight, maxHeight, 5);
+            this(allowedTerrain, minHeight, maxHeight, 5, TemperatureType.unrestricted(),null,null,1,1,null);
         }
         public static final Set<String> TEMPLATES = Set.of("plains", "hills", "plateau", "mountains");
         public TerrainRule {

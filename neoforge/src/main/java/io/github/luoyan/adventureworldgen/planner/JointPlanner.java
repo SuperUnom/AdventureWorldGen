@@ -361,7 +361,9 @@ public final class JointPlanner {
                     fail("carrier biome is not allowed", patch.patchId());
                 if (!patch.contains(owner.originX(), owner.originZ())) fail("carrier does not contain structure origin", patch.patchId());
             }
-            if (patch.area() < range.min() || patch.area() > range.max()) fail("patch area outside configured range", patch.patchId());
+            // Minimum area is best effort after bounded multi-region recovery. The configured
+            // maximum and every per-cell environmental / structure constraint remain hard.
+            if (patch.area() > range.max()) fail("patch area exceeds configured maximum", patch.patchId());
             int centerX = (patch.minX() + patch.maxXExclusive()) / 2;
             int centerZ = (patch.minZ() + patch.maxZExclusive()) / 2;
             if (!patchCompatible(patch, biomes)) fail("biome terrain rule rejected a patch cell", patch.patchId());

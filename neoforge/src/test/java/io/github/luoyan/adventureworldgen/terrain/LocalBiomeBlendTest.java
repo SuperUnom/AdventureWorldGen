@@ -9,21 +9,29 @@ class LocalBiomeBlendTest {
         var forest=new ContentId("minecraft:forest");var desert=new ContentId("minecraft:desert");
         var blend=new LocalBiomeBlend(345705185492107788L);
         java.util.function.BiFunction<Integer,Integer,ContentId> carrier=(x,z)->x<0?forest:desert;
-        int mixedQuarts=0,forestEast=0,desertWest=0;
+        int mixedQuarts=0;
         for(int z=-64;z<64;z+=4)for(int x=-32;x<32;x+=4) {
             var ids=new java.util.HashSet<ContentId>();
             for(int dz=0;dz<4;dz++)for(int dx=0;dx<4;dx++) {
                 int wx=x+dx,wz=z+dz;
                 var id=blend.sample(wx,wz,carrier,b->true,carrier.apply(wx,wz));ids.add(id);
-                if(wx>=0&&id.equals(forest))forestEast++;
-                if(wx<0&&id.equals(desert))desertWest++;
                 assertEquals(forest,blend.sample(wx,wz,carrier,b->b.equals(forest),forest));
                 if(wx<-4)assertEquals(forest,id);if(wx>4)assertEquals(desert,id);
             }
             if(ids.size()==2)mixedQuarts++;
         }
         assertTrue(mixedQuarts>30,"surface is still a single label per 4x4 square");
-        assertTrue(forestEast>0&&desertWest>0,"edge does not interleave both ways");
+        Integer previous=null;var positions=new java.util.HashSet<Integer>();
+        for(int z=-64;z<64;z++) {
+            int boundary=16;
+            for(int x=-16;x<=16;x++)if(blend.sample(x,z,carrier,b->true,carrier.apply(x,z)).equals(desert)) {
+                boundary=x;break;
+            }
+            positions.add(boundary);
+            if(previous!=null)assertTrue(Math.abs(boundary-previous)<=1,"boundary contains an abrupt tooth");
+            previous=boundary;
+        }
+        assertTrue(positions.size()>1,"continuous boundary warp did not bend the edge");
     }
     @Test void configurableRadiusNeverImportsDistantBiomesAndZeroDisablesMixing() {
         var a=new ContentId("test:a");var b=new ContentId("test:b");

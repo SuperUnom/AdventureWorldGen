@@ -6,10 +6,12 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Temperatur
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
 import java.util.*;
 
-/** Demand-calibrated continuous climate, sampled from the same frozen terrain used for ownership. */
+/** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */
 public final class ClimatePlan {
     public static final int STEP=32;
     private final AdventureWorldConfig config;
+    private final String temperatureField;
+    private final OrganicTemperatureField organic;
     private HumidityPlan humidity;
     private final List<ContentId> shores;
     private final ValueNoise regional, detail, warpX, warpZ, foothills;
@@ -33,10 +35,18 @@ public final class ClimatePlan {
     public record State(int extent, double[] slopeHeight, double[] regionalHeight, double angle,
                         double low, double high, double[] thresholds, boolean snowBoundary,
                         TemperatureType spawnType, double[] ratios, double[] actual,
-                        List<Correction> corrections, List<Supply> supply, HumidityPlan.State humidity) {}
+                        List<Correction> corrections, List<Supply> supply, HumidityPlan.State humidity, String temperatureField) {
+        /** Source-compatible constructor for legacy plan states without an explicit temperature version. */
+        public State(int extent,double[] slopeHeight,double[] regionalHeight,double angle,double low,double high,
+                     double[] thresholds,boolean snowBoundary,TemperatureType spawnType,double[] ratios,double[] actual,
+                     List<Correction> corrections,List<Supply> supply,HumidityPlan.State humidity) {
+            this(extent,slopeHeight,regionalHeight,angle,low,high,thresholds,snowBoundary,spawnType,ratios,actual,
+                    corrections,supply,humidity,null);
+        }
+    }
     public State snapshot() {
         return new State(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
-                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot());
+                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot(),temperatureField);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain) {
         this(seed,config,terrain,ignored->{});
@@ -47,6 +57,10 @@ public final class ClimatePlan {
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,State frozen) {
         shores=config.biomes().filler().stream().filter(id->{var r=config.biomes().terrainRules().get(id);return r!=null&&r.shoreOnly();}).toList();
         this.config=config;
+        temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
+        if(temperatureField!=null&&!OrganicTemperatureField.VERSION.equals(temperatureField))
+            throw new IllegalArgumentException("unsupported frozen temperature field: "+temperatureField);
+        organic=temperatureField==null?null:new OrganicTemperatureField(seed);
         radius=config.world().radius();core=Math.min(64,radius/8);
         frozenValues=new FrozenQuartField(radius+128);
         regional=new ValueNoise(seed,"climate/region",Math.max(128,radius*.48));
@@ -68,6 +82,9 @@ public final class ClimatePlan {
             if(!Double.isFinite(frozen.angle())||!Double.isFinite(frozen.low())||!Double.isFinite(frozen.high())
                     || frozen.thresholds()[0]>=frozen.thresholds()[1] || frozen.thresholds()[1]>=frozen.thresholds()[2])
                 throw new IllegalArgumentException("invalid frozen climate thresholds");
+            if(organic!=null&&(frozen.low()!=0||frozen.high()!=10
+                    ||!Arrays.equals(frozen.thresholds(),new double[]{2.5,5,7.5})||!frozen.corrections().isEmpty()))
+                throw new IllegalArgumentException("organic temperature state must retain fixed thresholds and no corrections");
             slopeHeight=frozen.slopeHeight().clone();regionalHeight=frozen.regionalHeight().clone();
             angle=frozen.angle();low=frozen.low();high=frozen.high();snowBoundary=frozen.snowBoundary();spawnType=frozen.spawnType();
             System.arraycopy(frozen.thresholds(),0,thresholds,0,3);
@@ -112,25 +129,10 @@ public final class ClimatePlan {
         // Kept in the serialized state for compatibility; temperature is configured, not a snow test.
         snowBoundary=false;
         double sum=Arrays.stream(ratios).sum();for(int i=0;i<4;i++)ratios[i]/=sum;
-        double start=(PlacementIndex.mix(seed)>>>11)*0x1.0p-53*Math.PI*2,best=Double.POSITIVE_INFINITY,bestAngle=start;
-        for(int trial=0;trial<8;trial++) {
-            angle=start+trial*Math.PI/4;calibrate();double cost=supplyCost();
-            if(cost<best){best=cost;bestAngle=angle;}
-            progress.accept(.2+.6*(trial+1)/8);
-        }
-        angle=bestAngle;calibrate();
-        // Bounded local thermal boundary repair, never an alteration to hard terrain rules.
-        for(var d:new RequirementExpander().expandMinimum(config).patches()) {
-            ContentId id=preferredBiome(d);long available=climateArea(id);
-            if(available>=d.area().target())continue;
-            var preferred=preferences(config,id).keySet();
-            Site center=sites.stream().filter(s->config.biomes().allows(id,s.sample)&&Math.hypot(s.x,s.z)>core*3)
-                    .min(Comparator.comparingDouble(s->cost(id,s.x,s.z,s.sample))).orElse(null);
-            if(center==null)continue;
-            TemperatureType t=preferred.stream().min(Comparator.<TemperatureType>comparingDouble(v->Math.abs(v.ordinal()-typeAt(center.x,center.z,center.sample).ordinal())).thenComparingInt(TemperatureType::ordinal)).orElseThrow();
-            double value=raw(center.x,center.z,center.sample),target=rawCenter(t);
-            corrections.add(new Correction(center.x,center.z,Math.max(96,Math.sqrt(d.area().target()/Math.PI)*1.8),target-value));
-        }
+        // Demand remains diagnostic. It does not reshape the accepted temperature field.
+        angle=0;low=0;high=10;
+        thresholds[0]=2.5;thresholds[1]=5;thresholds[2]=7.5;
+        progress.accept(.8);
         this.frozen=true;
         for(var s:sites)actual[typeAt(s.x,s.z,s.sample).ordinal()]++;
         for(int i=0;i<4;i++)actual[i]/=sites.size();
@@ -149,29 +151,11 @@ public final class ClimatePlan {
         for(var e:prefs.entrySet()) {
             double land=1;
             if(prefs.size()>1)land+=sites.stream().filter(s->config.biomes().allows(id,s.sample))
-                    .filter(s->{double value=base(s.x,s.z,s.sample);return (value<-.6?TemperatureType.VERY_COLD:value<-.15?TemperatureType.COLD:value>.3?TemperatureType.HOT:TemperatureType.MEDIUM)==e.getKey();}).count();
+                    .filter(s->{double value=base(s.x,s.z,s.sample);return (value<2.5?TemperatureType.VERY_COLD:value<5?TemperatureType.COLD:value<7.5?TemperatureType.MEDIUM:TemperatureType.HOT)==e.getKey();}).count();
             shares[e.getKey().ordinal()]=e.getValue()*Math.sqrt(land);
         }
         double total=Arrays.stream(shares).sum();
         for(int i=0;i<4;i++)out[i]+=amount*shares[i]/total;
-    }
-    private void calibrate() {
-        double[] values=sites.stream().mapToDouble(s->base(s.x,s.z,s.sample)).sorted().toArray();
-        low=values[0];high=values[values.length-1];
-        double cumulative=0;
-        for(int i=0;i<3;i++) {
-            cumulative+=ratios[i];
-            thresholds[i]=cumulative==0?low-.01:values[Math.min(values.length-1,(int)(values.length*cumulative))];
-            if(i>0)thresholds[i]=Math.max(thresholds[i],thresholds[i-1]+.01);
-        }
-    }
-    private double supplyCost() {
-        double result=0;
-        for(var d:new RequirementExpander().expandMinimum(config).patches()) {
-            long area=climateArea(preferredBiome(d));
-            double deficit=Math.max(0,1-area/(double)d.area().target());result+=deficit*deficit;
-        }
-        return result;
     }
     private ContentId preferredBiome(RequirementExpander.PatchDemand demand) {
         return demand.allowedBiomes().stream().max(Comparator.comparingLong(this::climateArea)
@@ -204,10 +188,14 @@ public final class ClimatePlan {
     }
     /** Cooling follows broad mountain mass, slopes and actual local elevation at separate scales. */
     public double elevationCooling(double x,double z,MacroSample s) {
-        double effective=.25*s.groundSurface()+.55*elevation(slopeHeight,x,z)+.20*elevation(regionalHeight,x,z);
-        return .0048*Math.max(0,effective-76);
+        double effective=effectiveHeightAt(x,z,s);
+        return organic==null?.0048*Math.max(0,effective-76):OrganicTemperatureField.cooling(effective);
+    }
+    public double effectiveHeightAt(double x,double z,MacroSample s) {
+        return .25*s.groundSurface()+.55*elevation(slopeHeight,x,z)+.20*elevation(regionalHeight,x,z);
     }
     private double base(double x,double z,MacroSample s) {
+        if(organic!=null)return organic.temperature(x,z,effectiveHeightAt(x,z,s));
         double wx=x+radius*.22*warpX.sample(x,z),wz=z+radius*.22*warpZ.sample(x,z);
         double slope=elevation(slopeHeight,x,z),mass=elevation(regionalHeight,x,z);
         // Terrain relief modulates broad noise: boundaries follow valleys and spurs without pixel noise.
@@ -221,6 +209,7 @@ public final class ClimatePlan {
     }
     private double computeRaw(double x,double z,MacroSample s) {
         double value=base(x,z,s);
+        if(organic!=null)return value;
         for(var c:corrections)value+=c.delta*Math.exp(-Math.pow(Math.hypot(x-c.x,z-c.z)/c.radius,2)*2);
         double d=Math.hypot(x,z),influence=1-Math.clamp((d-core)/(core*3),0,1);
         influence=influence*influence*(3-2*influence);
@@ -238,7 +227,9 @@ public final class ClimatePlan {
         return TemperatureType.HOT;
     }
     public double valueAt(double x,double z,MacroSample sample) {
-        double v=raw(x,z,sample);int band=0;
+        double v=raw(x,z,sample);
+        if(organic!=null)return v;
+        int band=0;
         while(band<3&&v>=thresholds[band])band++;
         double from=band==0?low:thresholds[band-1],to=band==3?high:thresholds[band];
         return Math.clamp(2.5*(band+(v-from)/Math.max(.01,to-from)),0,10);
@@ -251,14 +242,14 @@ public final class ClimatePlan {
         return best;
     }
     public HumidityPlan humidity(){return humidity;}
-    /** Every ownership path shares moisture and intermittent shore constraints. */
+    /** Configured climate types are admission rules; weights only rank legal candidates. */
     public boolean allowsEnvironment(ContentId id,double x,double z,MacroSample sample) {
         double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
-        if(!allowsSnowClass(id,qx,qz,sample)||!humidity.allows(id,qx,qz,sample))return false;
+        if(!prefersType(id,qx,qz,sample)||!humidity.allows(id,qx,qz,sample))return false;
         var rule=config.biomes().terrainRules().get(id);
         if(rule!=null&&rule.shoreOnly())return humidity.isShore(qx,qz,sample);
         if(shores.isEmpty()||!humidity.isShore(qx,qz,sample))return true;
-        for(var shore:shores)if(config.biomes().allows(shore,sample)&&allowsSnowClass(shore,qx,qz,sample)
+        for(var shore:shores)if(config.biomes().allows(shore,sample)&&prefersType(shore,qx,qz,sample)
                 &&humidity.allows(shore,qx,qz,sample))return false;
         return true;
     }
@@ -278,7 +269,7 @@ public final class ClimatePlan {
     }
     public static Map<TemperatureType,Double> preferences(AdventureWorldConfig config,ContentId id) {
         var rule=config.biomes().terrainRules().get(id);
-        return rule==null?Map.of(TemperatureType.MEDIUM,1.0):rule.temperatures();
+        return rule==null?TemperatureType.unrestricted():rule.temperatures();
     }
     public static double weight(AdventureWorldConfig config,ContentId id) {
         var rule=config.biomes().terrainRules().get(id);return rule==null?1:rule.fillerWeight();

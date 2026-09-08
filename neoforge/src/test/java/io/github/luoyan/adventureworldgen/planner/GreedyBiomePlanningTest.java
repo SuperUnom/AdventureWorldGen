@@ -33,7 +33,7 @@ class GreedyBiomePlanningTest {
                 <index.terrainCapacity(List.of(new ContentId("test:common"))));
     }
 
-    @Test void seedsAndGrowthPreferConfiguredTemperatureAndFallBackToAdjacentBand() {
+    @Test void seedsAndGrowthStayInsideConfiguredTemperatureAndReportMissingSupply() {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":384},"spawn":{"biome":"test:spawn"},"biomes":{
            "required":[{"id":"test:hot","adventure_level":5,"area":{"min":4096,"max":8192}}],
@@ -47,16 +47,15 @@ class GreedyBiomePlanningTest {
         assertTrue(climate.prefersType(hot.biomeId(),hot.anchorX()+2,hot.anchorZ()+2,FLAT.sample(0,0)));
         long preferred=Arrays.stream(hot.mask().cells()).filter(c->climate.prefersType(hot.biomeId(),
                 CellMask.x(c)+2,CellMask.z(c)+2,FLAT.sample(0,0))).count();
-        assertTrue(preferred>=hot.mask().size()*.9,"growth left ample preferred temperature land");
+        assertEquals(hot.mask().size(),preferred,"every claimed cell must satisfy its configured temperature");
         var s=climate.snapshot();
         var medium=new ClimatePlan(7331,config,FLAT,v->{},new ClimatePlan.State(s.extent(),s.slopeHeight(),s.regionalHeight(),
                 s.angle(),-101,101,new double[]{-100,-99,100},false,AdventureWorldConfig.TemperatureType.MEDIUM,
                 s.ratios(),s.actual(),List.of(),s.supply(),s.humidity()));
-        var fallback=new BiomeAllocationPlanner().allocate(7331,config,
+        var relaxed=new BiomeAllocationPlanner().allocate(7331,config,
                 new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true),demands,List.of(),medium,v->{});
-        var patch=fallback.patches().stream().filter(p->p.biomeId().equals(hot.biomeId())).findFirst().orElseThrow();
-        assertEquals(1,medium.temperatureDistance(patch.biomeId(),patch.anchorX()+2,patch.anchorZ()+2,FLAT.sample(0,0)));
-        assertTrue(patch.area()>=4096);
+        assertFalse(relaxed.patches().stream().anyMatch(p->p.biomeId().equals(hot.biomeId())),
+                "zero hot supply must relax area, never temperature admission");
     }
 
     @Test void quartCachePreservesNegativeCoordinatesAndComputesEachFrozenValueOnce() {
@@ -105,7 +104,9 @@ class GreedyBiomePlanningTest {
         assertDoesNotThrow(()->new ContentPreflight().validate(config,registries,
                 AdapterRegistry.builder(new GenericBiomeAdapter()).build()));
         var climate=new ClimatePlan(9,config,FLAT);
-        assertTrue(climate.prefersType(new ContentId("minecraft:plains"),2,2,FLAT.sample(2,2)));
-        assertTrue(climate.allowsEnvironment(new ContentId("minecraft:plains"),2,2,FLAT.sample(2,2)));
+        assertEquals(new OrganicTemperatureField(9).temperature(2,2,80),
+                climate.valueAt(2,2,FLAT.sample(2,2)),"spawn preference must not rewrite the fixed climate");
+        assertEquals(climate.prefersType(new ContentId("minecraft:plains"),2,2,FLAT.sample(2,2)),
+                climate.allowsEnvironment(new ContentId("minecraft:plains"),2,2,FLAT.sample(2,2)));
     }
 }

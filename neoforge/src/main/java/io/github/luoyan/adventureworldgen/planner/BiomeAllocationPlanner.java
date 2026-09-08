@@ -8,10 +8,11 @@ import java.util.function.DoubleConsumer;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 
-/** Connected competitive growth. Memory contains ownership and active frontiers, never all biome/cell edges. */
+/** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {
     private static final int[][] DIR={{4,0},{-4,0},{0,4},{0,-4}};
     private static final long BUDGET=12_000_000;
+    private static final int MAX_REGION_SEEDS=64;
     private record Ranked(PlacementIndex.Point point,ContentId biome,int band,double score) {}
     private static final Comparator<Ranked> SEED_ORDER=Comparator.comparingInt(Ranked::band)
             .thenComparingDouble(Ranked::score).thenComparingLong(v->v.point.cell()).thenComparing(Ranked::biome);
@@ -35,6 +36,8 @@ public final class BiomeAllocationPlanner {
         final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingInt(Edge::band).thenComparingDouble(Edge::score).thenComparingLong(Edge::cell));
         PlacementIndex.Point anchor;
         int retries;
+        int seedCount=1,supplementStep;
+        Iterator<PlacementIndex.Point> supplements=Collections.emptyIterator();
         boolean filler;
         Region(long seed,RequirementExpander.PatchDemand d) {
             demand=d;biome=d.allowedBiomes().getFirst();noise=new ValueNoise(seed,"growth/"+d.patchId(),192);
@@ -67,6 +70,13 @@ public final class BiomeAllocationPlanner {
         for(var demand:ordered) {
             var region=new Region(seed,demand);regions.add(region);
             region.anchor=selectSeed(seed,region,demand.patchId().equals(spawn));
+            if(region.anchor==null) {
+                System.getLogger(BiomeAllocationPlanner.class.getName()).log(System.Logger.Level.WARNING,
+                        "Biome area relaxed: {0} {1}, requested minimum={2}, actual=0; no legal seed",
+                        demand.patchId(),region.biome,demand.area().min());
+                regions.removeLast();
+                continue;
+            }
             claimSeedCore(regions.size()-1);
             progress.accept(.18*regions.size()/Math.max(1,ordered.size()));
         }
@@ -79,37 +89,29 @@ public final class BiomeAllocationPlanner {
         }
         requiredCount=regions.size();
         growTo(false);
-        // Only failed regions are reset. Other successful ownership and all hard rules remain fixed.
-        for(int pass=0;pass<3;pass++) {
-            boolean deficient=false;
-            for(int i=0;i<regions.size();i++) {
+        // Keep every successful claim. If a frontier exhausts below minimum, seed another
+        // legal component. Each region scans the candidate catalogs only once across retries.
+        for(int round=1;round<MAX_REGION_SEEDS;round++) {
+            boolean added=false;
+            for(int i=0;i<requiredCount;i++) {
                 var r=regions.get(i);if(r.cells.size()>=r.minimum())continue;
-                deficient=true;
-                if(r.demand.patchId().equals(spawn))continue;
-                r.retries++;
-                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.detailCurrent("修复 "+r.biome+"：合法连通空间不足，重新选址 "+r.retries+"/3");
-                for(long cell:r.cells)owner.remove(cell);
-                r.cells.clear();r.queued.clear();r.frontier.clear();
-                r.anchor=selectSeed(seed,r,false);
-                claimSeedCore(i);
+                var point=nextSupplement(r);if(point==null)continue;
+                claim(i,point.cell(),0);r.seedCount++;added=true;
+                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.detailCurrent(
+                        "补充区域 "+r.biome+"："+r.seedCount+" 个种子，保留温湿度与地形限制");
             }
-            if(!deficient)break;
+            if(!added)break;
             growTo(false);
         }
-        List<String> missing=new ArrayList<>();long deficit=0;
-        for(var r:regions)if(r.cells.size()<r.minimum()) {
-            var rule=config.biomes().terrainRules().get(r.biome);
-            missing.add(r.demand.patchId()+" "+r.biome+" terrain="+(rule==null?"all":rule.allowedTerrain())
-                    +" missing_area="+((r.minimum()-r.cells.size())*16));deficit+=r.minimum()-r.cells.size();
-        }
-        if(!missing.isEmpty())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"connected-capacity",
-                "shared dry legal land could not satisfy connected minimum quotas after local retries",
-                Map.of("affected",missing,"missing_area",deficit*16,"operations",operations,"seed",seed));
         seedFillers(seed);
         growTo(true);
         progress.accept(.98);
         var patches=new ArrayList<PlannedBiomePatch>();
         for(var r:regions) {
+            if(!r.filler&&(r.seedCount>1||r.cells.size()<r.minimum()))
+                System.getLogger(BiomeAllocationPlanner.class.getName()).log(System.Logger.Level.WARNING,
+                        "Biome area relaxed: {0} {1}, requested minimum={2}, actual={3}, region seeds={4}",
+                        r.demand.patchId(),r.biome,r.demand.area().min(),r.cells.size()*16L,r.seedCount);
             if(r.filler&&r.cells.size()<256)continue; // final filler pass absorbs undersized seed remnants
             int minX=Integer.MAX_VALUE,minZ=Integer.MAX_VALUE,maxX=Integer.MIN_VALUE,maxZ=Integer.MIN_VALUE;
             for(long c:r.cells){int x=CellMask.x(c),z=CellMask.z(c);minX=Math.min(minX,x);minZ=Math.min(minZ,z);maxX=Math.max(maxX,x+4);maxZ=Math.max(maxZ,z+4);}
@@ -122,14 +124,18 @@ public final class BiomeAllocationPlanner {
         if(spawn&&config.spawn().hasBiome()) {
             var p=new PlacementIndex.Point(0,0);
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
-            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core","spawn cell is not legal dry land",Map.of("biome",r.biome));
+            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core",
+                    "spawn cell violates configured terrain/climate or land constraints",
+                    Map.of("biome",r.biome,"temperature",climate.typeAt(2,2,index.sample(0,0)),
+                            "allowed_temperatures",ClimatePlan.preferences(config,r.biome).keySet(),
+                            "humidity",climate.humidity().typeAt(2,2,index.sample(0,0))));
         }
         boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
                 StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
         double scale=Math.sqrt(r.demand.area().target()/Math.PI);
         long salt=DeterministicRandom.seed(seed,PlannerProfile.V2.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
         // Ownership does not change during selection. Reuse exhausted components across
-        // candidates, temperature relaxation and grid refinement, then discard the snapshot.
+        // candidates, capacity probe refinement and grid refinement, then discard the snapshot.
         Map<ContentId,ConnectedCapacityProbe> capacityProbes=new HashMap<>();
         for(int step:new int[]{16,8,4}) {
             // Bounded greedy shortlist per temperature distance; no full catalog sort.
@@ -158,7 +164,9 @@ public final class BiomeAllocationPlanner {
                 if(bucket.size()<1024)bucket.add(candidate);
                 else if(SEED_ORDER.compare(candidate,bucket.peek())<0){bucket.remove();bucket.add(candidate);}
             }
-            // Relax temperature, then conservative capacity probes. Final minimum quotas stay fixed.
+            // Prefer a connected minimum within this bounded shortlist. If it cannot fit,
+            // retain the largest measured legal component and recover with additional seeds.
+            Ranked fallback=null;int fallbackCells=-1;
             var candidates=new ArrayList<Ranked>();
             for(var bucket:ranked)candidates.addAll(bucket);
             candidates.sort(SEED_ORDER);
@@ -170,11 +178,28 @@ public final class BiomeAllocationPlanner {
                 if(capacity.knownInsufficient(candidate.point.cell(),r.minimum()))continue;
                 if(!supportsCarrierCore(r,candidate.point))continue;
                 int probe=(int)Math.min(r.minimum(),relaxation==0?4096:256);
-                if(capacity.measure(candidate.point.cell(),probe).supports(r.minimum(),probe))return candidate.point;
+                var measured=capacity.measure(candidate.point.cell(),probe);
+                if(measured.supports(r.minimum(),probe))return candidate.point;
+                if(measured.cells()>fallbackCells){fallback=candidate;fallbackCells=measured.cells();}
             }
+            if(fallback!=null){r.biome=fallback.biome;return fallback.point;}
         }
+        // A missing ordinary biome is reported as zero supply. Spawn and required structures
+        // still need a real legal anchor / usable footprint to construct a valid world.
+        if(!central&&carrierCoreSide(r)==0)return null;
         throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"biome-seed","no sufficiently connected legal seed with required carrier clearance",
                 Map.of("biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));
+    }
+    private PlacementIndex.Point nextSupplement(Region r) {
+        int[] steps={16,8,4};
+        while(true) {
+            while(r.supplements.hasNext()) {
+                var p=r.supplements.next();
+                if(!owner.containsKey(p.cell())&&legal(r,p.x(),p.z())&&index.accepts(r.demand.adventureLevel(),p))return p;
+            }
+            if(r.supplementStep==steps.length)return null;
+            r.supplements=index.candidates(r.demand.adventureLevel(),steps[r.supplementStep++]).iterator();
+        }
     }
     /** Reserve ownership, never reshape terrain or prepare a structure before biome growth finishes. */
     private static int carrierCoreSide(Region r) {

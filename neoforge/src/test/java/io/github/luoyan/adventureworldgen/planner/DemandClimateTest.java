@@ -15,13 +15,13 @@ class DemandClimateTest {
            "terrain_rules":{"test:cold":{"temperatures":{"cold":1}},"test:hot":{"temperatures":{"hot":1}}}}}
           """.formatted(target));
     }
-    @Test void increasingHotTargetExpandsHotLandAndPreservesSpawnCore() {
+    @Test void increasingHotTargetDoesNotRewriteAcceptedTemperatureField() {
         var a=new ClimatePlan(7331,config(8192),FLAT);var b=new ClimatePlan(7331,config(262144),FLAT);
-        assertTrue(b.targetRatios()[3]>a.targetRatios()[3]+.3);
-        assertTrue(b.actualRatios()[3]>a.actualRatios()[3]+.25);
-        for(int z=-32;z<=32;z+=4)for(int x=-32;x<=32;x+=4)
-            assertEquals(AdventureWorldConfig.TemperatureType.MEDIUM,b.typeAt(x,z,FLAT.sample(x,z)));
-        assertArrayEquals(b.actualRatios(),new ClimatePlan(7331,config(262144),FLAT).actualRatios());
+        assertArrayEquals(a.actualRatios(),b.actualRatios());
+        for(int z=-700;z<=700;z+=100)for(int x=-700;x<=700;x+=100)
+            assertEquals(a.valueAt(x,z,FLAT.sample(x,z)),b.valueAt(x,z,FLAT.sample(x,z)));
+        assertArrayEquals(new double[]{2.5,5,7.5},b.snapshot().thresholds());
+        assertTrue(b.snapshot().corrections().isEmpty());
         assertEquals(1,java.util.Arrays.stream(b.targetRatios()).sum(),1e-9);
     }
     @Test void targetAndPreferencesRoundTripAndHardHeightRemainsIndependent() {
@@ -75,7 +75,9 @@ class DemandClimateTest {
                 climate.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
             assertTrue(climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
         }
-        assertEquals(4,types.size());
+        // Fixed geography does not manufacture all four bands on a small, flat island.
+        assertFalse(types.contains(AdventureWorldConfig.TemperatureType.VERY_COLD));
+        assertArrayEquals(new double[]{2.5,5,7.5},climate.snapshot().thresholds());
         assertDoesNotThrow(()->parser.parse(CanonicalConfigJson.write(c).replace("\"very_cold\":1.0","\"very_cold\":1.0,\"cold\":1.0")));
     }
     @Test void mountainMassCoolsContinuouslyAndValleysRemainWarmer() {

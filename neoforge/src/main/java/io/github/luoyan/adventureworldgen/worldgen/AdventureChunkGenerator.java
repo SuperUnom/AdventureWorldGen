@@ -175,11 +175,12 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                         ? floors[(x - minX) * 16 + z - minZ]
                         : getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, chunk, state));
         BiomeManager biomes = new BiomeManager(
-                (x, y, z) -> getBiomeSource().getNoiseBiome(x, y, z, state.sampler()), plan.seed()) {
+                (x, y, z) -> getBiomeSource().getNoiseBiome(x, y, z, state.sampler()),
+                BiomeManager.obfuscateSeed(plan.seed())) {
             @Override public Holder<Biome> getBiome(BlockPos pos) {
-                // Match the planner's stored quart cells without a second biome-boundary warp.
-                Holder<Biome> biome = getBiomeSource().getNoiseBiome(pos.getX() >> 2, pos.getY() >> 2,
-                        pos.getZ() >> 2, state.sampler());
+                // Preserve vanilla's fuzzy Voronoi zoom from quart palettes to block columns.
+                // Directly reading pos >> 2 exposes the palette as large square stair steps.
+                Holder<Biome> biome = super.getBiome(pos);
                 // 1.21.1 SurfaceSystem probes the air above the column to grow badlands
                 // pillars before applying rules. Disable that terrain extension only;
                 // rule evaluations inside the column still see ERODED_BADLANDS.

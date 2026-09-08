@@ -123,8 +123,7 @@ public final class FillerLayout {
                     +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,id));
             if(band<bestBand||value<score){score=value;best=b;bestBand=band;}
         }
-        if(best<0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"filler","no legal filler",
-                Map.of("x",x(cell),"z",z(cell),"terrain",environment[cell].terrainTemplate(),"recipe",environment[cell].recipe(),"secondary",environment[cell].secondaryRecipe(),"landform",environment[cell].landform(),"humidity",climate.humidity().typeAt(x(cell),z(cell),environment[cell]),"temperature",climate.typeAt(x(cell),z(cell),environment[cell])));
+        if(best<0)throw noLegalFiller(x(cell),z(cell),environment[cell]);
         return best;
     }
     private double adventure(int biome,int cell) {
@@ -168,13 +167,18 @@ public final class FillerLayout {
         }
     }
     public ContentId biomeAt(int x,int z,MacroSample sample) {
-        int gx=(int)Math.floor((x+7*warpX.sample(x,z))/STEP)+extent;
-        int gz=(int)Math.floor((z+7*warpZ.sample(x,z))/STEP)+extent;
+        // As in TerraForged's climate cells, candidate lookup and Voronoi distance must use
+        // the same warped point. The former +/- mismatch searched one side of a grid line but
+        // measured the other, which could omit the true nearest eligible cell and jump by a
+        // 16-block planning cell at biome joins.
+        double px=x+7*warpX.sample(x,z),pz=z+7*warpZ.sample(x,z);
+        int gx=(int)Math.floor(px/STEP)+extent;
+        int gz=(int)Math.floor(pz/STEP)+extent;
         int best=-1,bestBand=4;double score=Double.POSITIVE_INFINITY;
         for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++) {
             int nx=gx+dx,nz=gz+dz;if(nx<0||nz<0||nx>=width||nz>=width)continue;
             int i=nz*width+nx,b=labels[i];if(b<0||!allows(pool.get(b),x,z,sample))continue;
-            double d=Math.hypot(x-x(i)-7*warpX.sample(x,z),z-z(i)-7*warpZ.sample(x,z));
+            double d=Math.hypot(px-x(i),pz-z(i));
             int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
             if(band<bestBand||(band==bestBand&&d<score)){score=d;best=b;bestBand=band;}
         }
@@ -188,8 +192,16 @@ public final class FillerLayout {
                 if(band<bestBand||cost<fallbackScore){fallbackScore=cost;best=b;bestBand=band;}
             }
         }
-        if(best<0)throw new IllegalStateException("No legal filler at "+x+","+z);
+        if(best<0)throw noLegalFiller(x,z,sample);
         return pool.get(best);
+    }
+    private PlanningFailure noLegalFiller(int x,int z,MacroSample sample) {
+        double qx=Math.floor(x/4.0)*4+2,qz=Math.floor(z/4.0)*4+2;
+        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"filler",
+                "no filler satisfies biomes.terrain_rules; add coverage for this terrain, temperature and humidity",
+                Map.of("x",x,"z",z,"terrain",sample.terrainTemplate(),"recipe",sample.recipe(),
+                        "secondary",sample.secondaryRecipe(),"landform",sample.landform(),
+                        "humidity",climate.humidity().typeAt(qx,qz,sample),"temperature",climate.typeAt(qx,qz,sample)));
     }
     public int seedCount(){return restoredSeedCount>=0?restoredSeedCount:seeds.size();}
     private int x(int i){return (i%width-extent)*STEP;}

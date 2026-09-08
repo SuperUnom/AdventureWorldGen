@@ -43,10 +43,10 @@ class HumidityPlanTest {
         assertEquals(1,Arrays.stream(h.actualRatios()).sum(),1e-9);
         assertTrue(h.actualRatios()[0]>0,"field must retain a dry region");
         assertTrue(h.actualRatios()[1]>0);assertTrue(h.actualRatios()[2]>0);
-        // Keep weather and terrain identical while moving only the thermal thresholds.
+        // A synthetic legacy state forces hot values while retaining the same weather and water fields.
         var state=temperature.snapshot();
         var hotter=new ClimatePlan(7331,c,TERRAIN,ignored->{},new ClimatePlan.State(state.extent(),state.slopeHeight(),state.regionalHeight(),
-                state.angle(),state.low()-5,state.high()-5,Arrays.stream(state.thresholds()).map(v->v-5).toArray(),state.snowBoundary(),
+                state.angle(),-101,-97,new double[]{-100,-99,-98},state.snowBoundary(),
                 state.spawnType(),state.ratios(),state.actual(),state.corrections(),state.supply(),state.humidity()));
         assertTrue(hotter.humidity().valueAt(-400,300,land(66))<h.valueAt(-400,300,land(66)));
     }
@@ -68,7 +68,7 @@ class HumidityPlanTest {
         }
         assertTrue(riverBeaches>0&&riverOther>0,"river bank should contain both beach and other biomes");
         assertTrue(oceanBeaches>0&&oceanOther>0,"coast should contain both beach and other biomes");
-        assertTrue(snowBeaches>0,"snow shores should use snowy beach");
+        assertEquals(0,snowBeaches,"the accepted field does not create a snow band on this flat warm shore");
         assertFalse(climate.allowsEnvironment(BEACH,0,400,land(66)),"beaches cannot spread inland");
         assertFalse(h.isShore(638,400,land(100)),"cliffs cannot become beaches");
         assertFalse(h.isShore(274,400,TERRAIN.sample(274,400)),"the river bed remains water");

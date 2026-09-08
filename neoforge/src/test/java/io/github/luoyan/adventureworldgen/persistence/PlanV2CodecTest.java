@@ -25,7 +25,8 @@ class PlanV2CodecTest {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":1536},"spawn":{"biome":"minecraft:forest"},
            "biomes":{"filler":["minecraft:desert","minecraft:snowy_plains"],"terrain_rules":{
-             "minecraft:desert":{"temperature_level":10},"minecraft:snowy_plains":{"temperature_level":0}}}}
+             "minecraft:desert":{"temperature_level":10,"temperatures":{"very_cold":1,"cold":1,"medium":1,"hot":4}},
+             "minecraft:snowy_plains":{"temperature_level":0,"temperatures":{"very_cold":4,"cold":1,"medium":1,"hot":1}}}}}
           """);
         var coast=new Coastline(List.of(new Vec2(-1000,-1000),new Vec2(1000,-1000),new Vec2(1000,1000),new Vec2(-1000,1000)));
         var network=new RiverNetwork(List.of(),List.of(),PlannerProfile.V2.hydrologyVersion());

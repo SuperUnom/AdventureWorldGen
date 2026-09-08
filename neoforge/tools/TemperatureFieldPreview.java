@@ -1,7 +1,7 @@
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
-import io.github.luoyan.adventureworldgen.terrain.GradientNoise;
+import io.github.luoyan.adventureworldgen.planner.OrganicTemperatureField;
 import com.google.gson.JsonParser;
 import java.awt.*;
 import java.awt.image.BufferedImage;
@@ -18,27 +18,6 @@ public class TemperatureFieldPreview {
     static final Color INK=new Color(0x203344), MUTED=new Color(0x586b7a);
 
     static double smooth(double t) { t=Math.clamp(t,0,1);return t*t*(3-2*t); }
-    /** Independent two-dimensional displacements and rotated climate layers; no shared band axis. */
-    static final class OrganicLatitude implements java.util.function.DoubleBinaryOperator {
-        final GradientNoise warpX,warpZ,detailX,detailZ,climate,secondary;
-        final double bend;
-        OrganicLatitude(long seed,double spacing,double bend,double scale) {
-            this.bend=bend;
-            warpX=new GradientNoise(seed,"temperature-preview/organic/warp-x",scale);
-            warpZ=new GradientNoise(seed,"temperature-preview/organic/warp-z",scale);
-            detailX=new GradientNoise(seed,"temperature-preview/organic/detail-x",scale*.42);
-            detailZ=new GradientNoise(seed,"temperature-preview/organic/detail-z",scale*.42);
-            climate=new GradientNoise(seed,"temperature-preview/organic/climate",spacing*2.3);
-            secondary=new GradientNoise(seed,"temperature-preview/organic/secondary",spacing*1.3);
-        }
-        @Override public double applyAsDouble(double x,double z) {
-            double wx=x+bend*warpX.sample(x,z),wz=z+bend*warpZ.sample(x,z);
-            double qx=wx+.22*bend*detailX.sample(wx,wz),qz=wz+.22*bend*detailZ.sample(wx,wz);
-            double field=.8*climate.sample(qx*.72,qz*1.2)
-                    +.2*secondary.sample(.8*qx-.6*qz,.6*qx+.8*qz);
-            return 5+4.5*Math.tanh(3.2*field);
-        }
-    }
     // Shared along-band warp: every latitude boundary remains parallel and ordered.
     static double latitude(double x,double z,double angle,double spacing,double bend,
                            double transition,ValueNoise warp,boolean repeating) {
@@ -92,7 +71,7 @@ public class TemperatureFieldPreview {
         double extent=config.world().radius()+200,step=extent*2/SIDE;
         var warp=new ValueNoise(plan.seed(),"temperature-preview/latitude-bend",warpScale);
         java.util.function.DoubleBinaryOperator latitudeField=organic
-                ?new OrganicLatitude(plan.seed(),spacing,bend,warpScale)
+                ?new OrganicTemperatureField(plan.seed(),spacing,bend,warpScale)
                 :(x,z)->latitude(x,z,angle,spacing,bend,transition,warp,repeating);
         var heat=new BufferedImage(SIDE,SIDE,BufferedImage.TYPE_INT_RGB);
         var bands=new BufferedImage(SIDE,SIDE,BufferedImage.TYPE_INT_RGB);
@@ -108,7 +87,7 @@ public class TemperatureFieldPreview {
                     boolean dry=sample.waterKind()!=io.github.luoyan.adventureworldgen.api.WaterKind.OCEAN;
                     double base=5+contrast*(latitudeField.applyAsDouble(x,z)-5)+offset;
                     // Reuse the existing 25% local / 55% slope / 20% mountain-mass height field.
-                    double rise=plan.climate().elevationCooling(x,z,sample)/.0048;
+                    double rise=Math.max(0,plan.climate().effectiveHeightAt(x,z,sample)-76);
                     double cooling=lapse*rise+(mountainLapse-lapse)*Math.max(0,rise+76-mountainHeight);
                     double value=Math.clamp(base-cooling,0,10);
                     if(!Double.isFinite(value)||cooling<0||value>Math.clamp(base,0,10)+1e-12)throw new AssertionError("invalid thermal field");
