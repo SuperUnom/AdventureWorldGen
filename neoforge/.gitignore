@@ -1,11 +1,18 @@
+# Gradle
 .gradle/
 build/
+
+# Minecraft 运行目录
 run/
 runs/
+
+# IDE
 .idea/
 *.iml
 .classpath
 .project
 .settings/
-.DS_Store
 .vscode/
+
+# macOS
+.DS_Store

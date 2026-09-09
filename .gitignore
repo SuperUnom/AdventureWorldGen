@@ -1,2 +1,8 @@
+# macOS
 .DS_Store
+
+# 运行时日志
+/logs/
+
+# 运行目录
 /neoforge/run-*/
