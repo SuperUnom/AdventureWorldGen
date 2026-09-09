@@ -28,8 +28,9 @@ class HydrologyGeneratorTest {
             var base = new io.github.luoyan.adventureworldgen.erosion.ErodedTerrain(island, erosion, "test");
             var network = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                     .generate(seed, 1536, 64, coast.coastline(), base);
-            assertEquals(8, network.channels().stream().filter(c -> c.parentId() == null).count());
-            assertTrue(network.channels().size() <= 96);
+            assertEquals(HydrologyProfile.FINITE_CONTINENT.mainRiverCount(1536), network.channels().stream().filter(c -> c.parentId() == null).count());
+            assertTrue(network.channels().stream().allMatch(c -> c.order() <= 1));
+            assertTrue(network.channels().size() <= 24, "too many short tributaries");
         }
     }
 
@@ -89,7 +90,10 @@ class HydrologyGeneratorTest {
         }
         assertTrue(curved >= 6 && totalSinuosity / mains.size() > 1.08, "network lacks developed bends");
         assertTrue(maximumSinuosity - minimumSinuosity > 0.08, "river shapes are too uniform");
-        assertTrue(first.channels().stream().filter(c -> c.order() > 0).count() >= 12, "too few tributaries");
+        assertTrue(first.channels().stream().filter(c -> c.order() > 0).count() >= 2, "no tributary catchments survived");
+        for (var parent : first.channels())
+            assertTrue(first.channels().stream().filter(c -> parent.id().equals(c.parentId())).count() <= 3,
+                    "tributary joins are too dense");
         for (var channel : first.channels()) {
             assertTrue(channel.order() <= 3);
             for (int i = 1; i < channel.waterSurfaces().size(); i++)
@@ -100,6 +104,30 @@ class HydrologyGeneratorTest {
                 assertEquals(64, channel.waterSurfaces().getLast(), 1e-9);
             }
         }
+    }
+
+    @Test void finiteContinentPrefersLongWideTrunksWithSparseTributaries() {
+        var coast = new io.github.luoyan.adventureworldgen.terrain.Coastline(
+                java.util.stream.IntStream.range(0, 64).mapToObj(i ->
+                        new io.github.luoyan.adventureworldgen.spatial.Vec2(
+                                3000 * Math.cos(i * Math.PI / 32), 3000 * Math.sin(i * Math.PI / 32))).toList());
+        MacroTerrain base = (x, z) -> new MacroSample(120, Double.NaN, WaterKind.NONE,
+                false, "test", "plains", "test");
+        var network = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
+                .generate(7331, 3000, 64, coast, base);
+        var morphology = new RiverMorphology(network);
+        var mains = network.channels().stream().filter(c -> c.order() == 0).toList();
+        assertEquals(6, mains.size());
+        assertTrue(mains.stream().mapToDouble(RiverNetwork.Channel::length).average().orElseThrow() > 1440,
+                "main catchments remain too short");
+        for (var channel : mains) {
+            var p = HydrologyGenerator.pointAt(channel, .5);
+            assertTrue(morphology.bedRadius(channel,.5,p.x(),p.z(),p.x(),p.z()) * 2 >= 16,
+                    "middle reach is still a narrow stream");
+        }
+        assertTrue(network.channels().stream().allMatch(c -> c.order() <= 1));
+        assertTrue(network.channels().size() <= 24, "tributaries overwhelm the six trunks");
+        assertTrue(network.channels().size() > 6, "all tributaries disappeared");
     }
 
     @Test

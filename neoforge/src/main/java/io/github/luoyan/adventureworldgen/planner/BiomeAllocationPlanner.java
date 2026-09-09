@@ -32,6 +32,8 @@ public final class BiomeAllocationPlanner {
         final RequirementExpander.PatchDemand demand;
         ContentId biome;
         final ValueNoise noise;
+        final long shapeSeed;
+        final List<OrganicGrowth> catchments=new ArrayList<>();
         final LongOpenHashSet cells=new LongOpenHashSet(),queued=new LongOpenHashSet();
         final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingInt(Edge::band).thenComparingDouble(Edge::score).thenComparingLong(Edge::cell));
         PlacementIndex.Point anchor;
@@ -40,7 +42,7 @@ public final class BiomeAllocationPlanner {
         Iterator<PlacementIndex.Point> supplements=Collections.emptyIterator();
         boolean filler;
         Region(long seed,RequirementExpander.PatchDemand d) {
-            demand=d;biome=d.allowedBiomes().getFirst();noise=new ValueNoise(seed,"growth/"+d.patchId(),192);
+            shapeSeed=seed;demand=d;biome=d.allowedBiomes().getFirst();noise=new ValueNoise(seed,"growth/"+d.patchId(),192);
         }
         long minimum(){return demand.area().inCells(4).min();}
         long target(){return Math.max(minimum(),demand.area().target()/16);}
@@ -323,6 +325,8 @@ public final class BiomeAllocationPlanner {
     private void claim(int i,long cell,double path) {
         var r=regions.get(i);owner.put(cell,i);r.cells.add(cell);
         int x=CellMask.x(cell),z=CellMask.z(cell);
+        if(path==0)r.catchments.add(new OrganicGrowth(r.shapeSeed,r.demand.patchId()+"/"+r.catchments.size(),
+                x,z,r.demand.area().target(),index.sample(x,z).groundSurface()));
         for(int[] d:DIR) {
             int nx=x+d[0],nz=z+d[1];long n=CellMask.key(nx,nz);
             if(!owner.containsKey(n)&&!r.queued.contains(n)&&legal(r,nx,nz))queue(r,i,nx,nz,path+4);
@@ -348,7 +352,12 @@ public final class BiomeAllocationPlanner {
         double environment=climate.cost(r.biome,x+2,z+2,sample);
         int band=climate.temperatureDistance(r.biome,x+2,z+2,sample);
         int support=0;for(int[] side:DIR)if(owner.get(CellMask.key(x+side[0],z+side[1]))==ownerIndex)support++;
-        double cost=next*.65+environment*128+r.noise.sample(x,z)*24-support*9;
+        // Four-neighbour path length is a Manhattan metric: it produces diamonds and
+        // straight competition fronts. Connectivity still comes from the frontier, while
+        // smooth catchment distance controls its shape (including supplemental regions).
+        double distance=Double.POSITIVE_INFINITY;
+        for(var catchment:r.catchments)distance=Math.min(distance,catchment.score(x,z,sample.groundSurface()));
+        double cost=distance*.65+environment*128+r.noise.sample(x,z)*8-support*3;
         r.frontier.add(new Edge(cell,next,band,cost));
     }
     private boolean legal(Region r,int x,int z) {

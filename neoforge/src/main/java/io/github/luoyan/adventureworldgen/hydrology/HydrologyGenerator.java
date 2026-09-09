@@ -27,7 +27,7 @@ public final class HydrologyGenerator {
         List<RiverNetwork.Channel> roots = new ArrayList<>();
         // Spread headwaters across the interior. Independently oblique outlet bearings
         // avoid a common central hub and leave space for separate coastal catchments.
-        for (int attempt = 0; roots.size() < profile.mainRiverCount() && attempt < 2048; attempt++) {
+        for (int attempt = 0; roots.size() < profile.mainRiverCount(radius) && attempt < 2048; attempt++) {
             String candidateId = "river/root-candidate/" + attempt;
             double anchorAngle = random(seed, candidateId, 1) * StrictMath.PI * 2;
             double angle = anchorAngle + (random(seed, candidateId, 0) < 0.5 ? -1 : 1)
@@ -49,7 +49,7 @@ public final class HydrologyGenerator {
             Vec2 outlet = new Vec2(anchor.x() + dx * low, anchor.z() + dz * low);
             // If the long inland catchments fill the available terrain first, also
             // consider short coastal catchments instead of failing the entire world.
-            double minimumLength = StrictMath.max(120, radius * (attempt < 512 ? 0.24 : 0.10));
+            double minimumLength = StrictMath.max(120, radius * (attempt < 1024 ? 0.48 : 0.24));
             if (low < minimumLength) continue;
             Vec2 source = anchor;
             if (StrictMath.hypot(source.x(), source.z()) < StrictMath.min(320, radius * 0.18)) continue;
@@ -65,7 +65,7 @@ public final class HydrologyGenerator {
             if (intersectsExisting(main, channels, null)) continue;
             channels.add(main); roots.add(main); maybeWetland(seed, main, wetlands, baseTerrain);
         }
-        if (roots.size() < profile.mainRiverCount()) throw rejected("roots", "bounded irregular river candidates exhausted");
+        if (roots.size() < profile.mainRiverCount(radius)) throw rejected("roots", "bounded irregular river candidates exhausted");
         for (RiverNetwork.Channel root : roots)
             generateForks(seed, radius, coast, baseTerrain, root, 1, channels, wetlands);
         validateMouths(channels, coast, seaSurface);
@@ -75,10 +75,10 @@ public final class HydrologyGenerator {
     private void generateForks(long seed, double radius, Coastline coast, MacroTerrain terrain,
                                RiverNetwork.Channel parent, int depth,
                                List<RiverNetwork.Channel> channels, List<RiverNetwork.Wetland> wetlands) {
-        if (depth > profile.maximumForkDepth() || parent.length() < 280 || channels.size() >= 96) return;
+        if (depth > profile.maximumForkDepth() || parent.length() < 480 || channels.size() >= 96) return;
         int forkIndex = 0;
-        for (double along = 0.18 + 0.06 * random(seed, parent.id() + "/first-fork", depth); along < 0.94 && channels.size() < 96;
-             along += 0.08 + 0.07 * random(seed, parent.id() + "/fork-spacing", forkIndex++)) {
+        for (double along = 0.26 + 0.08 * random(seed, parent.id() + "/first-fork", depth); along < 0.88 && channels.size() < 96;
+             along += 0.24 + 0.12 * random(seed, parent.id() + "/fork-spacing", forkIndex++)) {
             Vec2 join = pointAt(parent, along);
             Vec2 downstream = pointAt(parent, StrictMath.min(1.0, along + 0.01));
             double parentAngle = StrictMath.atan2(downstream.z() - join.z(), downstream.x() - join.x());
@@ -89,7 +89,7 @@ public final class HydrologyGenerator {
                 String candidate = id + "/candidate/" + attempt;
                 double sign = ((forkIndex + depth + attempt) & 1) == 0 ? 1 : -1;
                 double angle = parentAngle + StrictMath.PI + sign * (0.5 + 0.8 * random(seed, candidate, 0));
-                double length = StrictMath.max(110, parent.length() * (0.16 + 0.28 * random(seed, candidate, 1)));
+                double length = StrictMath.max(240, parent.length() * (0.25 + 0.30 * random(seed, candidate, 1)));
                 Vec2 source = new Vec2(join.x() + StrictMath.cos(angle) * length,
                         join.z() + StrictMath.sin(angle) * length);
                 if (!coast.contains(source.x(), source.z())) continue;

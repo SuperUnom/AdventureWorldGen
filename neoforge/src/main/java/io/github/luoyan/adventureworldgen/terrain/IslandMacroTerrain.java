@@ -8,15 +8,12 @@ import java.util.Objects;
 
 /** Coast and regional terrain composition before inland hydrology is applied. */
 public final class IslandMacroTerrain implements MacroTerrain {
-    /** The visible continental shelf is intentionally narrow: ocean depth should
-     * become unmistakable within a few blocks of crossing the coastline. */
-    public static final double COASTAL_DROP_WIDTH = 8.0;
     private final Coastline coastline;
     private final RegionTerrain regions;
     private final double seaSurface;
     private final double landBand;
     private final double seaBand;
-    private final ValueNoise deepOcean;
+    private final OceanBathymetry bathymetry;
     private final String version;
     private final io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<Byte> coastTiles =
             new io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<>(16384);
@@ -33,11 +30,11 @@ public final class IslandMacroTerrain implements MacroTerrain {
                 // Distance to a closed boundary is 1-Lipschitz. The extra margin
                 // keeps floating-point boundary cases on the exact-query path.
                 double reach=StrictMath.sqrt(2)*32+1e-8;
-                return (byte)(distance>landBand+reach?1:distance< -seaBand-reach?-1:0);
+                return (byte)(distance>landBand+reach?1:distance< -OceanBathymetry.extent(seaBand)-reach?-1:0);
             });
             tile=new CoastTile(tx,tz,saturated);lastCoastTile.set(tile);
         }
-        return tile.saturation>0?landBand:tile.saturation<0?-seaBand:coastline.signedDistance(x,z);
+        return tile.saturation>0?landBand:tile.saturation<0?-OceanBathymetry.extent(seaBand):coastline.signedDistance(x,z);
     }
 
     public IslandMacroTerrain(Coastline coastline, RegionTerrain regions, long seed, double seaSurface,
@@ -47,7 +44,7 @@ public final class IslandMacroTerrain implements MacroTerrain {
         this.seaSurface = seaSurface;
         this.landBand = landBand;
         this.seaBand = seaBand;
-        this.deepOcean = new ValueNoise(seed, "ftf-adapted/deep-ocean", 600);
+        this.bathymetry = new OceanBathymetry(seed);
         this.version = Objects.requireNonNull(version, "version");
     }
 
@@ -62,18 +59,12 @@ public final class IslandMacroTerrain implements MacroTerrain {
                     region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
                     region.recipe().id(),region.secondary()==null?"":region.secondary().id(),region.secondaryWeight(),region.mountainInfluence(),0,0,0);
         }
-        double blend = oceanBlend(-signedDistance,seaBand);
-        // FTF-adapted deep-water envelope reached across the narrow coastal drop.
-        double deep = 7.0 + 25.0 * clamp((deepOcean.sample(x, z) + 1.0) * 0.5);
-        return new MacroSample(seaSurface - blend * deep, seaSurface, WaterKind.OCEAN, false,
+        double depth = bathymetry.depth(x,z,-signedDistance,seaBand);
+        return new MacroSample(seaSurface - depth, seaSurface, WaterKind.OCEAN, false,
                 region.regionId(), region.template().name().toLowerCase(java.util.Locale.ROOT), version,
                     region.recipe().id(),region.secondary()==null?"":region.secondary().id(),region.secondaryWeight(),region.mountainInfluence(),0,0,0);
     }
 
     private static double clamp(double value) { return StrictMath.max(0.0, StrictMath.min(1.0, value)); }
     private static double smooth(double value) { return value * value * (3.0 - 2.0 * value); }
-    public static double oceanBlend(double distanceIntoOcean,double configuredSeaBand) {
-        double width=StrictMath.min(COASTAL_DROP_WIDTH,configuredSeaBand);
-        return smooth(clamp(distanceIntoOcean/width));
-    }
 }

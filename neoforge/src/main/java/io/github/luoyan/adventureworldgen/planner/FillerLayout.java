@@ -14,7 +14,8 @@ public final class FillerLayout {
     private final MacroSample[] environment;
     private final AdventureWorldConfig config;
     private final ClimatePlan climate;
-    private final ValueNoise warpX,warpZ,shape;
+    private final ValueNoise shape;
+    private final io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp boundaryWarp;
     private final List<ContentId> pool;
     private final List<Seed> seeds=new ArrayList<>();
     private final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingInt(Edge::band).thenComparingDouble(Edge::cost)
@@ -33,7 +34,7 @@ public final class FillerLayout {
     }
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,State frozen) {
         this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
-        warpX=new ValueNoise(seed,"filler/boundary-x",80);warpZ=new ValueNoise(seed,"filler/boundary-z",80);
+        boundaryWarp=new io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp(seed,"filler/boundary",1);
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
         long size=(long)width*width;
@@ -176,20 +177,23 @@ public final class FillerLayout {
         }
     }
     public ContentId biomeAt(int x,int z,MacroSample sample) {
-        // As in TerraForged's climate cells, candidate lookup and Voronoi distance must use
-        // the same warped point. The former +/- mismatch searched one side of a grid line but
-        // measured the other, which could omit the true nearest eligible cell and jump by a
-        // 16-block planning cell at biome joins.
-        double px=x+7*warpX.sample(x,z),pz=z+7*warpZ.sample(x,z);
-        int gx=(int)Math.floor(px/STEP)+extent;
-        int gz=(int)Math.floor(pz/STEP)+extent;
-        int best=-1,bestBand=4;double score=Double.POSITIVE_INFINITY;
-        for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++) {
-            int nx=gx+dx,nz=gz+dz;if(nx<0||nz<0||nx>=width||nz>=width)continue;
-            int i=nz*width+nx,b=labels[i];if(b<0||!allows(pool.get(b),x,z,sample))continue;
-            double d=Math.hypot(px-x(i),pz-z(i));
+        // Reconstruct categorical coverage with a C2 cubic B-spline. Nearest-cell
+        // Voronoi lookup exposes the planning grid as polygonal corners even after warping.
+        var point=boundaryWarp.apply(x,z);
+        double px=point.x()/STEP,pz=point.z()/STEP;
+        int gx=(int)Math.floor(px),gz=(int)Math.floor(pz);
+        double[] support=new double[pool.size()];
+        for(int dz=-1;dz<=2;dz++)for(int dx=-1;dx<=2;dx++) {
+            int nx=gx+dx+extent,nz=gz+dz+extent;
+            if(nx<0||nz<0||nx>=width||nz>=width)continue;
+            int b=labels[nz*width+nx];
+            if(b>=0)support[b]+=spline(px-gx-dx)*spline(pz-gz-dz);
+        }
+        int best=-1,bestBand=4;double score=-1;
+        for(int b=0;b<pool.size();b++) {
+            if(support[b]<=0||!allows(pool.get(b),x,z,sample))continue;
             int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
-            if(band<bestBand||(band==bestBand&&d<score)){score=d;best=b;bestBand=band;}
+            if(band<bestBand||(band==bestBand&&support[b]>score)){score=support[b];best=b;bestBand=band;}
         }
         if(bestBand>0) {
             double fallbackScore=Double.POSITIVE_INFINITY;
@@ -203,6 +207,10 @@ public final class FillerLayout {
         }
         if(best<0)throw noLegalFiller(x,z,sample);
         return pool.get(best);
+    }
+    private static double spline(double distance) {
+        double t=Math.abs(distance);
+        return t<1 ? (4-6*t*t+3*t*t*t)/6 : t<2 ? Math.pow(2-t,3)/6 : 0;
     }
     private PlanningFailure noLegalFiller(int x,int z,MacroSample sample) {
         double qx=Math.floor(x/4.0)*4+2,qz=Math.floor(z/4.0)*4+2;

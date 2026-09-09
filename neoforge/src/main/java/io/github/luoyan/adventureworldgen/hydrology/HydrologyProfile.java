@@ -13,11 +13,19 @@ public record HydrologyProfile(int mainRiverCount, int maximumForkDepth,
             new Erosion(135, 12, 0.7, 0.7, 0.5, 0.5),
             new Smoothing(1, 1.8, 0.9));
 
-    /** Smaller, sparse standing water for the finite 3000-block continent. Upstream golden values remain above. */
+    /** Wider, longer catchments with sparse first-order tributaries and standing water. */
     public static final HydrologyProfile FINITE_CONTINENT = new HydrologyProfile(
-            8, 3, FTF_ADAPTED_V1.main(), FTF_ADAPTED_V1.branch(),
+            6, 1,
+            new RiverShape(6, 2, 6, 24, 14, 0.75),
+            new RiverShape(4, 2, 5, 18, 8, 0.975),
             new Lake(0.18, 0.0, 0.03, 4, 30, 65, 2, 6),
             new Wetland(0.12, 24, 44), FTF_ADAPTED_V1.erosion(), FTF_ADAPTED_V1.smoothing());
+
+    public int mainRiverCount(double radius) {
+        return this.equals(FINITE_CONTINENT)
+                ? Math.max(2, (int)Math.round(mainRiverCount * Math.min(1, Math.sqrt(radius / 3000))))
+                : mainRiverCount;
+    }
 
     public record RiverShape(int bedDepth, int minimumBankHeight, int maximumBankHeight,
                              int bankWidth, int bedWidth, double fade) {}

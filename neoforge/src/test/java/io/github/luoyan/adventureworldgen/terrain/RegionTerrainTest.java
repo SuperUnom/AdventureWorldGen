@@ -51,14 +51,14 @@ class RegionTerrainTest {
     }
 
     @Test
-    void oceanFloorDropsWithinEightBlocksOfTheCoast() {
+    void oceanFloorRetainsShallowsNearTheCoast() {
         var coast = new Coastline(java.util.List.of(
                 new io.github.luoyan.adventureworldgen.spatial.Vec2(-1000,-1000),
                 new io.github.luoyan.adventureworldgen.spatial.Vec2(1000,-1000),
                 new io.github.luoyan.adventureworldgen.spatial.Vec2(1000,1000),
                 new io.github.luoyan.adventureworldgen.spatial.Vec2(-1000,1000)));
         var terrain=new IslandMacroTerrain(coast,new RegionTerrain(9,PlannerProfile.V2),9,64,128,256,"test");
-        assertTrue(terrain.sample(1004,0).waterDepth()>=3,"coastal drop is still too gradual");
-        assertTrue(terrain.sample(1008,0).waterDepth()>=7,"deep-water envelope was not reached");
+        assertTrue(terrain.sample(1004,0).waterDepth()<1,"nearshore drop is too steep");
+        assertTrue(terrain.sample(1008,0).waterDepth()<1,"shallow coast is missing");
     }
 }

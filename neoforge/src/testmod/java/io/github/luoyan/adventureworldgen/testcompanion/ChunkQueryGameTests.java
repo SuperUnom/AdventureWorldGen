@@ -24,6 +24,11 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @GameTestHolder("testcompanion_performance")
 @PrefixGameTestTemplate(false)
 public final class ChunkQueryGameTests {
+    @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 2400)
+    public static void shelfOceanPreservesNativeCaves(GameTestHelper helper) {
+        AdventureWorldGameTests.plannedOceanColumnsPreserveDeepCavesAndContinuousWater(helper);
+    }
+
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)
     public static void nativeMaterialsStillMatchPlan(GameTestHelper helper) {
         SurfaceGameTests.nativeMaterialsPreservePlannedRelief(helper);
@@ -85,6 +90,13 @@ public final class ChunkQueryGameTests {
             var filled = generator.fillFromNoise(Blender.empty(), random, noStructures, chunk);
             level.getServer().managedBlock(filled::isDone); filled.join();
             generator.buildPlannedSurface(registries, chunk);
+            for (int x=0;x<16;x++)for(int z=0;z<16;z++) {
+                int bx=pos.getMinBlockX()+x,bz=pos.getMinBlockZ()+z;
+                var sample=plan.terrainAt(bx+.5,bz+.5);
+                helper.assertTrue(chunk.getHeight(Heightmap.Types.OCEAN_FLOOR_WG,x,z)
+                        ==plan.solidSurfaceAt(bx,bz,sample)-1,
+                        "composed seabed differs from planned shelf at "+bx+","+bz);
+            }
         }
         helper.succeed();
     }

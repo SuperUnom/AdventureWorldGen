@@ -105,7 +105,7 @@ public final class AdventureWorldGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
-    public static void nativeOceanColumnsAndCoastHaveContinuousWater(GameTestHelper helper) {
+    public static void plannedOceanColumnsPreserveDeepCavesAndContinuousWater(GameTestHelper helper) {
         var plan = plan();
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "ocean_regression");
         io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry.start(id, () -> plan).join();
@@ -151,8 +151,15 @@ public final class AdventureWorldGameTests {
                 helper.assertTrue(column.getBlock(64).isAir(), "ocean water datum is inconsistent");
                 for (int y = -64; y < 320; y++) {
                     var block = new net.minecraft.core.BlockPos(x + dx, y, z + dz);
-                    helper.assertTrue(actual.getBlockState(block).equals(expected.getBlockState(block)),
-                            "offshore chunk differs from native ocean density at " + block);
+                    int floor=plan.solidSurfaceAt(x+dx,z+dz,plan.terrainAt(x+dx+.5,z+dz+.5));
+                    var nativeBlock=expected.getBlockState(block);
+                    var wanted=y==-64?net.minecraft.world.level.block.Blocks.BEDROCK.defaultBlockState()
+                            :y<floor?net.minecraft.world.level.block.Blocks.STONE.defaultBlockState()
+                            :y<64?net.minecraft.world.level.block.Blocks.WATER.defaultBlockState()
+                            :net.minecraft.world.level.block.Blocks.AIR.defaultBlockState();
+                    if(y>-64 && y<floor-9 && !nativeBlock.blocksMotion())wanted=nativeBlock;
+                    helper.assertTrue(actual.getBlockState(block).equals(wanted),
+                            "planned ocean floor/cave composition differs at " + block);
                 }
             }
         }

@@ -104,9 +104,9 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
         if (hasOcean(chunk, plan)) {
             return oceanDelegate.fillFromNoise(blender, oceanState(plan), structures, chunk)
-                    .thenApply(filled -> { composeColumns(filled, plan, randomState, true); return filled; });
+                    .thenApply(filled -> { composeColumns(filled, plan, randomState, true, structures); return filled; });
         }
-        composeColumns(chunk, plan, randomState, false);
+        composeColumns(chunk, plan, randomState, false, structures);
         return CompletableFuture.completedFuture(chunk);
     }
 
@@ -125,13 +125,26 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
 
     private void composeColumns(ChunkAccess chunk,
                                 GeneratedAdventurePlan plan,
-                                RandomState randomState, boolean generatedOcean) {
+                                RandomState randomState, boolean generatedOcean, StructureManager structures) {
+        var foundations = new StructureTerrain(structures, chunk.getPos());
         BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
         int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
         for (int x = minX; x < minX + 16; x++) for (int z = minZ; z < minZ + 16; z++) {
-            double blend = oceanBlend(plan, x, z);
-            if (generatedOcean && blend >= 1) continue;
-            NoiseColumn column = getBaseColumn(x, z, chunk, randomState);
+            var terrain = plan.terrainAt(x + .5, z + .5);
+            NoiseColumn nativeOcean = null;
+            if (generatedOcean && terrain.waterKind() == WaterKind.OCEAN) {
+                BlockState[] nativeStates = new BlockState[DEPTH];
+                for (int y = MIN_Y; y < MIN_Y + DEPTH; y++)
+                    nativeStates[y - MIN_Y] = chunk.getBlockState(pos.set(x, y, z));
+                nativeOcean = new NoiseColumn(MIN_Y, nativeStates);
+            }
+            NoiseColumn column = plannedColumn(plan, x, z, terrain, nativeOcean);
+            if (!foundations.isEmpty()) {
+                int floor = getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, chunk, randomState);
+                int adapted = clamp(foundations.surfaceAt(x, z, floor), MIN_Y + 1, MIN_Y + DEPTH);
+                for (int y = Math.min(floor, adapted); y < Math.max(floor, adapted); y++)
+                    column.setBlock(y, y < adapted ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+            }
             for (int y = MIN_Y; y < MIN_Y + DEPTH; y++)
                 chunk.setBlockState(pos.set(x, y, z), column.getBlock(y), false);
             var sample = plan.terrainAt(x + 0.5, z + 0.5);
@@ -145,11 +158,6 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG,
                 Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.MOTION_BLOCKING,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
-    }
-
-    private static double oceanBlend(GeneratedAdventurePlan plan, int x, int z) {
-        return io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain.oceanBlend(
-                -plan.coastline().signedDistance(x + 0.5, z + 0.5),plan.seaBand());
     }
 
     @Override
@@ -228,6 +236,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                                        BiomeManager biomeManager, StructureManager structures,
                                        ChunkAccess chunk, GenerationStep.Carving step) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        if (!new StructureTerrain(structures, chunk.getPos()).isEmpty()) return;
         // Ocean caves and aquifers already come from native density generation. Carvers using
         // an unrelated overworld aquifer can drain custom river surfaces, so exclude wet chunks.
         int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
@@ -282,39 +291,29 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor level,
                              RandomState randomState) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
-        if (oceanBlend(plan, x, z) <= 0) {
-            MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
-            int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
-            int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
-                    MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
-            return (type.isOpaque().test(Blocks.WATER.defaultBlockState())
-                    ? StrictMath.max(solidTop, waterTop) : solidTop) + 1;
-        }
-        NoiseColumn column = getBaseColumn(x, z, level, randomState);
-        for (int y = MIN_Y + DEPTH - 1; y >= MIN_Y; y--)
-            if (type.isOpaque().test(column.getBlock(y))) return y + 1;
-        return MIN_Y;
+        MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
+        int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
+        int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
+                MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
+        return (type.isOpaque().test(Blocks.WATER.defaultBlockState())
+                ? StrictMath.max(solidTop, waterTop) : solidTop) + 1;
     }
 
     @Override
     public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor level, RandomState randomState) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
-        double blend = oceanBlend(plan, x, z);
-        NoiseColumn nativeOcean = blend > 0 ? oceanDelegate.getBaseColumn(x, z, level, oceanState(plan)) : null;
-        if (blend >= 1) return nativeOcean;
-        double ground = sample.groundSurface();
-        if (nativeOcean != null) {
-            int nativeFloor = MIN_Y;
-            for (int y = SEA_LEVEL - 1; y >= MIN_Y; y--) {
-                if (nativeOcean.getBlock(y).blocksMotion()) { nativeFloor = y + 1; break; }
-            }
-            // Both endpoints use the same sea-level datum; only the ocean bed is blended.
-            ground = plan.seaSurface() + (nativeFloor - plan.seaSurface()) * blend
-                    - plan.oceanCarvingAt(x + 0.5, z + 0.5);
-        }
+        NoiseColumn nativeOcean = sample.waterKind() == WaterKind.OCEAN
+                ? oceanDelegate.getBaseColumn(x, z, level, oceanState(plan)) : null;
+        return plannedColumn(plan, x, z, sample, nativeOcean);
+    }
+
+    private NoiseColumn plannedColumn(GeneratedAdventurePlan plan, int x, int z,
+                                      MacroSample sample, NoiseColumn nativeOcean) {
+        // The visible floor always comes from the shared plan. Native ocean noise supplies
+        // only cavities below a sealed roof, never a second competing surface datum.
         BlockState[] states = new BlockState[DEPTH];
-        int solidSurface = nativeOcean == null ? plan.solidSurfaceAt(x, z, sample) : (int) StrictMath.floor(ground);
+        int solidSurface = plan.solidSurfaceAt(x, z, sample);
         int solidTop = clamp(solidSurface - 1, MIN_Y, MIN_Y + DEPTH - 1);
         int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
                 MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
@@ -322,8 +321,8 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
             states[y - MIN_Y] = y == MIN_Y ? Blocks.BEDROCK.defaultBlockState()
                     : y <= solidTop ? Blocks.STONE.defaultBlockState()
                     : y <= waterTop ? Blocks.WATER.defaultBlockState() : Blocks.AIR.defaultBlockState();
-            // Preserve native underwater caves beneath the unmodified seabed.
-            if (nativeOcean != null && y < solidTop - 8 && !nativeOcean.getBlock(y).blocksMotion())
+            // Preserve native underwater caves beneath the planned seabed.
+            if (nativeOcean != null && y > MIN_Y && y < solidTop - 8 && !nativeOcean.getBlock(y).blocksMotion())
                 states[y - MIN_Y] = nativeOcean.getBlock(y);
         }
         return new NoiseColumn(MIN_Y, states);

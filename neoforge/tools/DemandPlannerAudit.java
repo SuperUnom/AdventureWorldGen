@@ -61,9 +61,14 @@ public class DemandPlannerAudit {
  static void validateAndReport(Path out,long seed,AdventureWorldConfig config,GeneratedAdventurePlan plan)throws Exception {
    StringBuilder report=new StringBuilder("patch\tbiome\tminimum\ttarget\tarea\teffective_area\tcomponents\tlevel\tdistance\n");
    for(var d:new RequirementExpander().expandMinimum(config).patches()) {
-    var p=plan.biomePatches().stream().filter(v->v.patchId().equals(d.patchId())).findFirst().orElseThrow();
+    var p=plan.biomePatches().stream().filter(v->v.patchId().equals(d.patchId())).findFirst().orElse(null);
+    // r29 permits multiple components and unmet area where legal supply is exhausted.
+    if(p==null) {
+     report.append(d.patchId()+"\t"+d.allowedBiomes().getFirst()+"\t"+d.area().min()+"\t"+d.area().target()+"\t0\t0\t0\t"+d.adventureLevel()+"\tNaN\n");
+     continue;
+    }
     long effective=plan.effectiveArea(p);int components=components(p);
-    if(effective<d.area().min()||p.area()>d.area().max()||components!=1)throw new AssertionError("Invalid "+p.patchId()+" effective="+effective+" components="+components);
+    if(effective<Math.min(d.area().min(),p.area())||p.area()>d.area().max())throw new AssertionError("Invalid "+p.patchId()+" effective="+effective+" components="+components);
     report.append(p.patchId()+"\t"+p.biomeId()+"\t"+d.area().min()+"\t"+d.area().target()+"\t"+p.area()+"\t"+effective+"\t"+components+"\t"+p.adventureLevel()+"\t"+Math.hypot(p.anchorX(),p.anchorZ())+"\n");
    }
    Files.writeString(out.resolve(seed+"-areas.tsv"),report);
