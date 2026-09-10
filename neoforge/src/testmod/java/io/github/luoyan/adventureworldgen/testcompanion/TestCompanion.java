@@ -17,6 +17,8 @@ public final class TestCompanion {
         AdapterRegistrations.register(TestCompanionAdapters.ASHEN_GROVE);
         AdapterRegistrations.register(TestCompanionAdapters.WAYSTATION);
         modBus.addListener(TestCompanion::registerGameTests);
+        // The normal-world acceptance only acts when the audit system property is set.
+        net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(WaystationAudit::onServerStarted);
     }
 
     private static void registerGameTests(RegisterGameTestsEvent event) {

@@ -130,6 +130,30 @@ public final class WaystationPiece extends StructurePiece {
         return List.copyOf(positions);
     }
 
+    /** World position of one of the two containers, in the same order {@code postProcess} uses. */
+    public BlockPos containerWorldPos(int which) {
+        int[] local = containerLocalPos(which);
+        return this.getWorldPos(local[0], local[1], local[2]).immutable();
+    }
+
+    /** Body positions the normal-world audit asserts on: where the block must be, and which one. */
+    public List<BodySample> bodySamples() {
+        int width = localWidth(), depth = localDepth();
+        return List.of(
+                new BodySample(this.getWorldPos(0, FLOOR_Y, 0).immutable(), floorBlock(variant)),
+                new BodySample(this.getWorldPos(width - 1, FLOOR_Y, depth - 1).immutable(), floorBlock(variant)),
+                new BodySample(this.getWorldPos(0, WALL_BOTTOM, 0).immutable(), wallBlock(variant)),
+                new BodySample(this.getWorldPos(width - 1, ROOF_Y, depth - 1).immutable(), roofBlock(variant)));
+    }
+
+    public static BlockState floorBlock(int variant) { return PALETTES[Math.floorMod(variant, VARIANTS)].floor(); }
+    public static BlockState wallBlock(int variant) { return PALETTES[Math.floorMod(variant, VARIANTS)].wall(); }
+    public static BlockState roofBlock(int variant) { return PALETTES[Math.floorMod(variant, VARIANTS)].roof(); }
+
+    /** One asserted body block: the world position and the state {@code postProcess} writes there. */
+    public record BodySample(BlockPos pos, BlockState state) {}
+
+
     @Override
     protected void addAdditionalSaveData(StructurePieceSerializationContext context, CompoundTag tag) {
         tag.putInt("Index", index);

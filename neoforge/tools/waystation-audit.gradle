@@ -1,0 +1,14 @@
+// Drive the normal-world waystation audit: point runTestCompanionServer at a dedicated world
+// directory and tell the companion which phase to run. Usage:
+//   ./gradlew runTestCompanionServer -I tools/waystation-audit.gradle -PauditWorld=run-waystation-audit -PauditPhase=cold --offline
+//   ./gradlew runTestCompanionServer -I tools/waystation-audit.gradle -PauditWorld=run-waystation-audit -PauditPhase=ready --offline
+allprojects {
+    afterEvaluate {
+        def forge = extensions.findByName('neoForge')
+        if (forge != null) {
+            forge.runs.testCompanionServer.gameDirectory = file(providers.gradleProperty('auditWorld').getOrElse('run-waystation-audit'))
+            forge.runs.testCompanionServer.systemProperty 'testcompanion.audit', 'true'
+            forge.runs.testCompanionServer.systemProperty 'testcompanion.audit.phase', providers.gradleProperty('auditPhase').getOrElse('cold')
+        }
+    }
+}

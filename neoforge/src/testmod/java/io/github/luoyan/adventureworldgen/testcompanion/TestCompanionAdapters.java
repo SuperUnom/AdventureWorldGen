@@ -53,15 +53,17 @@ public final class TestCompanionAdapters {
             };
             int variant = Math.floorMod((int) structureSeed, WaystationPiece.VARIANTS);
             List<AdventurePlanView.PlannedPiece> pieces = new ArrayList<>();
+            // The two boxes stay disjoint: pieces are placed in order and a shared cell would let the
+            // later piece overwrite the earlier one's floor, wall or container.
             pieces.add(freeze(new WaystationPiece(0, variant, structureSeed, WaystationPiece.SIMPLE_DUNGEON_LOOT,
                     orientation, box(candidate, -12, -6, 12, 6)), candidate, 0));
             pieces.add(freeze(new WaystationPiece(1, variant, structureSeed ^ 1L, WaystationPiece.SIMPLE_DUNGEON_LOOT,
-                    orientation, box(candidate, 5, -4, 25, 4)), candidate, 1));
+                    orientation, box(candidate, 14, -4, 34, 4)), candidate, 1));
             List<HorizontalBox> footprint = pieces.stream().map(piece -> new HorizontalBox(
                     piece.minX(), piece.minZ(), piece.maxX(), piece.maxZ())).toList();
             return new Prepared(candidate, pieces, footprint,
                     List.of(new HorizontalBox(candidate.originX() - 16, candidate.originZ() - 10,
-                            candidate.originX() + 29, candidate.originZ() + 16)),
+                            candidate.originX() + 38, candidate.originZ() + 16)),
                     candidate.originX(), candidate.originY() + 1, candidate.originZ() - 7);
         }
         @Override public List<String> validatePrepared(Prepared structure, MacroTerrain terrain) {
