@@ -1,7 +1,7 @@
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
-import io.github.luoyan.adventureworldgen.planner.OrganicTemperatureField;
+import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
 import com.google.gson.JsonParser;
 import java.awt.*;
 import java.awt.image.BufferedImage;
