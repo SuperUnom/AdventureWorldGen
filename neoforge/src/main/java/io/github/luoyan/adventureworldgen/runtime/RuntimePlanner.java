@@ -11,7 +11,6 @@ import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
-import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
@@ -20,7 +19,6 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.erosion.ErosionGenerator;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,8 +26,6 @@ import org.slf4j.LoggerFactory;
 /** Deterministic stage orchestration; wall-clock time is logging only and never a termination input. */
 public final class RuntimePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RuntimePlanner.class);
-    /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-shelves-diverse-defaults-r33";
     private RuntimePlanner() {}
 
     public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
@@ -47,7 +43,7 @@ public final class RuntimePlanner {
 
     private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                                AdapterRegistry adapters, PlanningProgress.Run progress) {
-        String inputHash = inputHash(seed, loaded, adapters);
+        String inputHash = PlanIdentity.hash(seed, loaded, adapters);
         AtomicPlanRepository repository = new AtomicPlanRepository();
         PlanV2Codec codec = new PlanV2Codec();
         try {
@@ -64,13 +60,7 @@ public final class RuntimePlanner {
         var metrics=new PlanningMetrics();
         double radius = loaded.config().world().radius();
         double spawnRadius = StrictMath.min(256.0, radius / 10.0);
-        double spawnFootprint = loaded.config().spawn().hasStructure()
-                ? adapters.structure(loaded.config().spawn().structure().id()).orElseThrow(() ->
-                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "spawn-reservation",
-                        "spawn structure has no adapter", java.util.Map.of("content_id",
-                        loaded.config().spawn().structure().id()))).describe().maximumFootprintRadius()
-                + StrictMath.hypot(loaded.config().spawn().structure().spawnPoint().x(),
-                loaded.config().spawn().structure().spawnPoint().z()) : 0.0;
+        double spawnFootprint = StructureAdapterBridge.spawnReservationRadius(adapters, loaded.config());
         double keep = spawnRadius + spawnFootprint + StrictMath.min(32.0, radius / 20.0);
         LOGGER.info("AdventureWorldGen planning coast for {} with seed {}", loaded.id(), seed);
         progress.stage(PlanningStage.COAST);
@@ -109,22 +99,8 @@ public final class RuntimePlanner {
         progress.stage(PlanningStage.PLACEMENT);
         var jointPlanner = new JointPlanner(PlannerProfile.V2);
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
-                (demand, x, y, z, structureSeed) -> {
-                    var adapter = adapters.structure(demand.structureId()).orElseThrow(() ->
-                            new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "structure-prepare",
-                                    "no adapter for planned structure", java.util.Map.of("content_id", demand.structureId())));
-                    var rotations = adapter.describe().rotations();
-                    String rotation = rotations.get(Math.floorMod((int) structureSeed, rotations.size()));
-                    var prepared = adapter.prepare(new io.github.luoyan.adventureworldgen.api.StructureAdapter.Candidate(
-                            demand.instanceId(), x, y, z, rotation), structureSeed);
-                    var errors = adapter.validatePrepared(prepared, erodedTerrain);
-                    if (!errors.isEmpty()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
-                            "structure-prepare", "prepared structure failed validation",
-                            java.util.Map.of("instance_id", demand.instanceId(), "errors", errors));
-                    return new AdventurePlanView.PlannedStructure(demand.instanceId(), demand.structureId(), x, y, z,
-                            rotation, prepared.entranceX(), prepared.entranceY(), prepared.entranceZ(),
-                            prepared.footprint(), prepared.biomeProtection(), prepared.pieces());
-                }, new JointPlanner.LevelConstraint() {
+                new StructureAdapterBridge(adapters, erodedTerrain),
+                new JointPlanner.LevelConstraint() {
                     public boolean accepts(int level,int x,int z) { return true; }
                     public double penalty(int level,int x,int z) {
                         return io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(level,
@@ -168,13 +144,5 @@ public final class RuntimePlanner {
         try { metrics.write(worldDirectory,seed,plan); }
         catch(IOException unavailable) { LOGGER.warn("Could not write planning timing diagnostics",unavailable); }
         return plan;
-    }
-
-    public static String inputHash(long seed, LoadedProfile loaded, AdapterRegistry adapters) {
-        String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
-                + "\nimplementation=" + IMPLEMENTATION_REVISION
-                + "\nhydrology=" + PlannerProfile.V2.hydrologyVersion() + "\nterrain=terrain-r22\nadapters="
-                + String.join(",", adapters.versionKeys()) + "\ncost=directed-cost-16x8-v1\nerosion=ftf-erosion-block-units-v2";
-        return AtomicPlanRepository.sha256(input.getBytes(StandardCharsets.UTF_8));
     }
 }

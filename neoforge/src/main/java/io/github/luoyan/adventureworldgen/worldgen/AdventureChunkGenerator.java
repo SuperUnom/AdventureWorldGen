@@ -331,7 +331,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override public void addDebugScreenInfo(List<String> lines, RandomState randomState, BlockPos pos) {
         MacroSample sample = RuntimePlanRegistry.await(profile).terrainAt(pos.getX(), pos.getZ());
         lines.add("AdventureWorldGen " + sample.terrainVersion());
-        lines.add(io.github.luoyan.adventureworldgen.runtime.RuntimePlanner.IMPLEMENTATION_REVISION);
+        lines.add(io.github.luoyan.adventureworldgen.runtime.PlanIdentity.IMPLEMENTATION_REVISION);
         lines.add("Region " + sample.regionId() + " / " + sample.terrainTemplate() + " / " + sample.recipe());
         if(sample.secondaryWeight()>0)lines.add("Composite " + sample.secondaryRecipe() + " @ " + String.format(java.util.Locale.ROOT,"%.2f",sample.secondaryWeight()));
         lines.add(String.format(java.util.Locale.ROOT,"%s slope %.2f relief %.1f range %.2f",sample.landform(),sample.slope(),sample.localRelief(),sample.mountainInfluence()));
