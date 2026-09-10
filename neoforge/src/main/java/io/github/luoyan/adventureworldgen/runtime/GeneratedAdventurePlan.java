@@ -9,7 +9,6 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
-import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
@@ -130,13 +129,13 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this.terrain = terrainStack.terrain();
         if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
             throw new IllegalArgumentException("incomplete frozen biome layout");
-        climate=prepared!=null?prepared.climate():new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},observer,frozenLayout==null?null:frozenLayout.climate());
-        if(frozenLayout==null)observer.stage(PlanningStage.FILLER);
-        environmentRules=new io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules(config,climate);
-        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,environmentRules,observer,frozenLayout==null?null:frozenLayout.filler());
-        if(frozenLayout==null)observer.stage(PlanningStage.TRANSITION);
-        double y = terrain.sample(0, 0).groundSurface() + 1.0;
-        this.spawn = frozenSpawn == null ? new SpawnPosition(0.5, StrictMath.ceil(y), 0.5, 0) : frozenSpawn;
+        // Layout assembly lives in PlanAssembly; the plan keeps the steps that need its own queries.
+        PlanAssembly.Layout layout = PlanAssembly.layout(seed, config, terrain, this.biomePatches, frozenLayout,
+                prepared == null ? null : prepared.climate(), observer);
+        climate = layout.climate();
+        environmentRules = layout.rules();
+        filler = layout.filler();
+        this.spawn = PlanAssembly.spawn(terrain, frozenSpawn);
         if(frozenLayout==null)protectMinimumAreas();
         else {
             var ids=this.biomePatches.stream().map(PlannedBiomePatch::patchId).collect(java.util.stream.Collectors.toSet());
