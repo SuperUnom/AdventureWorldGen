@@ -18,6 +18,7 @@ import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain;
@@ -124,7 +125,8 @@ class PlanningBaselineTest {
                         costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                         "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"),
                 erosion, capacities, null,
-                new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()));
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()),
+                PlanningObserver.NONE);
     }
 
     /**

@@ -83,17 +83,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout) {
         this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null);
-    }
-    GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
-                                  RiverNetwork riverNetwork, double seaSurface, double landBand,
-                                  double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
-                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
-                                  PlanDiagnostics diagnostics, ErosionDeltaField erosion,
-                                  io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
-                                  BiomeLayout frozenLayout, PlanningInputs prepared) {
-        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,prepared,PlanningObserver.NONE);
+                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null,PlanningObserver.NONE);
     }
     GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
