@@ -7,6 +7,7 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 
 /** Infinite, world-aligned jittered Voronoi regions with continuous shared-boundary blending. */
 public final class RegionTerrain {

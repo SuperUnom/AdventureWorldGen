@@ -4,6 +4,7 @@ import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongArrayFIFOQueue;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import java.util.function.LongPredicate;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /** Connectivity queries for one biome and one unchanged ownership snapshot. */
 final class ConnectedCapacityProbe {

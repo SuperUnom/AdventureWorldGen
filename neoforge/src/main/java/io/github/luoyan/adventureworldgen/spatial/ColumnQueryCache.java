@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.runtime;
+package io.github.luoyan.adventureworldgen.spatial;
 
 import java.util.concurrent.atomic.AtomicReferenceArray;
 import java.util.function.BiFunction;

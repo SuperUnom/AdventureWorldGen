@@ -32,10 +32,10 @@ class PlanV2CodecTest {
           """);
         var coast=new Coastline(List.of(new Vec2(-1000,-1000),new Vec2(1000,-1000),new Vec2(1000,1000),new Vec2(-1000,1000)));
         var network=new RiverNetwork(List.of(),List.of(),PlannerProfile.V2.hydrologyVersion());
-        var mask=new io.github.luoyan.adventureworldgen.planner.CellMask(new long[]{
-                io.github.luoyan.adventureworldgen.planner.CellMask.key(-4,-4),
-                io.github.luoyan.adventureworldgen.planner.CellMask.key(4,4),
-                io.github.luoyan.adventureworldgen.planner.CellMask.key(200,0)});
+        var mask=new io.github.luoyan.adventureworldgen.spatial.CellMask(new long[]{
+                io.github.luoyan.adventureworldgen.spatial.CellMask.key(-4,-4),
+                io.github.luoyan.adventureworldgen.spatial.CellMask.key(4,4),
+                io.github.luoyan.adventureworldgen.spatial.CellMask.key(200,0)});
         var patch=new PlannedBiomePatch("patch/test",new ContentId("minecraft:forest"),0,-4,-4,204,8,mask,4,4);
         var capacities=new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(List.of(
                 new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation(0,0,

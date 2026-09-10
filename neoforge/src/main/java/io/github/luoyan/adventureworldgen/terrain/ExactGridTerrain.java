@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
-import io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache;
+import io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache;
 
 /** Bounded memoization of exact integer/half-block queries on an immutable surface.
  * All other coordinates use the continuous function directly, without quantization. */

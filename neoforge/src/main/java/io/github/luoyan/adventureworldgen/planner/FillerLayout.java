@@ -5,8 +5,9 @@ import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /** Frozen variable-spacing seeds and multi-source frontier growth over remaining land. */
 public final class FillerLayout {
@@ -17,7 +18,7 @@ public final class FillerLayout {
     private final AdventureWorldConfig config;
     private final ClimatePlan climate;
     private final ValueNoise shape;
-    private final io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp boundaryWarp;
+    private final io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp boundaryWarp;
     private final List<ContentId> pool;
     private final List<Seed> seeds=new ArrayList<>();
     private final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingInt(Edge::band).thenComparingDouble(Edge::cost)
@@ -41,7 +42,7 @@ public final class FillerLayout {
                         PlanningObserver observer,State frozen) {
         this.progress=observer.within(PlanningStage.FILLER);
         this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
-        boundaryWarp=new io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp(seed,"filler/boundary",1);
+        boundaryWarp=new io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp(seed,"filler/boundary",1);
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
         long size=(long)width*width;

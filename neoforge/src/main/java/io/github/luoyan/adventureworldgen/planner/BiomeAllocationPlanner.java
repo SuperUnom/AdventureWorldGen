@@ -3,11 +3,12 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 import java.util.function.DoubleConsumer;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {

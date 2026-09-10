@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.planner;
 
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 
 /** Smooth anisotropic catchment preference. Connectivity comes from the legal-cell frontier. */
 public final class OrganicGrowth {

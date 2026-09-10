@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.terrain;
+package io.github.luoyan.adventureworldgen.noise;
 
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 

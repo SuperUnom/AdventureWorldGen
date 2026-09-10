@@ -1,6 +1,7 @@
 package io.github.luoyan.adventureworldgen.plan;
 
 import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /**
  * One planned biome patch: a concrete occurrence of a biome with its own ownership,
@@ -13,7 +14,7 @@ import io.github.luoyan.adventureworldgen.config.ContentId;
  */
 public record PlannedBiomePatch(String patchId, ContentId biomeId, int adventureLevel,
                                 int minX, int minZ, int maxXExclusive, int maxZExclusive,
-                                io.github.luoyan.adventureworldgen.planner.CellMask mask, int anchorX, int anchorZ) {
+                                CellMask mask, int anchorX, int anchorZ) {
     public PlannedBiomePatch(String id, ContentId biome, int level, int minX, int minZ, int maxX, int maxZ) {
         this(id, biome, level, minX, minZ, maxX, maxZ, null, (minX + maxX) / 2, (minZ + maxZ) / 2);
     }
@@ -22,8 +23,8 @@ public record PlannedBiomePatch(String patchId, ContentId biomeId, int adventure
         if (minX >= maxXExclusive || minZ >= maxZExclusive) throw new IllegalArgumentException("empty biome patch");
         if (mask != null && !mask.contains(anchorX, anchorZ)) throw new IllegalArgumentException("anchor outside ownership mask");
         if (mask != null) for (long cell : mask.cells()) {
-            int x = io.github.luoyan.adventureworldgen.planner.CellMask.x(cell);
-            int z = io.github.luoyan.adventureworldgen.planner.CellMask.z(cell);
+            int x = CellMask.x(cell);
+            int z = CellMask.z(cell);
             if (x < minX || z < minZ || x >= maxXExclusive || z >= maxZExclusive)
                 throw new IllegalArgumentException("ownership outside patch bounds");
         }

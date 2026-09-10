@@ -11,6 +11,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
@@ -272,8 +273,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         if(patch.mask()!=null) {
             // Disconnected regions may span the continent; visit ownership, not empty bounds.
             for(long cell:patch.mask().cells()) {
-                int x=io.github.luoyan.adventureworldgen.planner.CellMask.x(cell)+2;
-                int z=io.github.luoyan.adventureworldgen.planner.CellMask.z(cell)+2;
+                int x=io.github.luoyan.adventureworldgen.spatial.CellMask.x(cell)+2;
+                int z=io.github.luoyan.adventureworldgen.spatial.CellMask.z(cell)+2;
                 if(terrain.sample(x,z).waterKind()==WaterKind.NONE&&biomeAt(x,64,z).equals(patch.biomeId()))cells++;
             }
             return cells*16;

@@ -1,6 +1,7 @@
 package io.github.luoyan.adventureworldgen.planner;
 
 import java.util.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /** Integral bipartite b-matching. Alternating paths repair greedy claims without dropping a quota. */
 public final class QuotaAssignment {

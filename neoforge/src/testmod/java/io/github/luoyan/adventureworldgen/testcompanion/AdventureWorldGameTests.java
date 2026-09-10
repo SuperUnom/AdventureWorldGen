@@ -226,9 +226,9 @@ public final class AdventureWorldGameTests {
             var queue=new java.util.ArrayDeque<Long>();queue.add(first);long area=0;
             while(!queue.isEmpty()) {
                 long cell=queue.removeFirst();area+=16;
-                int x=io.github.luoyan.adventureworldgen.planner.CellMask.x(cell),z=io.github.luoyan.adventureworldgen.planner.CellMask.z(cell);
+                int x=io.github.luoyan.adventureworldgen.spatial.CellMask.x(cell),z=io.github.luoyan.adventureworldgen.spatial.CellMask.z(cell);
                 for(int[] d:new int[][]{{4,0},{-4,0},{0,4},{0,-4}}) {
-                    long next=io.github.luoyan.adventureworldgen.planner.CellMask.key(x+d[0],z+d[1]);
+                    long next=io.github.luoyan.adventureworldgen.spatial.CellMask.key(x+d[0],z+d[1]);
                     if(remaining.remove(next))queue.add(next);
                 }
             }

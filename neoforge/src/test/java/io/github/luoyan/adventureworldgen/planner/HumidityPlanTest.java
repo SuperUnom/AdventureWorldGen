@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 class HumidityPlanTest {
     private static final ContentId DESERT=new ContentId("minecraft:desert");

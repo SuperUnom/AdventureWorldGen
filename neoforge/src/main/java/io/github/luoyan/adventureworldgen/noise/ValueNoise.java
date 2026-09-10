@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.terrain;
+package io.github.luoyan.adventureworldgen.noise;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;

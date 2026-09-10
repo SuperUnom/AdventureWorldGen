@@ -1,5 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
+
 /** Shared shelf/slope/deep-basin height field for planning and Minecraft columns. */
 public final class OceanBathymetry {
     private final ValueNoise basins, hills, detail, shelfWidth;

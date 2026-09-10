@@ -15,8 +15,8 @@ public final class IslandMacroTerrain implements MacroTerrain {
     private final double seaBand;
     private final OceanBathymetry bathymetry;
     private final String version;
-    private final io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<Byte> coastTiles =
-            new io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<>(16384);
+    private final io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache<Byte> coastTiles =
+            new io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache<>(16384);
     private record CoastTile(int x,int z,byte saturation) {}
     private final ThreadLocal<CoastTile> lastCoastTile=new ThreadLocal<>();
 

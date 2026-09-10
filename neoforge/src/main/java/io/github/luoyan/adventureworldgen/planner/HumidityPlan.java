@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.HumidityType;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 import java.util.function.DoubleConsumer;
 

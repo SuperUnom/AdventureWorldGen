@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 import io.github.luoyan.adventureworldgen.config.ContentId;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 
 /** Smooth bounded domain warp for biome ownership. The callback must read raw ownership,
  * never this mixed result. Unlike a full-radius random direction at every query, the two

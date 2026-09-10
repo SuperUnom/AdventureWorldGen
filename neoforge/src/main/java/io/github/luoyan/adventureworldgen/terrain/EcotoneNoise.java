@@ -1,5 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
+
 /** Spatially correlated selection threshold: coherent islands, with a wandering broad transition.
  * This is not independent per-block dithering, nor a coordinate offset of one contour. */
 public final class EcotoneNoise {

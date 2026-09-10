@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.spatial;
 
 import java.nio.ByteBuffer;
 import java.util.Arrays;

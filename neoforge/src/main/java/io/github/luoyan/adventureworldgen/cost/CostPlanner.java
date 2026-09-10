@@ -24,7 +24,7 @@ public final class CostPlanner {
         var bounds = new CostDistanceMap.Bounds(-extent, extent, -extent, extent);
         if (bounds.nodeCount() > profile.maximumCostNodes())
             throw new IllegalArgumentException("cost bounds exceed configured maximum");
-        var samples = new io.github.luoyan.adventureworldgen.runtime.ColumnQueryCache<io.github.luoyan.adventureworldgen.api.MacroSample>(SAMPLE_CACHE_CAPACITY);
+        var samples = new io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache<io.github.luoyan.adventureworldgen.api.MacroSample>(SAMPLE_CACHE_CAPACITY);
         java.util.function.BiFunction<Integer,Integer,io.github.luoyan.adventureworldgen.api.MacroSample> query =
                 (x,z) -> terrain.sample(x,z);
         MacroTerrain cachedTerrain = (x,z) -> {

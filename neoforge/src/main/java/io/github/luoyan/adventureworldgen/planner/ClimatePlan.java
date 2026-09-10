@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 
 /** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */

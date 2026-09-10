@@ -302,7 +302,7 @@ public final class PlanV2Codec {
             result.add(new PlannedBiomePatch(string(item, "patch_id"),
                     new ContentId(string(item, "biome")), exactInt(item, "adventure_level"), exactInt(item, "min_x"),
                     exactInt(item, "min_z"), exactInt(item, "max_x_exclusive"), exactInt(item, "max_z_exclusive"),
-                    item.has("cells_base64") ? io.github.luoyan.adventureworldgen.planner.CellMask.decode(string(item, "cells_base64")) : null,
+                    item.has("cells_base64") ? io.github.luoyan.adventureworldgen.spatial.CellMask.decode(string(item, "cells_base64")) : null,
                     item.has("cells_base64") ? exactInt(item, "anchor_x") : (exactInt(item,"min_x") + exactInt(item,"max_x_exclusive"))/2,
                     item.has("cells_base64") ? exactInt(item, "anchor_z") : (exactInt(item,"min_z") + exactInt(item,"max_z_exclusive"))/2));
         }
