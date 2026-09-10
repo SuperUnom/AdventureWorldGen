@@ -57,7 +57,7 @@ public final class ClimateDiagnostics {
             for (int i = 0; i < weights.length; i++)
                 distribute(sites, field, d.allowedBiomes().get(i), d.area().target() * weights[i] / total, required);
         }
-        for (var id : config.biomes().filler()) distribute(sites, field, id, ClimatePlan.weight(config, id), filler);
+        for (var id : config.biomes().filler()) distribute(sites, field, id, BiomeEnvironmentRules.weight(config, id), filler);
         double rt = Arrays.stream(required).sum(), ft = Arrays.stream(filler).sum();
         double[] ratios = new double[4];
         for (int i = 0; i < 4; i++) ratios[i] = .8 * (rt > 0 ? required[i] / rt : 1.0 / 4) + .2 * (ft > 0 ? filler[i] / ft : 1.0 / 4);
@@ -88,7 +88,7 @@ public final class ClimateDiagnostics {
     }
 
     private void distribute(List<Site> sites, TemperatureField field, ContentId id, double amount, double[] out) {
-        var prefs = ClimatePlan.preferences(config, id);
+        var prefs = BiomeEnvironmentRules.preferences(config, id);
         double[] shares = new double[4];
         for (var e : prefs.entrySet()) {
             double land = 1;
@@ -109,7 +109,7 @@ public final class ClimateDiagnostics {
     }
 
     private long climateArea(List<Site> sites, TemperatureField field, ContentId id) {
-        var prefs = ClimatePlan.preferences(config, id);
+        var prefs = BiomeEnvironmentRules.preferences(config, id);
         return sites.stream().filter(s -> config.biomes().allows(id, s.sample)
                 && prefs.containsKey(TemperatureType.values()[field.band(s.x, s.z, s.sample)])).count() * step * step;
     }

@@ -71,11 +71,12 @@ class DemandClimateTest {
           """);
         assertEquals(c,parser.parse(CanonicalConfigJson.write(c)));
         var climate=new ClimatePlan(7331,c,FLAT);
+        var rules=new BiomeEnvironmentRules(c,climate);
         var types=java.util.EnumSet.noneOf(AdventureWorldConfig.TemperatureType.class);
         for(int x=-500;x<500;x+=16)for(int z=-500;z<500;z+=16) {
             var t=climate.typeAt(x+2,z+2,FLAT.sample(x,z));types.add(t);
             assertEquals(t==AdventureWorldConfig.TemperatureType.VERY_COLD,
-                climate.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
+                rules.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
             assertTrue(climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
         }
         // Fixed geography does not manufacture all four bands on a small, flat island.

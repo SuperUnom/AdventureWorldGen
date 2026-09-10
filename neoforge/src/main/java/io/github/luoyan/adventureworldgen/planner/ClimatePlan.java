@@ -19,7 +19,6 @@ public final class ClimatePlan {
     private final String temperatureField;
     private final OrganicTemperatureField organic;
     private HumidityPlan humidity;
-    private final List<ContentId> shores;
     private final ValueNoise regional, detail, warpX, warpZ, foothills;
     private final int heightExtent,heightWidth;
     private final double[] slopeHeight,regionalHeight;
@@ -63,7 +62,6 @@ public final class ClimatePlan {
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
                        PlanningObserver observer,State frozen) {
-        shores=config.biomes().filler().stream().filter(id->{var r=config.biomes().terrainRules().get(id);return r!=null&&r.shoreOnly();}).toList();
         this.config=config;
         temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
         if(temperatureField!=null&&!OrganicTemperatureField.VERSION.equals(temperatureField))
@@ -120,7 +118,7 @@ public final class ClimatePlan {
         ContentId spawn=config.spawn().biome();
         if(spawn==null&&config.spawn().hasStructure())spawn=config.structures().stream()
                 .filter(s->s.id().equals(config.spawn().structure().id())).flatMap(s->s.allowedBiomes().ids().stream()).findFirst().orElse(config.biomes().filler().getFirst());
-        spawnType=preferences(config,spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
+        spawnType=BiomeEnvironmentRules.preferences(config,spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
                 .thenComparing(e->-e.getKey().ordinal())).orElseThrow().getKey();
         angle=(DeterministicRandom.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;
         var diagnostics=new ClimateDiagnostics(config,STEP);
@@ -212,44 +210,7 @@ public final class ClimatePlan {
     }
     /** Legacy API: native snowfall never restricts configured biome ownership. */
     public boolean allowsSnowClass(ContentId id,double x,double z,MacroSample sample) { return true; }
-    public int temperatureDistance(ContentId id,double x,double z,MacroSample sample) {
-        int band=typeAt(x,z,sample).ordinal(),best=3;
-        for(var type:preferences(config,id).keySet())best=Math.min(best,Math.abs(type.ordinal()-band));
-        return best;
-    }
     public HumidityPlan humidity(){return humidity;}
-    /** Configured climate types are admission rules; weights only rank legal candidates. */
-    public boolean allowsEnvironment(ContentId id,double x,double z,MacroSample sample) {
-        double qx=Math.floor(x/4)*4+2,qz=Math.floor(z/4)*4+2;
-        if(!prefersType(id,qx,qz,sample)||!humidity.allows(id,qx,qz,sample))return false;
-        var rule=config.biomes().terrainRules().get(id);
-        if(rule!=null&&rule.shoreOnly())return humidity.isShore(qx,qz,sample);
-        if(shores.isEmpty()||!humidity.isShore(qx,qz,sample))return true;
-        for(var shore:shores)if(config.biomes().allows(shore,sample)&&prefersType(shore,qx,qz,sample)
-                &&humidity.allows(shore,qx,qz,sample))return false;
-        return true;
-    }
-    public boolean prefersType(ContentId id,double x,double z,MacroSample sample) {
-        return preferences(config,id).containsKey(typeAt(x,z,sample));
-    }
-    public double cost(ContentId id,double x,double z,MacroSample sample) {
-        double value=valueAt(x,z,sample),best=Double.POSITIVE_INFINITY;
-        var prefs=preferences(config,id);double max=prefs.values().stream().mapToDouble(Double::doubleValue).max().orElse(1);
-        for(var e:prefs.entrySet()) {
-            double center=1.25+2.5*e.getKey().ordinal();
-            double deviation=Math.max(0,Math.abs(center-value)-.8);
-            best=Math.min(best,deviation*deviation*.4-Math.log(e.getValue()/max)*.3);
-        }
-        var rule=config.biomes().terrainRules().get(id);
-        return best+(rule==null?0:rule.heightCost(sample.groundSurface()))+(humidity==null?0:humidity.cost(id,x,z,sample));
-    }
-    public static Map<TemperatureType,Double> preferences(AdventureWorldConfig config,ContentId id) {
-        var rule=config.biomes().terrainRules().get(id);
-        return rule==null?TemperatureType.unrestricted():rule.temperatures();
-    }
-    public static double weight(AdventureWorldConfig config,ContentId id) {
-        var rule=config.biomes().terrainRules().get(id);return rule==null?1:rule.fillerWeight();
-    }
     public double[] targetRatios(){return ratios.clone();}
     public double[] actualRatios(){return actual.clone();}
     public List<ClimateDiagnostics.Supply> supply(){return List.copyOf(supply);}

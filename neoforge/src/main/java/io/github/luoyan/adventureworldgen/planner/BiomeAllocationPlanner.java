@@ -29,7 +29,7 @@ public final class BiomeAllocationPlanner {
     private long operations;
     private AdventureWorldConfig config;
     private PlacementIndex index;
-    private ClimatePlan climate;
+    private BiomeEnvironmentRules rules;
     private List<PlannedBiomePatch> reservations;
     private final Long2IntOpenHashMap owner=new Long2IntOpenHashMap();
     private final List<Region> regions=new ArrayList<>();
@@ -58,17 +58,17 @@ public final class BiomeAllocationPlanner {
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations) {
-        return allocate(seed,config,index,demands,reservations,new ClimatePlan(seed,config,index::sampleAt),PlanningObserver.NONE,ignored->{});
+        return allocate(seed,config,index,demands,reservations,new BiomeEnvironmentRules(config,new ClimatePlan(seed,config,index::sampleAt)),PlanningObserver.NONE,ignored->{});
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
-                           ClimatePlan climate,DoubleConsumer progress) {
-        return allocate(seed,config,index,demands,reservations,climate,PlanningObserver.NONE,progress);
+                           BiomeEnvironmentRules rules,DoubleConsumer progress) {
+        return allocate(seed,config,index,demands,reservations,rules,PlanningObserver.NONE,progress);
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
-                           ClimatePlan climate,PlanningObserver observer,DoubleConsumer progress) {
-        this.config=config;this.index=index;this.reservations=reservations;this.climate=climate;this.progress=progress;
+                           BiomeEnvironmentRules rules,PlanningObserver observer,DoubleConsumer progress) {
+        this.config=config;this.index=index;this.reservations=reservations;this.rules=rules;this.progress=progress;
         this.observer=observer;
         operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
         String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
@@ -142,9 +142,9 @@ public final class BiomeAllocationPlanner {
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
             throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core",
                     "spawn cell violates configured terrain/climate or land constraints",
-                    Map.of("biome",r.biome,"temperature",climate.typeAt(2,2,index.sample(0,0)),
-                            "allowed_temperatures",ClimatePlan.preferences(config,r.biome).keySet(),
-                            "humidity",climate.humidity().typeAt(2,2,index.sample(0,0))));
+                    Map.of("biome",r.biome,"temperature",rules.temperature().typeAt(2,2,index.sample(0,0)),
+                            "allowed_temperatures",BiomeEnvironmentRules.preferences(config,r.biome).keySet(),
+                            "humidity",rules.humidity().typeAt(2,2,index.sample(0,0))));
         }
         boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
                 StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
@@ -173,9 +173,9 @@ public final class BiomeAllocationPlanner {
                 for(int[] d:DIR)if(!legal(r,p.x()+d[0]*clearance/4,p.z()+d[1]*clearance/4))capacity+=2;
                 double u=Math.max(1e-12,(DeterministicRandom.mix(p.cell()^salt)>>>11)*0x1.0p-53);
                 // Temperature wins; deterministic jitter breaks close suitability ties.
-                double score=climate.cost(r.biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()))*3
+                double score=rules.cost(r.biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()))*3
                         +4*index.penalty(r.demand.adventureLevel(),p)+crowd+capacity+Math.log(-Math.log(u))*.35;
-                int band=climate.temperatureDistance(biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()));
+                int band=rules.temperatureDistance(biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()));
                 var candidate=new Ranked(p,biome,band,score);var bucket=ranked.get(band);
                 if(bucket.size()<1024)bucket.add(candidate);
                 else if(SEED_ORDER.compare(candidate,bucket.peek())<0){bucket.remove();bucket.add(candidate);}
@@ -266,8 +266,8 @@ public final class BiomeAllocationPlanner {
             if(close)continue;
             ContentId best=null;int bestBand=4;double score=Double.POSITIVE_INFINITY;
             for(var biome:config.biomes().filler()) {
-                if(!index.allows(biome,point.x(),point.z())||!climate.allowsEnvironment(biome,point.x(),point.z(),index.sample(point.x(),point.z())))continue;
-                int band=climate.temperatureDistance(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()));
+                if(!index.allows(biome,point.x(),point.z())||!rules.allows(biome,point.x(),point.z(),index.sample(point.x(),point.z())))continue;
+                int band=rules.temperatureDistance(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()));
                 if(band>bestBand)continue;
                 double density=0;
                 for(var r:regions)if(r.biome.equals(biome))density+=Math.exp(-Math.pow(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())/384,2));
@@ -275,9 +275,9 @@ public final class BiomeAllocationPlanner {
                 double level=rule!=null&&rule.adventureLevel()!=null?rule.adventureLevel():config.biomes().required().stream()
                         .filter(r->r.id().equals(biome)).mapToInt(AdventureWorldConfig.RequiredBiome::adventureLevel).average().orElse(5);
                 double u=Math.max(1e-12,(DeterministicRandom.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
-                double cost=climate.cost(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()))*6+density*.15
+                double cost=rules.cost(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()))*6+density*.15
                         +Math.pow((level-10*Math.hypot(point.x(),point.z())/config.world().radius())/5,2)
-                        +Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,biome));
+                        +Math.log(-Math.log(u))-Math.log(BiomeEnvironmentRules.weight(config,biome));
                 if(band<bestBand||cost<score){score=cost;best=biome;bestBand=band;}
             }
             if(best==null)continue;
@@ -363,8 +363,8 @@ public final class BiomeAllocationPlanner {
     }
     private void queue(Region r,int ownerIndex,int x,int z,double next) {
         long cell=CellMask.key(x,z);r.queued.add(cell);var sample=index.sample(x,z);
-        double environment=climate.cost(r.biome,x+2,z+2,sample);
-        int band=climate.temperatureDistance(r.biome,x+2,z+2,sample);
+        double environment=rules.cost(r.biome,x+2,z+2,sample);
+        int band=rules.temperatureDistance(r.biome,x+2,z+2,sample);
         int support=0;for(int[] side:DIR)if(owner.get(CellMask.key(x+side[0],z+side[1]))==ownerIndex)support++;
         // Four-neighbour path length is a Manhattan metric: it produces diamonds and
         // straight competition fronts. Connectivity still comes from the frontier, while
@@ -385,7 +385,7 @@ public final class BiomeAllocationPlanner {
         boolean valid=Math.hypot(x,z)<=config.world().radius();
         if(valid)for(var p:reservations)if(p.contains(x,z)){valid=false;break;}
         if(valid)valid=index.allows(r.biome,x,z)
-                &&climate.allowsEnvironment(r.biome,x,z,index.sample(x,z));
+                &&rules.allows(r.biome,x,z,index.sample(x,z));
         cache.put(cell,(byte)(valid?1:2));
         return valid;
     }

@@ -55,7 +55,8 @@ class HumidityPlanTest {
     }
     @Test void beachesOnlyUseOceanShoresAndRemainIntermittent() {
         var c=config();var climate=new ClimatePlan(7331,c,TERRAIN);var h=climate.humidity();
-        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),climate);
+        var rules=new BiomeEnvironmentRules(c,climate);
+        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),rules);
         int riverBeaches=0,riverOther=0,oceanBeaches=0,oceanOther=0,snowBeaches=0;
         for(int z=-950;z<=950;z+=4) {
             for(int x:new int[]{246,638}) {
@@ -65,14 +66,14 @@ class HumidityPlanTest {
                 else {if(beach)oceanBeaches++;else oceanOther++;}
                 if(id.equals(SNOW_BEACH))snowBeaches++;
                 if(beach)assertEquals(id.equals(SNOW_BEACH),climate.typeAt(x,z,s)==AdventureWorldConfig.TemperatureType.VERY_COLD);
-                assertTrue(climate.allowsEnvironment(id,x,z,s));
+                assertTrue(rules.allows(id,x,z,s));
             }
         }
         assertEquals(0,riverBeaches,"river banks must not become beach biomes");
         assertTrue(riverOther>0);
         assertTrue(oceanBeaches>0&&oceanOther>0,"coast should contain both beach and other biomes");
         assertEquals(0,snowBeaches,"the accepted field does not create a snow band on this flat warm shore");
-        assertFalse(climate.allowsEnvironment(BEACH,0,400,land(66)),"beaches cannot spread inland");
+        assertFalse(rules.allows(BEACH,0,400,land(66)),"beaches cannot spread inland");
         assertFalse(h.isShore(638,400,land(100)),"cliffs cannot become beaches");
         assertFalse(h.isShore(274,400,TERRAIN.sample(274,400)),"the river bed remains water");
         assertFalse(h.isShore(246,400,TERRAIN.sample(246,400)),"a dry river bank is not an ocean shore");
@@ -83,20 +84,21 @@ class HumidityPlanTest {
                 List.of(new AdventureWorldConfig.RequiredBiome("desert",DESERT,3,new AdventureWorldConfig.AreaRange(4096,8192))),
                 base.biomes().filler(),base.biomes().terrainRules()),List.of());
         var climate=new ClimatePlan(7331,c,TERRAIN);
+        var rules=new BiomeEnvironmentRules(c,climate);
         var result=new JointPlanner(PlannerProfile.V2).plan(7331,c,TERRAIN,(d,x,y,z,s)->{throw new AssertionError();});
         assertTrue(result.patches().stream().anyMatch(p->p.biomeId().equals(DESERT)&&p.area()>=4096));
         for(var patch:result.patches())for(long cell:patch.mask().cells()) {
             int x=CellMask.x(cell)+2,z=CellMask.z(cell)+2;
             var sample=TERRAIN.sample(x,z);
             assertEquals(WaterKind.NONE,sample.waterKind());
-            assertTrue(climate.allowsEnvironment(patch.biomeId(),x,z,sample),patch.patchId());
+            assertTrue(rules.allows(patch.biomeId(),x,z,sample),patch.patchId());
         }
     }
     @Test void humidityAndFillerReloadWithoutResamplingTerrain() {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN);
         var frozen=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},ignored->{},original.snapshot());
-        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),original);
-        var restored=new FillerLayout(7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),frozen,filler.snapshot());
+        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),new BiomeEnvironmentRules(c,original));
+        var restored=new FillerLayout(7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),new BiomeEnvironmentRules(c,frozen),filler.snapshot());
         assertArrayEquals(original.humidity().actualRatios(),frozen.humidity().actualRatios());
         for(int z=-900;z<900;z+=37)for(int x=-900;x<650;x+=37) {
             var s=TERRAIN.sample(x,z);
@@ -112,11 +114,12 @@ class HumidityPlanTest {
         MacroTerrain composite=(x,z)->new MacroSample(100,Double.NaN,WaterKind.NONE,false,"r","plains","r21",
                 "plains","hills_2",.3,0,0,0,0);
         var climate=new ClimatePlan(9,c,composite);
-        var filler=new FillerLayout(9,c,composite,List.of(),climate);
+        var rules=new BiomeEnvironmentRules(c,climate);
+        var filler=new FillerLayout(9,c,composite,List.of(),rules);
         for(int x=-450;x<450;x+=19)for(int z=-450;z<450;z+=19) {
             var sample=composite.sample(x,z);var id=filler.biomeAt(x,z,sample);
             assertEquals(new ContentId("example:forest"),id);
-            assertTrue(climate.allowsEnvironment(id,x,z,sample));
+            assertTrue(rules.allows(id,x,z,sample));
             assertNotEquals(AdventureWorldConfig.HumidityType.DRY,climate.humidity().typeAt(x,z,sample));
         }
     }

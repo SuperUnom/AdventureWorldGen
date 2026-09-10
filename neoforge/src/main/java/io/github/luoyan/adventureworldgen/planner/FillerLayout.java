@@ -20,7 +20,7 @@ public final class FillerLayout {
     private final int[] labels;
     private final MacroSample[] environment;
     private final AdventureWorldConfig config;
-    private final ClimatePlan climate;
+    private final BiomeEnvironmentRules rules;
     private final ValueNoise shape;
     private final io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp boundaryWarp;
     private final List<ContentId> pool;
@@ -36,16 +36,16 @@ public final class FillerLayout {
     public record State(int extent,int[] labels,int seedCount) {}
     public State snapshot(){return new State(extent,labels.clone(),seedCount());}
     private final java.util.function.DoubleConsumer progress;
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate) {
-        this(seed,config,terrain,patches,climate,null);
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules) {
+        this(seed,config,terrain,patches,rules,null);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,State frozen) {
-        this(seed,config,terrain,patches,climate,PlanningObserver.NONE,frozen);
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,State frozen) {
+        this(seed,config,terrain,patches,rules,PlanningObserver.NONE,frozen);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,
                         PlanningObserver observer,State frozen) {
         this.progress=observer.within(PlanningStage.FILLER);
-        this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
+        this.worldSeed=seed;this.config=config;this.rules=rules;pool=config.biomes().filler();
         boundaryWarp=new io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp(seed,"filler/boundary",1);
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
@@ -121,19 +121,19 @@ public final class FillerLayout {
         return allows(id,x(cell),z(cell),environment[cell]);
     }
     private boolean allows(ContentId id,int x,int z,MacroSample sample) {
-        return config.biomes().allows(id,sample)&&climate.allowsEnvironment(id,x,z,sample);
+        return config.biomes().allows(id,sample)&&rules.allows(id,x,z,sample);
     }
     private int choose(int cell) {
         int best=-1,bestBand=4;double score=Double.POSITIVE_INFINITY;
         for(int b=0;b<pool.size();b++) {
             ContentId id=pool.get(b);if(!allows(id,cell))continue;
-            int band=climate.temperatureDistance(id,x(cell)+2,z(cell)+2,environment[cell]);
+            int band=rules.temperatureDistance(id,x(cell)+2,z(cell)+2,environment[cell]);
             if(band>bestBand)continue;
             double density=0;
             for(var s:seeds)if(s.biome==b)density+=Math.exp(-Math.pow(Math.hypot(x(cell)-x(s.cell),z(cell)-z(s.cell))/384,2));
             double u=Math.max(1e-12,(DeterministicRandom.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
-            double value=climate.cost(id,x(cell)+2,z(cell)+2,environment[cell])*7+density*.12
-                    +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,id));
+            double value=rules.cost(id,x(cell)+2,z(cell)+2,environment[cell])*7+density*.12
+                    +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(BiomeEnvironmentRules.weight(config,id));
             if(band<bestBand||value<score){score=value;best=b;bestBand=band;}
         }
         if(best<0)throw noLegalFiller(x(cell),z(cell),environment[cell]);
@@ -143,7 +143,7 @@ public final class FillerLayout {
         return Double.isFinite(levels[biome])?Math.pow((levels[biome]-10*Math.hypot(x(cell),z(cell))/config.world().radius())/4,2):0;
     }
     private void enqueue(int cell,int seed,double cost) {
-        int band=climate.temperatureDistance(pool.get(seeds.get(seed).biome),x(cell)+2,z(cell)+2,environment[cell]);
+        int band=rules.temperatureDistance(pool.get(seeds.get(seed).biome),x(cell)+2,z(cell)+2,environment[cell]);
         frontier.add(new Edge(cell,seed,band,cost));
     }
     private void flood() {
@@ -157,8 +157,8 @@ public final class FillerLayout {
             if((assigned&511)==0)progress.accept(.4+.55*assigned/Math.max(1.0,total));
             for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1&&allows(id,n)) {
                 double distance=stepDistance(i,n);
-                double step=distance*(1+climate.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
-                        +STEP*climate.temperatureDistance(id,x(n)+2,z(n)+2,environment[n])*8
+                double step=distance*(1+rules.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
+                        +STEP*rules.temperatureDistance(id,x(n)+2,z(n)+2,environment[n])*8
                         +4*(1+shape.sample(x(n),z(n)));
                 enqueue(n,edge.seed,edge.cost+step);
             }
@@ -182,8 +182,8 @@ public final class FillerLayout {
                 for(int n:neighbors(i))if(n>=0&&labels[n]>=0){support.merge(labels[n],1,Integer::sum);if(labels[n]==labels[i])own++;}
                 if(own>3)continue;
                 for(var e:support.entrySet())if(e.getValue()>=5&&allows(pool.get(e.getKey()),i)
-                        &&climate.temperatureDistance(pool.get(e.getKey()),x(i)+2,z(i)+2,environment[i])
-                        <=climate.temperatureDistance(pool.get(labels[i]),x(i)+2,z(i)+2,environment[i])){next[i]=e.getKey();break;}
+                        &&rules.temperatureDistance(pool.get(e.getKey()),x(i)+2,z(i)+2,environment[i])
+                        <=rules.temperatureDistance(pool.get(labels[i]),x(i)+2,z(i)+2,environment[i])){next[i]=e.getKey();break;}
             }
             System.arraycopy(next,0,labels,0,labels.length);
         }
@@ -204,16 +204,16 @@ public final class FillerLayout {
         int best=-1,bestBand=4;double score=-1;
         for(int b=0;b<pool.size();b++) {
             if(support[b]<=0||!allows(pool.get(b),x,z,sample))continue;
-            int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
+            int band=rules.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
             if(band<bestBand||(band==bestBand&&support[b]>score)){score=support[b];best=b;bestBand=band;}
         }
         if(bestBand>0) {
             double fallbackScore=Double.POSITIVE_INFINITY;
             int localBand=bestBand;
             for(int b=0;b<pool.size();b++)if(allows(pool.get(b),x,z,sample)) {
-                int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
+                int band=rules.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
                 if(band>bestBand||(best>=0&&band>=localBand))continue;
-                double cost=climate.cost(pool.get(b),x,z,sample)-Math.log(ClimatePlan.weight(config,pool.get(b)))*.1;
+                double cost=rules.cost(pool.get(b),x,z,sample)-Math.log(BiomeEnvironmentRules.weight(config,pool.get(b)))*.1;
                 if(band<bestBand||cost<fallbackScore){fallbackScore=cost;best=b;bestBand=band;}
             }
         }
@@ -230,7 +230,7 @@ public final class FillerLayout {
                 "no filler satisfies biomes.terrain_rules; add coverage for this terrain, temperature and humidity",
                 Map.of("x",x,"z",z,"terrain",sample.terrainTemplate(),"recipe",sample.recipe(),
                         "secondary",sample.secondaryRecipe(),"landform",sample.landform(),
-                        "humidity",climate.humidity().typeAt(qx,qz,sample),"temperature",climate.typeAt(qx,qz,sample)));
+                        "humidity",rules.humidity().typeAt(qx,qz,sample),"temperature",rules.temperature().typeAt(qx,qz,sample)));
     }
     public int seedCount(){return restoredSeedCount>=0?restoredSeedCount:seeds.size();}
     private int x(int i){return (i%width-extent)*STEP;}

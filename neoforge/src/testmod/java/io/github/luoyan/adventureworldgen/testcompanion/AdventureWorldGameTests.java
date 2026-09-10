@@ -201,6 +201,7 @@ public final class AdventureWorldGameTests {
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("windswept")).count()==4,"new windswept filler candidates disappeared");
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("badlands")).count()==3,"new badlands filler candidates disappeared");
         int mountains = 0, openHotLand = 0;
+        var environmentRules = new io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules(config, plan.climate());
         for (int z = -3000; z < 3000; z += 32) for (int x = -3000; x < 3000; x += 32) {
             var terrain = plan.terrainAt(x+2,z+2);
             if (terrain.waterKind() == io.github.luoyan.adventureworldgen.api.WaterKind.OCEAN) continue;
@@ -209,7 +210,7 @@ public final class AdventureWorldGameTests {
             if(terrain.waterKind()==io.github.luoyan.adventureworldgen.api.WaterKind.NONE) {
                 // Temperature preferences can fall back across bands. Native snowfall does not
                 // override author configuration; frozen moisture and shore rules remain mandatory.
-                helper.assertTrue(plan.climate().allowsEnvironment(biome,x+2,z+2,terrain),
+                helper.assertTrue(environmentRules.allows(biome,x+2,z+2,terrain),
                         "biome violates frozen environment: "+biome+" at "+x+","+z);
             }
             if (terrain.terrainTemplate().equals("mountains")) mountains++;

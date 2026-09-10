@@ -21,11 +21,12 @@ class StrictClimateTest {
         MacroTerrain terrain=(x,z)->new MacroSample(80+150*Math.exp(-x*x/(80.0*80)),
                 Double.NaN,WaterKind.NONE,false,"r","mountains","test");
         var climate=new ClimatePlan(7331,config,terrain);
-        var filler=new FillerLayout(7331,config,terrain,List.of(),climate);
+        var rules=new BiomeEnvironmentRules(config,climate);
+        var filler=new FillerLayout(7331,config,terrain,List.of(),rules);
         // Also exercise query fallback when every nearby stored label is snowy.
         var state=filler.snapshot();int[] snowyLabels=state.labels().clone();
         Arrays.fill(snowyLabels,config.biomes().filler().indexOf(new ContentId("minecraft:snowy_slopes")));
-        var warped=new FillerLayout(7331,config,terrain,List.of(),climate,
+        var warped=new FillerLayout(7331,config,terrain,List.of(),rules,
                 new FillerLayout.State(state.extent(),snowyLabels,1));
         Set<TemperatureType> seen=EnumSet.noneOf(TemperatureType.class);
         for(int z=-242;z<244;z+=4)for(int x=-242;x<244;x+=4) {
@@ -47,9 +48,9 @@ class StrictClimateTest {
             "test:legacy":{"temperature_level":0}}}}
           """);
         for(var c:List.of(config,parser.parse(CanonicalConfigJson.write(config)))) {
-            assertEquals(TemperatureType.unrestricted(),ClimatePlan.preferences(c,new ContentId("test:plain")));
-            assertEquals(TemperatureType.unrestricted(),ClimatePlan.preferences(c,new ContentId("test:terrain_only")));
-            assertEquals(Map.of(TemperatureType.VERY_COLD,1.0),ClimatePlan.preferences(c,new ContentId("test:legacy")));
+            assertEquals(TemperatureType.unrestricted(),BiomeEnvironmentRules.preferences(c,new ContentId("test:plain")));
+            assertEquals(TemperatureType.unrestricted(),BiomeEnvironmentRules.preferences(c,new ContentId("test:terrain_only")));
+            assertEquals(Map.of(TemperatureType.VERY_COLD,1.0),BiomeEnvironmentRules.preferences(c,new ContentId("test:legacy")));
         }
     }
 

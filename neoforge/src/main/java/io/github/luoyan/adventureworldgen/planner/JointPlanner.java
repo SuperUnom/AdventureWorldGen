@@ -26,6 +26,7 @@ public final class JointPlanner {
     private final PlannerProfile profile;
     private PlacementIndex placementIndex;
     private ClimatePlan climate;
+    private BiomeEnvironmentRules rules;
 
     public JointPlanner(PlannerProfile profile) { this.profile = profile; }
 
@@ -70,15 +71,16 @@ public final class JointPlanner {
         checkpoint.accept("index");
         observer.stage(PlanningStage.TEMPERATURE);
         climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null);
+        rules=new BiomeEnvironmentRules(config,climate);
         checkpoint.accept("climate");
         observer.stage(PlanningStage.SEEDS);
-        BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsEnvironment(biome,x,z,placementIndex.sample(x,z));
+        BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&rules.allows(biome,x,z,placementIndex.sample(x,z));
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
                 "Placement index built in {0} ms", (System.nanoTime() - indexStart) / 1_000_000);
 
         progress.accept(0.4);
         long assignmentStart = System.nanoTime();
-        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),climate,observer,value -> {
+        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),rules,observer,value -> {
             var stage=value<.18?PlanningStage.SEEDS:PlanningStage.GROWTH;
             observer.within(stage).accept(value<.18?value/.18:(value-.18)/.82);
         });
@@ -146,7 +148,7 @@ public final class JointPlanner {
             }
             candidates.sort(java.util.Comparator.comparingDouble((PlacementIndex.Point p)->
                     levels.penalty(demand.adventureLevel(),p.x(),p.z())*4
-                    +climate.cost(carrier.biomeId(),p.x()+2,p.z()+2,placementIndex.sample(p.x(),p.z()))*3
+                    +rules.cost(carrier.biomeId(),p.x()+2,p.z()+2,placementIndex.sample(p.x(),p.z()))*3
                     +Math.hypot(p.x()-carrier.anchorX(),p.z()-carrier.anchorZ())/Math.max(32,Math.sqrt(carrier.area()))
                     +(DeterministicRandom.mix(salt^p.cell())>>>11)*0x1.0p-53*.35).thenComparingLong(PlacementIndex.Point::cell));
             for(var point:candidates) {

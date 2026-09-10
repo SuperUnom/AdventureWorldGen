@@ -29,6 +29,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private static final ContentId OCEAN = new ContentId("minecraft:ocean");
     private final long seed;
     private final io.github.luoyan.adventureworldgen.planner.ClimatePlan climate;
+    private final io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules environmentRules;
     private final io.github.luoyan.adventureworldgen.planner.FillerLayout filler;
     private final java.util.Set<String> blendProtectedPatches=new java.util.HashSet<>();
     private final AdventureWorldConfig config;
@@ -134,7 +135,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             throw new IllegalArgumentException("incomplete frozen biome layout");
         climate=prepared!=null?prepared.climate():new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},observer,frozenLayout==null?null:frozenLayout.climate());
         if(frozenLayout==null)observer.stage(PlanningStage.FILLER);
-        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate,observer,frozenLayout==null?null:frozenLayout.filler());
+        environmentRules=new io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules(config,climate);
+        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,environmentRules,observer,frozenLayout==null?null:frozenLayout.filler());
         if(frozenLayout==null)observer.stage(PlanningStage.TRANSITION);
         double y = terrain.sample(0, 0).groundSurface() + 1.0;
         this.spawn = frozenSpawn == null ? new SpawnPosition(0.5, StrictMath.ceil(y), 0.5, 0) : frozenSpawn;
@@ -191,7 +193,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             int qx=Math.floorDiv(nx,4)*4+2,qz=Math.floorDiv(nz,4)*4+2;
             var nearby=terrain.sample(qx,qz);
             return nearby.waterKind()==WaterKind.NONE?landBiomeAt(qx,qz,nearby):fallback;
-        },id->config.biomes().allows(id,sample)&&climate.allowsEnvironment(id,x,z,sample),fallback);
+        },id->config.biomes().allows(id,sample)&&environmentRules.allows(id,x,z,sample),fallback);
     }
 
     private double spawnPositionX(){return spawn==null?0:spawn.x();}
