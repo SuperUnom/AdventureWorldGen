@@ -184,8 +184,18 @@ public final class AdventureWorldGameTests {
     private static void assertTerrainBiomes(GameTestHelper helper, GeneratedAdventurePlan plan,
             io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config) {
         helper.assertTrue(config.biomes().required().size() == 23, "default woodland/mountain requirements disappeared");
+        var supply = new java.util.HashMap<String, Long>();
+        for (var entry : plan.climate().supply()) supply.put(entry.biome(), entry.climateArea());
         for (var required : config.biomes().required()) {
-            var patch = plan.biomePatches().stream().filter(p -> p.patchId().equals(required.patchId())).findFirst().orElseThrow();
+            var patch = plan.biomePatches().stream().filter(p -> p.patchId().equals(required.patchId())).findFirst().orElse(null);
+            if (patch == null) {
+                // r29: a demand with no legal position records zero supply and may be absent, so a
+                // missing patch is no longer a failure by itself. It must still agree with the plan's
+                // own supply record - a biome with legal climate area cannot simply disappear.
+                helper.assertTrue(supply.getOrDefault(required.id().value(), 0L) == 0,
+                        "required biome disappeared although the plan recorded legal climate area: " + required.id());
+                continue;
+            }
             long area = 0;
             for (int z = patch.minZ() + 2; z < patch.maxZExclusive(); z += 4)
                 for (int x = patch.minX() + 2; x < patch.maxXExclusive(); x += 4) if (patch.contains(x,z)) {
@@ -193,10 +203,17 @@ public final class AdventureWorldGameTests {
                     helper.assertTrue(config.biomes().allows(required.id(),plan.terrainAt(x,z)), "required biome spills onto forbidden terrain");
                     area += 16;
                 }
-            helper.assertTrue(area >= required.area().min() && area <= required.area().max(), "required area is incorrect");
-            helper.assertTrue(plan.effectiveArea(patch)>=required.area().min(),"mixing or water consumed minimum effective area");
-            helper.assertTrue(largestComponentArea(patch) == area,
-                    "required biome lost its main contiguous body: " + required.id());
+            // r29 accepts the achieved area when legal supply cannot reach the request, and keeps the
+            // configured maximum as a hard ceiling. Its own final check is the comparison below:
+            // mixing may not drop a patch below the smaller of the request and the achieved area.
+            helper.assertTrue(area <= required.area().max(), "required area exceeds its configured maximum: " + required.id());
+            helper.assertTrue(plan.effectiveArea(patch) >= Math.min(required.area().min(), patch.area()),
+                    "mixing or water consumed the achieved area: " + required.id());
+            long owned = 0;
+            for (long body : componentAreas(patch)) owned += body;
+            // One demand may cover several legal regions whose areas add up, so a single body is not
+            // required. What must still hold: the ownership set is exactly what the loop above walked.
+            helper.assertTrue(owned == area, "recorded ownership does not match its components: " + required.id());
         }
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("windswept")).count()==4,"new windswept filler candidates disappeared");
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("badlands")).count()==3,"new badlands filler candidates disappeared");
@@ -219,10 +236,18 @@ public final class AdventureWorldGameTests {
         helper.assertTrue(mountains > 100 && openHotLand > 50, "terrain-rule test lacks mountain/open hot land coverage");
     }
 
-    private static long largestComponentArea(PlannedBiomePatch patch) {
+    /**
+     * Areas of the disconnected ownership bodies of one patch, largest first.
+     *
+     * <p>Ownership is a sparse set of quart cells that are 4x4 blocks each; neighbours are the four
+     * 4-block steps and diagonals do not connect. r29 allows one demand to cover several legal
+     * regions whose areas add up, so callers must treat a multi-body patch as normal and only
+     * require that the bodies account for the whole recorded area.
+     */
+    private static long[] componentAreas(PlannedBiomePatch patch) {
         var remaining=new java.util.HashSet<Long>();
         for(long cell:patch.mask().cells())remaining.add(cell);
-        long largest=0;
+        var areas=new java.util.ArrayList<Long>();
         while(!remaining.isEmpty()) {
             long first=remaining.iterator().next();remaining.remove(first);
             var queue=new java.util.ArrayDeque<Long>();queue.add(first);long area=0;
@@ -234,9 +259,12 @@ public final class AdventureWorldGameTests {
                     if(remaining.remove(next))queue.add(next);
                 }
             }
-            largest=Math.max(largest,area);
+            areas.add(area);
         }
-        return largest;
+        areas.sort(java.util.Comparator.reverseOrder());
+        long[] result=new long[areas.size()];
+        for(int i=0;i<result.length;i++)result[i]=areas.get(i);
+        return result;
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
