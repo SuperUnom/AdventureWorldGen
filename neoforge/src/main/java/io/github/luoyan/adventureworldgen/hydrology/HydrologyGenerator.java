@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.hydrology;
 
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;

@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.hydrology;
 
-import io.github.luoyan.adventureworldgen.terrain.GradientNoise;
+import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.ArrayList;
 import java.util.HashMap;

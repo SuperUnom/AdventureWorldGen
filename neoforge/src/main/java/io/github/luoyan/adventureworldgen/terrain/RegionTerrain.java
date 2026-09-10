@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 

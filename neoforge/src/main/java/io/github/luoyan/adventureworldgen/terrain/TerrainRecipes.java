@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 
 import java.util.*;
 import java.util.function.DoubleUnaryOperator;
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** FTF 43fd42a4 Populators/VolcanoPopulator function graphs with upstream Perlin/Ridge/Billow kernels.
  * Shapes have mathematical [0,1] bounds; block amplitude replaces upstream Levels/B/V units.

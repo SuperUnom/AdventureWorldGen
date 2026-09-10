@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import java.util.*;
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 
 /** Frozen meandering range corridors planned before terrain, erosion, rivers and biome ownership. */

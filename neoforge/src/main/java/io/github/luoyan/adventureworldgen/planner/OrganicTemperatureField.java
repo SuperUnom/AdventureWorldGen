@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.planner;
 
-import io.github.luoyan.adventureworldgen.terrain.GradientNoise;
+import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 import java.util.function.DoubleBinaryOperator;
 
 /** Accepted preview v7: immutable, world-aligned climate, independent of biome demand. */

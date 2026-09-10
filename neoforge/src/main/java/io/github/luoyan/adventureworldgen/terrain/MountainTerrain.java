@@ -1,5 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
+import io.github.luoyan.adventureworldgen.noise.GradientNoise;
+
 /** Adapted FTF Populators.makeMountains / PerlinRidge, fixed upstream 43fd42a4.
  * Uses project seed/hash semantics; not an upstream bit-for-bit port. See META-INF/NOTICE. */
 public final class MountainTerrain {

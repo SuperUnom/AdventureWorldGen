@@ -1,6 +1,5 @@
-package io.github.luoyan.adventureworldgen.terrain;
+package io.github.luoyan.adventureworldgen.noise;
 
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
 
 /** Seeded gradient noise with quintic interpolation, for warped terrain function graphs. */
 public final class GradientNoise {

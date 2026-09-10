@@ -1,10 +1,11 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.*;
+import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 
 /** FTF UpliftContinentGenerator adaptation: warped Voronoi edge field, frozen as a contour.
  * A single connected continent is selected; the radius scales its extent, never clips it to a circle. */

@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** Stable bounded placement of the minimum legal patch/structure solution before optional optimization. */
 public final class JointPlanner {
