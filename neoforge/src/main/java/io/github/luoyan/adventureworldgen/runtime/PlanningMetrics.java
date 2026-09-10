@@ -6,8 +6,29 @@ import java.util.Map;
 import java.nio.file.*;
 import java.io.IOException;
 
-/** Diagnostic timing only; deliberately excluded from deterministic plan bytes and random inputs. */
+/**
+ * Diagnostic timing and statistics for one planning run, written next to the plan.
+ *
+ * <p>Wall-clock and heap observations only: deliberately excluded from the plan bytes, the input
+ * identity and every random input, so a slow or fast run changes nothing about the result. The
+ * orchestrator only brackets its stages with {@link #finish(Stage)}; what a stage is called, and
+ * what the file contains, stays here.
+ */
 final class PlanningMetrics {
+    /**
+     * The stages this file reports. The key strings are the JSON keys of {@code stage_ms}, so
+     * renaming one changes the diagnostics file, not the plan.
+     */
+    enum Stage {
+        COAST("coast"), CAPACITY_RESERVATION("capacity_reservation"), EROSION("erosion"), RIVERS("rivers"),
+        COST_GRAPH("cost_graph"), FILLER_AND_TRANSITION("filler_and_transition"), VALIDATION("validation"),
+        SAVE("save");
+
+        private final String key;
+        Stage(String key) { this.key = key; }
+        String key() { return key; }
+    }
+
     private final Map<String,Long> millis=new LinkedHashMap<>();
     private long previous=System.nanoTime(), observedHeap;
     private final com.google.gson.JsonArray adventure=new com.google.gson.JsonArray();
@@ -21,8 +42,20 @@ final class PlanningMetrics {
             adventure.add(entry);
         }
     }
-    void finish(String stage) {
-        long now=System.nanoTime(); millis.put(stage,(now-previous)/1_000_000); previous=now;
+    void finish(Stage stage) {
+        record(stage.key());
+    }
+
+    /**
+     * Joint planning reports its intermediate checkpoints by name; they share the same timeline, so
+     * the diagnostics file keeps one ordered map of stage and checkpoint durations.
+     */
+    void finish(String checkpoint) {
+        record(checkpoint);
+    }
+
+    private void record(String key) {
+        long now=System.nanoTime(); millis.put(key,(now-previous)/1_000_000); previous=now;
         observedHeap=Math.max(observedHeap,Runtime.getRuntime().totalMemory()-Runtime.getRuntime().freeMemory());
     }
     void write(Path world,long seed,GeneratedAdventurePlan plan) throws IOException {

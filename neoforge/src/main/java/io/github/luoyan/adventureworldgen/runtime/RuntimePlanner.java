@@ -61,10 +61,10 @@ public final class RuntimePlanner {
         LOGGER.info("AdventureWorldGen planning coast for {} with seed {}", loaded.id(), seed);
         progress.stage(PlanningStage.COAST);
         var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, radius, keep);
-        metrics.finish("coast");
+        metrics.finish(PlanningMetrics.Stage.COAST);
         LOGGER.info("AdventureWorldGen planning continuous regions for {}", loaded.id());
         var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(seed,loaded.config(),coast.coastline(),coast.landBand());
-        metrics.finish("capacity_reservation");
+        metrics.finish(PlanningMetrics.Stage.CAPACITY_RESERVATION);
         var terrainFoundation = PlanTerrain.foundation(seed, loaded.config(), capacities, coast.coastline(),
                 64.0, coast.landBand(), coast.seaBand(), "terrain-r22");
         LOGGER.info("AdventureWorldGen simulating and freezing erosion delta field for {}", loaded.id());
@@ -74,20 +74,20 @@ public final class RuntimePlanner {
         int erosionSize = erosionExtent * 2 / erosionSpacing + 1;
         var erosion = new ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, terrainFoundation.island(), -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningStage.EROSION));
-        metrics.finish("erosion");
+        metrics.finish(PlanningMetrics.Stage.EROSION);
         var erodedIsland = terrainFoundation.eroded(erosion);
         LOGGER.info("AdventureWorldGen planning {} hydrology for {}", PlannerProfile.V2.hydrologyVersion(), loaded.id());
         progress.stage(PlanningStage.RIVERS);
         var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, radius, 64.0, coast.coastline(), erodedIsland);
-        metrics.finish("rivers");
+        metrics.finish(PlanningMetrics.Stage.RIVERS);
         // Planning queries keep the memoizing wrapper warm; the same stack is handed to the plan.
         var planningTerrain = PlanTerrain.compose(terrainFoundation, erodedIsland, rivers).withMemoizedQueries();
         var erodedTerrain = planningTerrain.terrain();
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
         progress.stage(PlanningStage.COSTS);
         var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
-        metrics.finish("cost_graph");
+        metrics.finish(PlanningMetrics.Stage.COST_GRAPH);
         LOGGER.info("AdventureWorldGen cost graph has {} nodes and {} canonical edges for {}",
                 costs.nodeCount(), costs.edgeStats().computations(), loaded.id());
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
@@ -112,7 +112,7 @@ public final class RuntimePlanner {
                 costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                 "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,null,
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
-        metrics.finish("filler_and_transition");
+        metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
         progress.stage(PlanningStage.VALIDATION);
         // The policy compares request against achieved area; reporting and failure text stay here.
         io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.checkAchievedAreas(loaded.config(),
@@ -123,7 +123,7 @@ public final class RuntimePlanner {
                     else LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
                             relaxation.patchId(), relaxation.requested(), relaxation.achieved());
                 });
-        metrics.finish("validation");
+        metrics.finish(PlanningMetrics.Stage.VALIDATION);
         metrics.adventure(joint.patches(),costs,radius);
         progress.stage(PlanningStage.SAVE);
         try {
@@ -132,7 +132,7 @@ public final class RuntimePlanner {
             throw new IllegalStateException("could not atomically publish AdventureWorldGen plan", failure);
         }
         LOGGER.info("AdventureWorldGen plan READY for {} in {} ms", loaded.id(), (System.nanoTime() - started) / 1_000_000);
-        metrics.finish("save");
+        metrics.finish(PlanningMetrics.Stage.SAVE);
         try { metrics.write(worldDirectory,seed,plan); }
         catch(IOException unavailable) { LOGGER.warn("Could not write planning timing diagnostics",unavailable); }
         return plan;
