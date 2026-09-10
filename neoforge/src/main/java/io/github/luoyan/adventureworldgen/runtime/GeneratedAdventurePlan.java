@@ -48,7 +48,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final PlanDiagnostics diagnostics;
     private final ErosionDeltaField erosion;
     private final io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities;
-    private final io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend blockBlend;
+    private final io.github.luoyan.adventureworldgen.biome.LocalBiomeBlend blockBlend;
     private final ColumnQueryCache<MacroSample> columnSamples = new ColumnQueryCache<>(16384);
     private final ColumnQueryCache<ContentId> columnBiomes;
 
@@ -106,7 +106,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         java.util.Objects.requireNonNull(observer,"observer");
         this.capacities=capacities;
         this.seed = seed;
-        this.blockBlend=new io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend(seed,config.biomes().blendRadius());
+        this.blockBlend=new io.github.luoyan.adventureworldgen.biome.LocalBiomeBlend(seed,config.biomes().blendRadius());
         this.config = config;
         this.coastline = coastline;
         this.riverNetwork = riverNetwork;

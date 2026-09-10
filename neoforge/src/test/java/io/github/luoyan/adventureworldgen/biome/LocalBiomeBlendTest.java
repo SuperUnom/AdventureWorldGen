@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.terrain;
+package io.github.luoyan.adventureworldgen.biome;
 
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import org.junit.jupiter.api.Test;

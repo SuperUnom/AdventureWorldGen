@@ -74,6 +74,14 @@ class PackageBoundaryTest {
                 "io.github.luoyan.adventureworldgen.runtime");
     }
 
+    @Test
+    void biomeStrategiesDoNotDependOnPlanningOrGameLifecycle() throws IOException {
+        // Biome ownership, transition and water-biome strategies read environment fields and plan
+        // data; they must not reach into the solver or the runtime session.
+        assertNoImport("biome", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime");
+    }
+
     private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
         Path directory = SOURCE_ROOT.resolve(pkg);
         assumeTrue(Files.isDirectory(directory), "source tree not found at " + directory.toAbsolutePath());
