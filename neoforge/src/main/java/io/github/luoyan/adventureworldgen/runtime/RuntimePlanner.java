@@ -104,14 +104,14 @@ public final class RuntimePlanner {
                     }
                 }, (biome, x, z) -> adapters.biome(biome)
                         .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress, progress.within(PlanningStage.PLACEMENT), metrics::finish);
-        GeneratedAdventurePlan plan = new GeneratedAdventurePlan(seed, loaded.config(), coast.coastline(), rivers,
+        GeneratedAdventurePlan plan = GeneratedAdventurePlan.fromPlanning(seed, loaded.config(), coast.coastline(), rivers,
                 64.0, coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
                 joint.patches(), joint.structures(), new io.github.luoyan.adventureworldgen.plan.PlanDiagnostics(
                 coast.vertexCount(), rivers.channels().size(),
                 rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
                 costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
-                "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,null,
+                "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
         metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
         progress.stage(PlanningStage.VALIDATION);

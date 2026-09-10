@@ -116,7 +116,7 @@ class PlanningBaselineTest {
                     }
                 }, (biome, x, z) -> true, ignored -> { }, ignored -> { });
 
-        return new GeneratedAdventurePlan(SEED, config, coast.coastline(), rivers, 64.0,
+        return GeneratedAdventurePlan.fromPlanning(SEED, config, coast.coastline(), rivers, 64.0,
                 coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
                 joint.patches(), joint.structures(),
                 new PlanDiagnostics(coast.vertexCount(), rivers.channels().size(),
@@ -124,7 +124,7 @@ class PlanningBaselineTest {
                         (long) erosion.width() * erosion.height(), erosion.operationCount(),
                         costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                         "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"),
-                erosion, capacities, null,
+                erosion, capacities,
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()),
                 PlanningObserver.NONE);
     }

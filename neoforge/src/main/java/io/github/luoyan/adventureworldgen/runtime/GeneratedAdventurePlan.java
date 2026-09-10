@@ -85,7 +85,31 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
                 biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null,PlanningObserver.NONE);
     }
-    GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
+    /**
+     * First planning entry: this run just computed the layout, so its objects are reused and nothing
+     * is frozen. {@code prepared} is required — a first planning run always has the objects it built.
+     * Use {@link #restore(AdventureWorldConfig, PlanSnapshot)} to rebuild a plan from a decoded
+     * payload instead; that path takes the frozen layout and rebuilds the rest.
+     */
+    static GeneratedAdventurePlan fromPlanning(long seed, AdventureWorldConfig config, Coastline coastline,
+                                              RiverNetwork riverNetwork, double seaSurface, double landBand,
+                                              double seaBand, String terrainVersion, SpawnPosition spawn,
+                                              List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                              PlanDiagnostics diagnostics, ErosionDeltaField erosion,
+                                              io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
+                                              PlanningInputs prepared, PlanningObserver observer) {
+        return new GeneratedAdventurePlan(seed, config, coastline, riverNetwork, seaSurface, landBand, seaBand,
+                terrainVersion, spawn, biomePatches, structures, diagnostics, erosion, capacities, null,
+                java.util.Objects.requireNonNull(prepared, "prepared"), observer);
+    }
+
+    /**
+     * The one constructor that assembles a plan. {@code frozenLayout} is the decoded layout of a
+     * READY payload and {@code prepared} the objects of a first planning run; both are null only for
+     * a plan built from explicit geometry (tests and read-only tools). Private so callers cannot mix
+     * a frozen layout with first-planning objects: use {@link #fromPlanning} or {@link #restore}.
+     */
+    private GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
