@@ -1,4 +1,5 @@
 package io.github.luoyan.adventureworldgen.runtime;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -10,7 +11,7 @@ final class PlanningMetrics {
     private final Map<String,Long> millis=new LinkedHashMap<>();
     private long previous=System.nanoTime(), observedHeap;
     private final com.google.gson.JsonArray adventure=new com.google.gson.JsonArray();
-    void adventure(java.util.List<GeneratedAdventurePlan.PlannedBiomePatch> patches,
+    void adventure(java.util.List<PlannedBiomePatch> patches,
                    io.github.luoyan.adventureworldgen.cost.CostPlanner.Result costs,double radius) {
         for(var patch:patches) {
             if(patch.patchId().startsWith("filler/"))continue;

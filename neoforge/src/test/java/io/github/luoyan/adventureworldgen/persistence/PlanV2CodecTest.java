@@ -18,6 +18,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 class PlanV2CodecTest {
     @Test
@@ -34,7 +35,7 @@ class PlanV2CodecTest {
                 io.github.luoyan.adventureworldgen.planner.CellMask.key(-4,-4),
                 io.github.luoyan.adventureworldgen.planner.CellMask.key(4,4),
                 io.github.luoyan.adventureworldgen.planner.CellMask.key(200,0)});
-        var patch=new GeneratedAdventurePlan.PlannedBiomePatch("patch/test",new ContentId("minecraft:forest"),0,-4,-4,204,8,mask,4,4);
+        var patch=new PlannedBiomePatch("patch/test",new ContentId("minecraft:forest"),0,-4,-4,204,8,mask,4,4);
         var capacities=new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(List.of(
                 new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation(0,0,
                         io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Template.MOUNTAINS,null,180.0,48)));

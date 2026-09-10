@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
 import java.util.*;
 

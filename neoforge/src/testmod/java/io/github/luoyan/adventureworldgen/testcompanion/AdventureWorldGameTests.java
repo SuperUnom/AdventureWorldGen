@@ -12,6 +12,7 @@ import net.minecraft.nbt.NbtIo;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
@@ -215,7 +216,7 @@ public final class AdventureWorldGameTests {
         helper.assertTrue(mountains > 100 && openHotLand > 50, "terrain-rule test lacks mountain/open hot land coverage");
     }
 
-    private static long largestComponentArea(GeneratedAdventurePlan.PlannedBiomePatch patch) {
+    private static long largestComponentArea(PlannedBiomePatch patch) {
         var remaining=new java.util.HashSet<Long>();
         for(long cell:patch.mask().cells())remaining.add(cell);
         long largest=0;

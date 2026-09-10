@@ -8,11 +8,12 @@ import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 /** A wavy line can cross a scanline many times. Test enclosed 2-D islands on BOTH sides instead. */
 class EcotoneTopologyTest {
     @Test void planningMaskHasNaturalContourWithoutMixedIslands() {
-        var patch = new GeneratedAdventurePlan.PlannedBiomePatch("patch/required/23",new ContentId("minecraft:forest"),5,-128,-128,128,128);
+        var patch = new PlannedBiomePatch("patch/required/23",new ContentId("minecraft:forest"),5,-128,-128,128,128);
         boolean[][] cells = new boolean[80][80];
         long area=0;
         for(int z=0;z<80;z++)for(int x=0;x<80;x++) {

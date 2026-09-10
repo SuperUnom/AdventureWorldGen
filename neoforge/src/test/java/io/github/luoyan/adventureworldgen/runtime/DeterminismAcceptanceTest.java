@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 class DeterminismAcceptanceTest {
     @Test
@@ -33,9 +34,9 @@ class DeterminismAcceptanceTest {
                 new Vec2(512, 512), new Vec2(-512, 512));
         var coast = new Coastline(vertices);
         var rivers = new RiverNetwork(List.of(), List.of(), PlannerProfile.V2.hydrologyVersion());
-        var patches = List.of(new GeneratedAdventurePlan.PlannedBiomePatch(
+        var patches = List.of(new PlannedBiomePatch(
                 "patch/required/0", new ContentId("minecraft:forest"), 3, 96, -32, 160, 32),
-                new GeneratedAdventurePlan.PlannedBiomePatch(
+                new PlannedBiomePatch(
                         "patch/spawn", new ContentId("minecraft:plains"), 0, -128, -128, 128, 128));
         String expectedPlanHash = null;
         for (int run = 0; run < 10; run++) {

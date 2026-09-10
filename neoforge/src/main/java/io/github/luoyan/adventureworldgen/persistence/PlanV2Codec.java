@@ -8,8 +8,10 @@ import com.google.gson.stream.JsonWriter;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
@@ -25,7 +27,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Base64;
 import java.nio.ByteBuffer;
-import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 
 /** Canonical, explicit plan-v2 payload. No runtime random draw is needed to restore coast or water geometry. */
 public final class PlanV2Codec {
@@ -102,7 +103,7 @@ public final class PlanV2Codec {
             Coastline coast = new Coastline(readPoints(array(terrain, "coast"), "$.terrain.coast"));
             RiverNetwork network = readNetwork(object(terrain.get("river_network"), "$.terrain.river_network",
                     Set.of("channels", "version", "wetlands")));
-            List<GeneratedAdventurePlan.PlannedBiomePatch> patches = readPatches(array(terrain, "biome_patches"));
+            List<PlannedBiomePatch> patches = readPatches(array(terrain, "biome_patches"));
             ErosionDeltaField erosion = terrain.has("erosion") ? readErosion(object(terrain.get("erosion"), "$.terrain.erosion",
                     Set.of("deltas_base64", "height", "operation_count", "origin_x", "origin_z", "spacing", "width"))) : null;
             List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
@@ -293,12 +294,12 @@ public final class PlanV2Codec {
         json.endArray();
     }
 
-    private static List<GeneratedAdventurePlan.PlannedBiomePatch> readPatches(JsonArray encoded) {
-        List<GeneratedAdventurePlan.PlannedBiomePatch> result = new ArrayList<>();
+    private static List<PlannedBiomePatch> readPatches(JsonArray encoded) {
+        List<PlannedBiomePatch> result = new ArrayList<>();
         for (JsonElement element : encoded) {
             JsonObject item = object(element, "biome_patch", Set.of("adventure_level", "biome", "max_x_exclusive",
                     "max_z_exclusive", "min_x", "min_z", "patch_id", "cells_base64", "anchor_x", "anchor_z"));
-            result.add(new GeneratedAdventurePlan.PlannedBiomePatch(string(item, "patch_id"),
+            result.add(new PlannedBiomePatch(string(item, "patch_id"),
                     new ContentId(string(item, "biome")), exactInt(item, "adventure_level"), exactInt(item, "min_x"),
                     exactInt(item, "min_z"), exactInt(item, "max_x_exclusive"), exactInt(item, "max_z_exclusive"),
                     item.has("cells_base64") ? io.github.luoyan.adventureworldgen.planner.CellMask.decode(string(item, "cells_base64")) : null,

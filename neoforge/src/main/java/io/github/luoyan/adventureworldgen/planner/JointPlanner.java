@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.ContentId;
-import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,7 +48,7 @@ public final class JointPlanner {
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, java.util.function.DoubleConsumer progress,
                        java.util.function.Consumer<String> checkpoint) {
         var demands = new RequirementExpander().expandMinimum(config);
-        List<GeneratedAdventurePlan.PlannedBiomePatch> patches = new ArrayList<>();
+        List<PlannedBiomePatch> patches = new ArrayList<>();
         List<AdventurePlanView.PlannedStructure> structures = new ArrayList<>();
         Set<String> occupied = new HashSet<>();
         long operations = 0;
@@ -116,7 +116,7 @@ public final class JointPlanner {
     }
 
     private void placeRequiredStructure(long seed,AdventureWorldConfig config,MacroTerrain terrain,
-            StructureFreezer freezer,LevelConstraint levels,GeneratedAdventurePlan.PlannedBiomePatch carrier,
+            StructureFreezer freezer,LevelConstraint levels,PlannedBiomePatch carrier,
             List<AdventurePlanView.PlannedStructure> structures,RequirementExpander.StructureInstanceDemand demand) {
         var settings=config.structures().stream().filter(v->v.id().equals(demand.structureId())).findFirst().orElseThrow();
         long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure-in-biome",demand.instanceId(),0);
@@ -170,7 +170,7 @@ public final class JointPlanner {
     private boolean placeStructure(long seed, AdventureWorldConfig config, MacroTerrain terrain,
                                    StructureFreezer freezer, LevelConstraint levels,
                                    BiomeConstraint biomes,
-                                   List<GeneratedAdventurePlan.PlannedBiomePatch> patches,
+                                   List<PlannedBiomePatch> patches,
                                    List<AdventurePlanView.PlannedStructure> structures, Set<String> occupied,
                                    RequirementExpander.StructureInstanceDemand demand, int proposalSequence,
                                    boolean required) {
@@ -226,15 +226,15 @@ public final class JointPlanner {
         return false;
     }
 
-    private static boolean patchCompatible(GeneratedAdventurePlan.PlannedBiomePatch patch, BiomeConstraint biomes) {
+    private static boolean patchCompatible(PlannedBiomePatch patch, BiomeConstraint biomes) {
         for (int z = patch.minZ() + 2; z < patch.maxZExclusive(); z += 4)
             for (int x = patch.minX() + 2; x < patch.maxXExclusive(); x += 4)
                 if (patch.contains(x, z) && !biomes.accepts(patch.biomeId(), x, z)) return false;
         return true;
     }
 
-    private static GeneratedAdventurePlan.PlannedBiomePatch fitCarrier(
-            GeneratedAdventurePlan.PlannedBiomePatch patch,
+    private static PlannedBiomePatch fitCarrier(
+            PlannedBiomePatch patch,
             List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> protection, long maximumArea) {
         if (protection.isEmpty()) return null;
         int minX = protection.stream().mapToInt(box -> box.minX()).min().orElseThrow();
@@ -244,7 +244,7 @@ public final class JointPlanner {
         int centerX = align4((minX + maxX) / 2), centerZ = align4((minZ + maxZ) / 2);
         for (int size = patch.maxXExclusive() - patch.minX(); ; size += 4) {
             int x = align4(centerX - size / 2), z = align4(centerZ - size / 2);
-            var candidate = new GeneratedAdventurePlan.PlannedBiomePatch(patch.patchId(), patch.biomeId(),
+            var candidate = new PlannedBiomePatch(patch.patchId(), patch.biomeId(),
                     patch.adventureLevel(), x, z, x + size, z + size);
             if (candidate.area() > maximumArea) return null;
             if (protection.stream().allMatch(box -> contains(candidate, box))) return candidate;
@@ -303,13 +303,13 @@ public final class JointPlanner {
                 "spawn structure candidate is not safe at this bounded attempt", Map.of("attempt", attempt));
     }
 
-    private static GeneratedAdventurePlan.PlannedBiomePatch rectangle(String id, ContentId biome, int level,
+    private static PlannedBiomePatch rectangle(String id, ContentId biome, int level,
                                                                         Center center, AdventureWorldConfig.AreaRange area) {
         long minimumCells = area.inCells(4).min();
         int width = StrictMath.max(1, (int) StrictMath.floor(StrictMath.sqrt(minimumCells * 1.8)));
         for (; (long) width * width <= PlannerProfile.V2.maximumAreaCells(); width++) {
             int minX = align4(center.x - width * 2), minZ = align4(center.z - width * 2);
-            var patch = new GeneratedAdventurePlan.PlannedBiomePatch(id, biome, level, minX, minZ,
+            var patch = new PlannedBiomePatch(id, biome, level, minX, minZ,
                     minX + width * 4, minZ + width * 4);
             long actualArea = patch.area();
             if (actualArea < area.min()) continue;
@@ -322,7 +322,7 @@ public final class JointPlanner {
     }
 
     private void validate(AdventureWorldConfig config, RequirementExpander.ExpandedRequirements demands,
-                                 List<GeneratedAdventurePlan.PlannedBiomePatch> patches,
+                                 List<PlannedBiomePatch> patches,
                                  List<AdventurePlanView.PlannedStructure> structures,
                                  AdventurePlanView.SpawnPosition spawn,
                                  MacroTerrain terrain, LevelConstraint levels, BiomeConstraint biomes) {
@@ -457,15 +457,15 @@ public final class JointPlanner {
                 structure.originY() + relative.y(), structure.originZ() + rz, yaw);
     }
     private static int align4(int value) { return Math.floorDiv(value, 4) * 4; }
-    private static boolean overlaps(GeneratedAdventurePlan.PlannedBiomePatch a,
-                                    GeneratedAdventurePlan.PlannedBiomePatch b) {
+    private static boolean overlaps(PlannedBiomePatch a,
+                                    PlannedBiomePatch b) {
         int minX = StrictMath.max(a.minX(), b.minX()), maxX = StrictMath.min(a.maxXExclusive(), b.maxXExclusive());
         int minZ = StrictMath.max(a.minZ(), b.minZ()), maxZ = StrictMath.min(a.maxZExclusive(), b.maxZExclusive());
         for (int x = minX; x < maxX; x += 4) for (int z = minZ; z < maxZ; z += 4)
             if (a.contains(x + 2, z + 2) && b.contains(x + 2, z + 2)) return true;
         return false;
     }
-    private static boolean contains(GeneratedAdventurePlan.PlannedBiomePatch patch,
+    private static boolean contains(PlannedBiomePatch patch,
                                     io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox box) {
         for (int x = align4(box.minX()); x <= box.maxX(); x+=4) for (int z = align4(box.minZ()); z <= box.maxZ(); z+=4)
             if (!patch.contains(x, z)) return false;
@@ -517,7 +517,7 @@ public final class JointPlanner {
         default boolean mightAccept(int level, int x, int z) { return true; }
     }
     @FunctionalInterface public interface BiomeConstraint { boolean accepts(ContentId biome, int x, int z); }
-    public record Result(List<GeneratedAdventurePlan.PlannedBiomePatch> patches,
+    public record Result(List<PlannedBiomePatch> patches,
                          List<AdventurePlanView.PlannedStructure> structures,
                          AdventurePlanView.SpawnPosition spawn, long operationCount) {
         public Result { patches = List.copyOf(patches); structures = List.copyOf(structures); }
