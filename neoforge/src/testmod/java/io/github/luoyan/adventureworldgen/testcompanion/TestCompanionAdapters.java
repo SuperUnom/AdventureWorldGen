@@ -23,15 +23,12 @@ public final class TestCompanionAdapters {
     public static final ContentId WAYSTATION_ID = new ContentId("testcompanion:waystation");
 
     public static final BiomeAdapter ASHEN_GROVE = new BiomeAdapter() {
-        private final SurfacePalette surface = new SurfacePalette(new ContentId("minecraft:podzol"),
-                new ContentId("minecraft:coarse_dirt"), new ContentId("minecraft:stone"), 4);
         @Override public ContentId biomeId() { return ASHEN_GROVE_ID; }
         @Override public String adapterVersion() { return "testcompanion-ashen-grove-v1"; }
         @Override public Compatibility compatibility(MacroSample terrain) {
             boolean allowed = terrain.waterKind() == WaterKind.NONE && !terrain.hazardous();
             return new Compatibility(allowed, allowed ? 0.75 : 0.0, allowed ? "dry custom biome" : "requires dry terrain");
         }
-        @Override public SurfacePalette surface(MacroSample terrain) { return surface; }
     };
 
     public static final StructureAdapter WAYSTATION = new StructureAdapter() {

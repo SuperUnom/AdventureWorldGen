@@ -31,7 +31,7 @@ public final class ChunkQueryGameTests {
 
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)
     public static void nativeMaterialsStillMatchPlan(GameTestHelper helper) {
-        SurfaceGameTests.nativeMaterialsPreservePlannedRelief(helper);
+        SurfaceGameTests.nativeMaterialsAndSurfaceExtensions(helper);
     }
 
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)

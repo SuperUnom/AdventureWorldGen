@@ -249,17 +249,16 @@ public final class AdventureWorldGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
-    public static void externalAdaptersPreserveSurfaceVegetationAndFrozenLoot(GameTestHelper helper) {
+    public static void externalAdaptersPreserveCompatibilityVegetationAndFrozenLoot(GameTestHelper helper) {
         var biomeRegistry = helper.getLevel().registryAccess().registryOrThrow(Registries.BIOME);
         var biome = biomeRegistry.get(ResourceLocation.parse(TestCompanionAdapters.ASHEN_GROVE_ID.value()));
         helper.assertTrue(biome != null, "test companion biome was not loaded from datapack resources");
         helper.assertTrue(biome.getGenerationSettings().features().size() > 9
                         && biome.getGenerationSettings().features().get(9).size() > 0,
                 "test companion biome has no vegetation feature step");
-        var surface = MinecraftAdapters.builtIn().biome(TestCompanionAdapters.ASHEN_GROVE_ID)
-                .surface(plan().terrainAt(0, 0));
-        helper.assertTrue(surface.top().equals(new ContentId("minecraft:podzol")),
-                "external biome adapter surface was not selected");
+        helper.assertTrue(MinecraftAdapters.builtIn().biome(TestCompanionAdapters.ASHEN_GROVE_ID)
+                        == TestCompanionAdapters.ASHEN_GROVE,
+                "external biome compatibility adapter was not selected");
 
         var frozen = plan().structures().stream().filter(item ->
                 item.structureId().equals(TestCompanionAdapters.WAYSTATION_ID)).findFirst().orElseThrow();
@@ -548,7 +547,7 @@ public final class AdventureWorldGameTests {
             }
         }
         int waterColumns = 0, descendingEdges = 0, waterBiomeColumns = 0;
-        java.util.Set<net.minecraft.world.level.block.Block> riverbedMaterials = new java.util.HashSet<>();
+        int protectedBeds = 0;
         for (var pos : positions) {
             var chunk = new net.minecraft.world.level.chunk.ProtoChunk(pos, net.minecraft.world.level.chunk.UpgradeData.EMPTY,
                     level, registries.registryOrThrow(Registries.BIOME), null);
@@ -558,7 +557,23 @@ public final class AdventureWorldGameTests {
             var future = generator.fillFromNoise(net.minecraft.world.level.levelgen.blending.Blender.empty(), random,
                     level.structureManager(), chunk);
             level.getServer().managedBlock(future::isDone); future.join();
+            // Native surfacing must preserve third-party blocks on submerged river/lake beds.
+            var bedMarkers = new java.util.ArrayList<net.minecraft.core.BlockPos>();
+            for (int dx = 0; dx < 16; dx++) for (int dz = 0; dz < 16; dz++) {
+                int x = pos.getMinBlockX() + dx, z = pos.getMinBlockZ() + dz;
+                var sample = generated.terrainAt(x + .5, z + .5);
+                if (sample.waterKind() != io.github.luoyan.adventureworldgen.api.WaterKind.RIVER
+                        && sample.waterKind() != io.github.luoyan.adventureworldgen.api.WaterKind.LAKE) continue;
+                var bed = new net.minecraft.core.BlockPos(x, generated.solidSurfaceAt(x, z, sample) - 1, z);
+                if (!chunk.getBlockState(bed.above()).is(net.minecraft.world.level.block.Blocks.WATER)) continue;
+                chunk.setBlockState(bed, net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK.defaultBlockState(), false);
+                bedMarkers.add(bed);
+            }
             generator.buildPlannedSurface(registries, chunk);
+            for (var bed : bedMarkers)
+                helper.assertTrue(chunk.getBlockState(bed).is(net.minecraft.world.level.block.Blocks.DIAMOND_BLOCK),
+                        "surface overwrote a third-party bed block at " + bed);
+            protectedBeds += bedMarkers.size();
             java.util.Set<net.minecraft.core.BlockPos> updates = new java.util.HashSet<>();
             var processing = chunk.getPostProcessing();
             for (int section = 0; section < processing.length; section++) if (processing[section] != null)
@@ -576,16 +591,6 @@ public final class AdventureWorldGameTests {
                 var surface = new net.minecraft.core.BlockPos(x, top, z);
                 if (chunk.getBlockState(surface).getFluidState().isEmpty()) continue;
                 waterColumns++;
-                if (sample.waterKind() == io.github.luoyan.adventureworldgen.api.WaterKind.RIVER) {
-                    for (int bedY = top - 1; bedY > level.getMinBuildHeight(); bedY--) {
-                        var bed = chunk.getBlockState(new net.minecraft.core.BlockPos(x, bedY, z));
-                        if (bed.blocksMotion()) {
-                            riverbedMaterials.add(bed.getBlock());
-                            helper.assertTrue(!bed.is(net.minecraft.world.level.block.Blocks.GRASS_BLOCK), "underwater riverbed has grass at " + x + "," + z + " biome=" + generated.surfaceBiomeAt(x, z));
-                            break;
-                        }
-                    }
-                }
                 var storedBiome = chunk.getNoiseBiome(x >> 2, top >> 2, z >> 2);
                 var expectedBiome = ResourceLocation.parse(generated.biomeAt(x, top, z).value());
                 helper.assertTrue(storedBiome.is(net.minecraft.resources.ResourceKey.create(Registries.BIOME, expectedBiome)),
@@ -603,7 +608,7 @@ public final class AdventureWorldGameTests {
                 }
             }
         }
-        helper.assertTrue(riverbedMaterials.size() >= 3, "generated riverbed still uses a uniform material");
+        helper.assertTrue(protectedBeds > 100, "regression did not exercise submerged bed preservation");
         helper.assertTrue(waterBiomeColumns > 100, "river water has no actual river biome palette");
         helper.assertTrue(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current().status()
                         == io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY,

@@ -56,9 +56,5 @@ class PlanIdentityTest {
             return new Compatibility(true, 1.0, "test");
         }
 
-        @Override public SurfacePalette surface(MacroSample terrain) {
-            return new SurfacePalette(new ContentId("test:top"), new ContentId("test:under"),
-                    new ContentId("test:stone"), 3);
-        }
     }
 }

@@ -124,10 +124,6 @@ class StructureAdapterBridgeTest {
         @Override public ContentId biomeId() { return new ContentId("test:generic"); }
         @Override public String adapterVersion() { return "test-1"; }
         @Override public Compatibility compatibility(MacroSample terrain) { return new Compatibility(true, 1.0, "test"); }
-        @Override public SurfacePalette surface(MacroSample terrain) {
-            return new SurfacePalette(new ContentId("test:top"), new ContentId("test:under"),
-                    new ContentId("test:stone"), 3);
-        }
     }
 
     /** A structure adapter that freezes a fixed piece list and records what it was asked to do. */

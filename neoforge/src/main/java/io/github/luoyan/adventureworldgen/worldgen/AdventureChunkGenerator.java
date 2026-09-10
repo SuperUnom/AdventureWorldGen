@@ -20,8 +20,6 @@ import net.minecraft.world.level.NoiseColumn;
 import net.minecraft.world.level.StructureManager;
 import net.minecraft.world.level.biome.Biome;
 import net.minecraft.world.level.biome.BiomeManager;
-import net.minecraft.world.level.biome.Biomes;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
@@ -64,8 +62,6 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private final NoiseBasedChunkGenerator oceanDelegate;
     private final NoiseGeneratorSettings oceanSettings;
     private final SurfaceRules.RuleSource surfaceRule;
-    private final io.github.luoyan.adventureworldgen.surface.RiverSediments riverSediments =
-            new io.github.luoyan.adventureworldgen.surface.RiverSediments();
     private final HolderLookup.RegistryLookup<NormalNoise.NoiseParameters> noises;
     private volatile RandomState oceanRandomState;
 
@@ -179,52 +175,12 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                         : getBaseHeight(x, z, Heightmap.Types.OCEAN_FLOOR_WG, chunk, state));
         BiomeManager biomes = new BiomeManager(
                 (x, y, z) -> getBiomeSource().getNoiseBiome(x, y, z, state.sampler()),
-                BiomeManager.obfuscateSeed(plan.seed())) {
-            @Override public Holder<Biome> getBiome(BlockPos pos) {
-                // Preserve vanilla's fuzzy Voronoi zoom from quart palettes to block columns.
-                // Directly reading pos >> 2 exposes the palette as large square stair steps.
-                Holder<Biome> biome = super.getBiome(pos);
-                // 1.21.1 SurfaceSystem probes the air above the column to grow badlands
-                // pillars before applying rules. Disable that terrain extension only;
-                // rule evaluations inside the column still see ERODED_BADLANDS.
-                if (biome.is(Biomes.ERODED_BADLANDS) && pos.getY() > chunk.getHeight(
-                        Heightmap.Types.WORLD_SURFACE_WG, pos.getX() & 15, pos.getZ() & 15))
-                    return registries.registryOrThrow(Registries.BIOME).getHolderOrThrow(Biomes.BADLANDS);
-                return biome;
-            }
-        };
+                BiomeManager.obfuscateSeed(plan.seed()));
         state.surfaceSystem().buildSurface(state, biomes, registries.registryOrThrow(Registries.BIOME),
                 false, new WorldGenerationContext(this, chunk), chunk, surfaceNoise, surfaceRule);
-        buildRiverbeds(registries, chunk, plan);
         Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG,
                 Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.MOTION_BLOCKING,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
-    }
-
-    private void buildRiverbeds(RegistryAccess registries, ChunkAccess chunk, GeneratedAdventurePlan plan) {
-        int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
-        BlockPos.MutableBlockPos position = new BlockPos.MutableBlockPos();
-        for (int localX = 0; localX < 16; localX++) for (int localZ = 0; localZ < 16; localZ++) {
-            int x = minX + localX, z = minZ + localZ;
-            var sample = plan.terrainAt(x + 0.5, z + 0.5);
-            if (sample.waterKind() != WaterKind.RIVER && sample.waterKind() != WaterKind.LAKE) continue;
-            int bedY = plan.solidSurfaceAt(x, z, sample) - 1;
-            if (bedY <= MIN_Y || bedY + 1 >= MIN_Y + DEPTH
-                    || !chunk.getBlockState(position.set(x, bedY + 1, z)).is(Blocks.WATER)) continue;
-            var palette = riverSediments.surface(sample, plan.seed(), x, z);
-            Block top = registries.registryOrThrow(Registries.BLOCK)
-                    .get(ResourceLocation.parse(palette.top().value()));
-            Block under = registries.registryOrThrow(Registries.BLOCK)
-                    .get(ResourceLocation.parse(palette.under().value()));
-            if (top == null || under == null) throw new IllegalStateException("biome adapter returned an unregistered block");
-            if (!chunk.getBlockState(position.set(x, bedY, z)).blocksMotion()) continue;
-            chunk.setBlockState(position, top.defaultBlockState(), false);
-            for (int depth = 1; depth <= palette.underDepth() && bedY - depth > MIN_Y; depth++) {
-                position.set(x, bedY - depth, z);
-                if (!chunk.getBlockState(position).blocksMotion()) break;
-                chunk.setBlockState(position, under.defaultBlockState(), false);
-            }
-        }
     }
 
     @Override public void applyCarvers(WorldGenRegion region, long seed, RandomState randomState,
