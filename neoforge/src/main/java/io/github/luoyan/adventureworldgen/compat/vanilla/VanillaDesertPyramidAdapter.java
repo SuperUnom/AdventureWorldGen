@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.worldgen;
+package io.github.luoyan.adventureworldgen.compat.vanilla;
 
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;

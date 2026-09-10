@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistrations;
+import io.github.luoyan.adventureworldgen.compat.vanilla.VanillaDesertPyramidAdapter;
 
 /** Built-in v1 adapter set. Other mods may build the same public registry contract in tests/integration. */
 public final class MinecraftAdapters {
