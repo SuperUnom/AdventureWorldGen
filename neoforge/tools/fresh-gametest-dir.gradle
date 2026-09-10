@@ -1,0 +1,10 @@
+// Point the GameTest run at a fresh -PverifyWorld game directory, so a stale READY plan from an
+// earlier code state cannot be reloaded instead of planned.
+allprojects {
+    afterEvaluate {
+        def forge = extensions.findByName('neoForge')
+        if (forge != null) {
+            forge.runs.gameTestServer.gameDirectory = file(providers.gradleProperty('verifyWorld').getOrElse('run-verify-fresh'))
+        }
+    }
+}

@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -104,6 +105,25 @@ class PackageBoundaryTest {
         // session object would make the storage layer depend on executable query state, and a READY
         // reload could then re-enter layout solving through the codec instead of restoring it.
         assertNoImport("persistence", "io.github.luoyan.adventureworldgen.runtime");
+    }
+
+    @Test
+    void theSharedChunkGeneratorRestoresOnlyRegisteredPieceTypes() throws IOException {
+        // P4: support for a structure is a registration, not a branch. The generator may resolve
+        // frozen pieces through the piece registry, but naming a concrete piece class or a single
+        // structure's piece type constant would mean every new structure edits the generator.
+        Path generator = SOURCE_ROOT.resolve("worldgen").resolve("AdventureChunkGenerator.java");
+        Path restore = SOURCE_ROOT.resolve("worldgen").resolve("FrozenPieceRestore.java");
+        assumeTrue(Files.isRegularFile(generator) && Files.isRegularFile(restore),
+                "source tree not found at " + generator.toAbsolutePath());
+        String generatorCode = stripComments(Files.readString(generator, StandardCharsets.UTF_8));
+        assertFalse(generatorCode.contains("structure.structures."),
+                "the shared chunk generator must not reference a concrete structure piece class");
+        assertFalse(generatorCode.contains("StructurePieceType."),
+                "the shared chunk generator must not branch on a named structure piece type");
+        String restoreCode = stripComments(Files.readString(restore, StandardCharsets.UTF_8));
+        assertTrue(restoreCode.contains("BuiltInRegistries.STRUCTURE_PIECE"),
+                "frozen pieces must be resolved in the registry the game registers piece types in");
     }
 
     private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {

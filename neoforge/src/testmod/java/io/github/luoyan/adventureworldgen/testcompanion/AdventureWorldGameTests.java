@@ -15,6 +15,26 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
+import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
+import io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator;
+import io.github.luoyan.adventureworldgen.worldgen.FrozenPieceRestore;
+import net.minecraft.core.Holder;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.HolderSet;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.tags.TagKey;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.chunk.ProtoChunk;
+import net.minecraft.world.level.chunk.UpgradeData;
+import net.minecraft.world.level.levelgen.structure.StructureSet;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
+import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceType;
 
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
@@ -50,6 +70,89 @@ public final class AdventureWorldGameTests {
                 new ContentId("minecraft:snowy_plains"), TestCompanionAdapters.ASHEN_GROVE_ID)),
                 "plan does not expose all required vanilla and companion biomes");
         helper.assertTrue(pyramid, "plan does not contain a frozen desert pyramid");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
+    public static void frozenPiecesRestoreThroughRegisteredPieceTypes(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var context = FrozenPieceRestore.context(level.registryAccess(), level.getStructureManager());
+        var planned = pyramidOf(plan());
+        var restored = FrozenPieceRestore.restore(planned, context);
+        helper.assertTrue(restored.size() == planned.pieces().size(),
+                "frozen piece restore dropped pieces instead of rebuilding every one");
+        for (int index = 0; index < restored.size(); index++) {
+            var frozen = planned.pieces().get(index);
+            var piece = restored.get(index);
+            helper.assertTrue(piece.getType() == StructurePieceType.DESERT_PYRAMID_PIECE,
+                    "restored piece did not come back as its registered type");
+            assertFrozenBox(helper, frozen, piece.getBoundingBox(), "restored piece " + frozen.pieceId());
+            // Re-serializing has to reproduce what was frozen: the rotation, the generator depth and
+            // the frozen chest decisions all survive the round trip through the piece type.
+            helper.assertTrue(piece.createTag(context).equals(frozenTag(frozen)),
+                    "restored piece " + frozen.pieceId() + " does not re-serialize to the frozen NBT");
+        }
+
+        var unknown = frozenPiece("testcompanion:not_a_registered_piece", planned.instanceId() + "/piece/unknown");
+        IllegalStateException rejection = null;
+        try {
+            FrozenPieceRestore.restore(new AdventurePlanView.PlannedStructure(planned.instanceId(),
+                    planned.structureId(), planned.originX(), planned.originY(), planned.originZ(),
+                    planned.rotation(), java.util.List.of(unknown)), context);
+        } catch (IllegalStateException expected) {
+            rejection = expected;
+        }
+        helper.assertTrue(rejection != null, "an unregistered frozen piece type was accepted instead of rejected");
+        helper.assertTrue(rejection.getMessage().contains("testcompanion:not_a_registered_piece")
+                        && rejection.getMessage().contains(planned.instanceId()),
+                "the unsupported piece diagnostic does not name the type and the instance: " + rejection.getMessage());
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
+    public static void plannedStartsInjectThroughRegisteredPieceTypes(GameTestHelper helper) {
+        var plan = plan();
+        var level = helper.getLevel();
+        var registries = level.registryAccess();
+        var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "structure_injection");
+        RuntimePlanRegistry.start(id, () -> plan).join();
+        var generator = new AdventureChunkGenerator(id, registries.lookupOrThrow(Registries.BIOME),
+                registries.lookupOrThrow(Registries.NOISE_SETTINGS), registries.lookupOrThrow(Registries.NOISE));
+        // This test is about the planned injection, so the vanilla pass gets no structure set to
+        // assemble: only the shared generator's own start injection runs here.
+        var state = ChunkGeneratorStructureState.createForNormal(level.getChunkSource().randomState(),
+                plan.seed(), generator.getBiomeSource(), noStructureSets());
+        var planned = pyramidOf(plan);
+        var pyramid = registries.registryOrThrow(Registries.STRUCTURE)
+                .get(ResourceLocation.parse(planned.structureId().value()));
+        helper.assertTrue(pyramid != null, "the controlled structure is missing from the registry");
+
+        var origin = new ChunkPos(Math.floorDiv(planned.originX(), 16), Math.floorDiv(planned.originZ(), 16));
+        var chunk = protoChunk(level, registries, origin);
+        generator.createStructures(registries, state, level.structureManager(), chunk, level.getStructureManager());
+        var injected = chunk.getStartForStructure(pyramid);
+        helper.assertTrue(injected != null && injected.isValid(),
+                "the planned structure was not injected into its origin chunk");
+        helper.assertTrue(injected.getPieces().size() == planned.pieces().size(),
+                "the injected start does not carry every frozen piece");
+        for (int index = 0; index < injected.getPieces().size(); index++) {
+            var frozen = planned.pieces().get(index);
+            var piece = injected.getPieces().get(index);
+            helper.assertTrue(piece.getType() == StructurePieceType.DESERT_PYRAMID_PIECE,
+                    "injected piece did not come from the registered piece type");
+            assertFrozenBox(helper, frozen, piece.getBoundingBox(), "injected piece " + frozen.pieceId());
+        }
+
+        // A neighbour chunk only overlaps the footprint. The plan injects a start at the origin
+        // chunk alone, and a native candidate under the controlled id is erased wherever it appears.
+        var neighbourPos = new ChunkPos(origin.x + 1, origin.z);
+        var neighbour = protoChunk(level, registries, neighbourPos);
+        neighbour.setStartForStructure(pyramid, new StructureStart(pyramid, neighbourPos, 0,
+                new PiecesContainer(java.util.List.of(injected.getPieces().getFirst()))));
+        generator.createStructures(registries, state, level.structureManager(), neighbour, level.getStructureManager());
+        var erased = neighbour.getStartForStructure(pyramid);
+        helper.assertTrue(erased == null || !erased.isValid(),
+                "a controlled native candidate survived the planned structure pass");
         helper.succeed();
     }
 
@@ -452,8 +555,67 @@ public final class AdventureWorldGameTests {
         }
     }
 
+    /** The frozen pyramid the companion profile requires, in plan order. */
+    private static AdventurePlanView.PlannedStructure pyramidOf(GeneratedAdventurePlan plan) {
+        return plan.structures().stream().filter(structure ->
+                        structure.structureId().equals(new ContentId("minecraft:desert_pyramid")))
+                .findFirst().orElseThrow();
+    }
+
+    private static void assertFrozenBox(GameTestHelper helper, AdventurePlanView.PlannedPiece frozen,
+                                        net.minecraft.world.level.levelgen.structure.BoundingBox box, String what) {
+        helper.assertTrue(box.minX() == frozen.minX() && box.minY() == frozen.minY()
+                        && box.minZ() == frozen.minZ() && box.maxX() == frozen.maxX()
+                        && box.maxY() == frozen.maxY() && box.maxZ() == frozen.maxZ(),
+                what + " does not occupy the frozen box");
+    }
+
+    private static CompoundTag frozenTag(AdventurePlanView.PlannedPiece frozen) {
+        try (var input = new java.io.DataInputStream(new java.io.ByteArrayInputStream(frozen.canonicalNbt()))) {
+            return NbtIo.read(input);
+        } catch (java.io.IOException failure) {
+            throw new AssertionError("could not decode frozen NBT for " + frozen.pieceId(), failure);
+        }
+    }
+
+    private static AdventurePlanView.PlannedPiece frozenPiece(String type, String pieceId) {
+        var tag = new CompoundTag();
+        tag.putString("id", type);
+        tag.putInt("GD", 0);
+        try (var bytes = new java.io.ByteArrayOutputStream();
+             var output = new java.io.DataOutputStream(bytes)) {
+            NbtIo.write(tag, output);
+            output.flush();
+            return new AdventurePlanView.PlannedPiece(pieceId, 0, 64, 0, 1, 65, 1, bytes.toByteArray());
+        } catch (java.io.IOException failure) {
+            throw new IllegalStateException("could not build a frozen piece tag for " + type, failure);
+        }
+    }
+
+    private static ProtoChunk protoChunk(ServerLevel level, RegistryAccess registries, ChunkPos pos) {
+        return new ProtoChunk(pos, UpgradeData.EMPTY, level, registries.registryOrThrow(Registries.BIOME), null);
+    }
+
+    /** No structure set at all: the vanilla pass assembles nothing, so the injection stands alone. */
+    private static HolderLookup<StructureSet> noStructureSets() {
+        return new HolderLookup<>() {
+            @Override public java.util.stream.Stream<Holder.Reference<StructureSet>> listElements() {
+                return java.util.stream.Stream.empty();
+            }
+            @Override public java.util.stream.Stream<HolderSet.Named<StructureSet>> listTags() {
+                return java.util.stream.Stream.empty();
+            }
+            @Override public java.util.Optional<Holder.Reference<StructureSet>> get(ResourceKey<StructureSet> key) {
+                return java.util.Optional.empty();
+            }
+            @Override public java.util.Optional<HolderSet.Named<StructureSet>> get(TagKey<StructureSet> key) {
+                return java.util.Optional.empty();
+            }
+        };
+    }
+
     private static void assertSurfaceFollowsBiome(GameTestHelper helper, GeneratedAdventurePlan plan,
-            io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator generator) {
+                                                  AdventureChunkGenerator generator) {
         var level = helper.getLevel();
         var random = level.getChunkSource().randomState();
         int verified = 0;

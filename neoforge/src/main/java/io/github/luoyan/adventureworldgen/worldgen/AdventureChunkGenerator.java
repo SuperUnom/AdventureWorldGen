@@ -35,17 +35,12 @@ import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.nbt.NbtIo;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
-import net.minecraft.world.level.levelgen.structure.structures.DesertPyramidPiece;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
-import java.io.IOException;
 
 import java.util.EnumSet;
 import java.util.List;
@@ -262,25 +257,16 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         }
 
         ChunkPos chunkPos = chunk.getPos();
+        // Piece types come from the registry, so any adapter that froze a piece can have it
+        // restored here. This generator names no structure and no piece class of its own.
+        var pieceContext = FrozenPieceRestore.context(registries, templates);
         for (var planned : plan.structuresIntersecting(chunkPos.x, chunkPos.z)) {
             if (Math.floorDiv(planned.originX(), 16) != chunkPos.x
                     || Math.floorDiv(planned.originZ(), 16) != chunkPos.z) continue;
             Structure controlled = structureRegistry.get(ResourceLocation.parse(planned.structureId().value()));
             if (controlled == null) throw new IllegalStateException("planned structure is missing: " + planned.structureId());
-            java.util.ArrayList<net.minecraft.world.level.levelgen.structure.StructurePiece> pieces = new java.util.ArrayList<>();
-            for (var frozen : planned.pieces()) {
-                try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(frozen.canonicalNbt()))) {
-                    var tag = NbtIo.read(input);
-                    String pieceType = tag.getString("id");
-                    if (!pieceType.equals("minecraft:tedp")) throw new IllegalStateException(
-                            "unsupported frozen piece type " + pieceType + " for " + planned.instanceId());
-                    pieces.add(new DesertPyramidPiece(tag));
-                } catch (IOException failure) {
-                    throw new IllegalStateException("could not restore frozen piece " + frozen.pieceId(), failure);
-                }
-            }
-            chunk.setStartForStructure(controlled,
-                    new StructureStart(controlled, chunkPos, 0, new PiecesContainer(pieces)));
+            chunk.setStartForStructure(controlled, new StructureStart(controlled, chunkPos, 0,
+                    new PiecesContainer(FrozenPieceRestore.restore(planned, pieceContext))));
         }
     }
     @Override public int getGenDepth() { return DEPTH; }
