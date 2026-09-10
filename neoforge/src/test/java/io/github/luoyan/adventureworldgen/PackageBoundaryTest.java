@@ -37,14 +37,32 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void planDataDoesNotDependOnPlanningOrRuntime() throws IOException {
+    void planDataDoesNotDependOnPlanningRuntimeConfigOrHydrology() throws IOException {
+        // plan is the shared vocabulary layer (ids, patches, versions, profile, failure contract).
+        // Nothing it depends on may import it, so it must stay at the bottom of the graph.
         assertNoImport("plan", "io.github.luoyan.adventureworldgen.planner",
-                "io.github.luoyan.adventureworldgen.runtime");
+                "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.config",
+                "io.github.luoyan.adventureworldgen.hydrology");
     }
 
     @Test
-    void sharedNoiseToolsDoNotDependOnPlanningOrRuntime() throws IOException {
+    void sharedBasePackagesDependOnlyOnEachOther() throws IOException {
+        // noise may use spatial (Vec2); spatial must stay dependency-free, because the plan
+        // package already depends on it for the ownership grid and a back edge would be a cycle.
         assertNoImport("noise", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.terrain",
+                "io.github.luoyan.adventureworldgen.config");
+        assertNoImport("spatial", "io.github.luoyan.adventureworldgen.");
+    }
+
+    @Test
+    void adapterAndConfigLayersDoNotDependOnPlanning() throws IOException {
+        // Adapters and author config describe intent; they must not reach into the solver.
+        assertNoImport("api", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime");
+        assertNoImport("config", "io.github.luoyan.adventureworldgen.planner",
                 "io.github.luoyan.adventureworldgen.runtime");
     }
 

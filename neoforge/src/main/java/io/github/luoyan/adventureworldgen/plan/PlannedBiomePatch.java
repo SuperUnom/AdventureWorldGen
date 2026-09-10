@@ -1,6 +1,5 @@
 package io.github.luoyan.adventureworldgen.plan;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 /**

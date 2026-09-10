@@ -7,6 +7,8 @@ import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** One coarse candidate catalog and lazily cached exact quart samples for a frozen terrain. */
 public final class PlacementIndex {

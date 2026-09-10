@@ -6,7 +6,7 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.core.Direction;

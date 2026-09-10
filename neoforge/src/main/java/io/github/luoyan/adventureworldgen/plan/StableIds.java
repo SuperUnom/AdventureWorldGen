@@ -1,6 +1,5 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.plan;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
 
 /** Canonical identifiers used by search state and persisted plans. */
 public final class StableIds {

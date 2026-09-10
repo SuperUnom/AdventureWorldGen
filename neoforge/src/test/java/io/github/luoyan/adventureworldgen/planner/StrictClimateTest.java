@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class StrictClimateTest {
     @Test void seed7331SnowyFillerCannotCrossTemperatureBoundaryEvenAfterQueryWarp() {

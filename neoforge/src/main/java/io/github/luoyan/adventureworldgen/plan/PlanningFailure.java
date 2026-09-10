@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.plan;
 
 import java.util.Collections;
 import java.util.Map;

@@ -7,6 +7,9 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.StableIds;
 
 class StructureBiomePlanningTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");

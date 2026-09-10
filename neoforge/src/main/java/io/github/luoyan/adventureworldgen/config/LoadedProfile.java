@@ -1,5 +1,7 @@
 package io.github.luoyan.adventureworldgen.config;
 
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+
 /**
  * A fully parsed author profile: its identity, the validated configuration, the canonical JSON
  * used for the plan input identity, and the pack that provided it.

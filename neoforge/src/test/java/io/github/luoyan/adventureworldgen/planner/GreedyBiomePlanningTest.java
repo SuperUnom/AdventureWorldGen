@@ -6,6 +6,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class GreedyBiomePlanningTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");

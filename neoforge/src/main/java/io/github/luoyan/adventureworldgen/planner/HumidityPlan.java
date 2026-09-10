@@ -7,6 +7,8 @@ import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 import java.util.function.DoubleConsumer;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** Continuous moisture over frozen terrain; water proximity is prepared before any biome grows. */
 public final class HumidityPlan {

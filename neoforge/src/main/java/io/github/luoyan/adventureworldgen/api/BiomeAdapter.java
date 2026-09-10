@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.api;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Public compatibility contract used during preflight and planning. */
 public interface BiomeAdapter {

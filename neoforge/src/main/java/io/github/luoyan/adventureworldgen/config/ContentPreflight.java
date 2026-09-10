@@ -1,11 +1,12 @@
 package io.github.luoyan.adventureworldgen.config;
 
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Resolves every referenced registry object and required adapter before any adventure chunk can generate. */
 public final class ContentPreflight {

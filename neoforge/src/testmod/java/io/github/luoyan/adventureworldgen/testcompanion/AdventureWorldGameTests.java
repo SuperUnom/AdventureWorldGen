@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.testcompanion;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.worldgen.ProfileReloadListener;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;

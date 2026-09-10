@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 

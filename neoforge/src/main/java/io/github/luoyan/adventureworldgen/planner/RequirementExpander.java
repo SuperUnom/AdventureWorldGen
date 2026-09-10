@@ -2,12 +2,14 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.AreaRange;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.StableIds;
 
 /** Expands normalized config into stable minimum-demand objects without making spatial choices. */
 public final class RequirementExpander {

@@ -1,9 +1,13 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.planner.*;
+// P2.1 will move the demand-reservation solving itself out of terrain; until then the
+// dependency is stated explicitly instead of hidden behind a wildcard.
+import io.github.luoyan.adventureworldgen.planner.RequirementExpander;
 import java.util.*;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** Pre-generation capacity commitments. No generated height is clipped to satisfy a biome rule. */
 public final class TerrainCapacityPlan {

@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.cost;
 
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 
 import java.util.Arrays;

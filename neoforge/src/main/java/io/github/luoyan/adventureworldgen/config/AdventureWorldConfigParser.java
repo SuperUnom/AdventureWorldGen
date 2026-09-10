@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Strict parser for the first author configuration contract. */
 public final class AdventureWorldConfigParser {

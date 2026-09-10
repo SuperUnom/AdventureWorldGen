@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.worldgen;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import org.junit.jupiter.api.Test;
 import java.util.HashSet;
 import java.util.Set;

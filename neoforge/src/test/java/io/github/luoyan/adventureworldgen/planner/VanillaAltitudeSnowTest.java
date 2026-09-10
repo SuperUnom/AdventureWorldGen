@@ -4,6 +4,7 @@ import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class VanillaAltitudeSnowTest {
     @Test void nativeSnowDoesNotOverrideConfiguredTemperature() {

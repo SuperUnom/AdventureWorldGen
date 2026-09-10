@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.runtime;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;

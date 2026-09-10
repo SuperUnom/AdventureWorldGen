@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.api;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.util.ArrayList;
 import java.util.Collection;

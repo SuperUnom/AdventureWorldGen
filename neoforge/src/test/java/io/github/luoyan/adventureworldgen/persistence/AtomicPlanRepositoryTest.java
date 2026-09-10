@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.persistence;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

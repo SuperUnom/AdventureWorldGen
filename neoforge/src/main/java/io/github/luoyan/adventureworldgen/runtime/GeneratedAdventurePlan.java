@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;

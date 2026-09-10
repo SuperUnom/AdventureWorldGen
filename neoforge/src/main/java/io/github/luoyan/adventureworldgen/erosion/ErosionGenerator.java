@@ -4,7 +4,7 @@ import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.util.ArrayList;
 import java.util.List;

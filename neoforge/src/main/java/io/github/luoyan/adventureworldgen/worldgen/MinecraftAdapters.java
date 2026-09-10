@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.api.GenericBiomeAdapter;
 import io.github.luoyan.adventureworldgen.api.BiomeAdapter;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistrations;
 
 /** Built-in v1 adapter set. Other mods may build the same public registry contract in tests/integration. */

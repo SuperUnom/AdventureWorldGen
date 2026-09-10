@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import java.util.function.BiFunction;
 import java.util.function.Predicate;
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;

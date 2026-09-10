@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.planner;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import java.util.Random;
 
 /** Vanilla 1.21.1's height-adjusted precipitation for temperate windswept and taiga biomes.

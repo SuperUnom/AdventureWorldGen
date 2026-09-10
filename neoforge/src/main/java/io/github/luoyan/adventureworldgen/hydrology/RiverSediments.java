@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.hydrology;
 
 import io.github.luoyan.adventureworldgen.api.BiomeAdapter.SurfacePalette;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 
 /** Shared sediment policy for submerged river columns, including generic biome adapters. */

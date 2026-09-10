@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;

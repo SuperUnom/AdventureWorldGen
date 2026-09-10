@@ -8,6 +8,7 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class TerrainRecipesTest {
     @Test void strongPlateauDetailIsIncludedInCapacityAndWorldHeightEnvelopes() {

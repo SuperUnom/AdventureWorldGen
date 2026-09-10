@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.api;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Conservative fallback surface policy; it deliberately makes no vegetation compatibility claim. */
 public final class GenericBiomeAdapter implements BiomeAdapter {

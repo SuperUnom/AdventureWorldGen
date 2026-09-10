@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.persistence;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;

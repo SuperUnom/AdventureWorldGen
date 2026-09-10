@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.worldgen;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;

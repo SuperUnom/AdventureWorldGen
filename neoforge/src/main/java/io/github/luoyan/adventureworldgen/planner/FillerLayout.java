@@ -9,6 +9,8 @@ import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** Frozen variable-spacing seeds and multi-source frontier growth over remaining land. */
 public final class FillerLayout {

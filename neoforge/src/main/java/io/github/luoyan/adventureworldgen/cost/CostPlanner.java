@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.cost.AdjacentEdgeCache.Node;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** Builds the complete 16-block global cost field used before bounded 8-block candidate refinement. */
 public final class CostPlanner {
@@ -59,8 +60,8 @@ public final class CostPlanner {
                 + Math.multiplyExact(bounds.nodeCount(), Long.BYTES + 2L * Integer.BYTES + 2L)
                 + SAMPLE_CACHE_CAPACITY * 192L;
         if (retainedBytes > profile.maximumWorkingMemoryBytes())
-            throw new io.github.luoyan.adventureworldgen.planner.PlanningFailure(
-                    io.github.luoyan.adventureworldgen.planner.PlanningFailure.Code.RESOURCE_LIMIT, "cost-graph",
+            throw new io.github.luoyan.adventureworldgen.plan.PlanningFailure(
+                    io.github.luoyan.adventureworldgen.plan.PlanningFailure.Code.RESOURCE_LIMIT, "cost-graph",
                     "compact cost graph exceeds planner-v2 memory budget",
                     java.util.Map.of("estimated_bytes", retainedBytes,
                             "maximum_bytes", profile.maximumWorkingMemoryBytes()));

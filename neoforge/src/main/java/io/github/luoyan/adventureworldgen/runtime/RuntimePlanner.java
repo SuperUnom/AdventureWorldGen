@@ -13,7 +13,7 @@ import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;

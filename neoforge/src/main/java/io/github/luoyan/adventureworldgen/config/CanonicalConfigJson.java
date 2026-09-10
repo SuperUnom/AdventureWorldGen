@@ -8,6 +8,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Vec3d;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Writes normalized author configuration with fixed key order and no insignificant whitespace. */
 public final class CanonicalConfigJson {

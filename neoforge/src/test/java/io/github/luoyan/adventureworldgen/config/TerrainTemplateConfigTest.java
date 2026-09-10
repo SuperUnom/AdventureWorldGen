@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import java.nio.file.*;
 import io.github.luoyan.adventureworldgen.terrain.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class TerrainTemplateConfigTest {
     private static String profile(String rule,String world) {return "{\"world\":{\"radius\":1000"+world+"},\"spawn\":{\"biome\":\"example:any\"},\"biomes\":{\"filler\":[\"example:any\"],\"terrain_rules\":{\"example:test\":"+rule+"}}}";}

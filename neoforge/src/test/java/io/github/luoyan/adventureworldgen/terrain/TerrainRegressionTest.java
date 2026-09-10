@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.api.*;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.erosion.*;
 import io.github.luoyan.adventureworldgen.hydrology.*;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;

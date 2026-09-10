@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.config;
+package io.github.luoyan.adventureworldgen.plan;
 
 import java.util.Objects;
 import java.util.regex.Pattern;

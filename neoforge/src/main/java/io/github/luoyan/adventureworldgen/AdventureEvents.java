@@ -18,7 +18,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.storage.LevelResource;
 import io.github.luoyan.adventureworldgen.config.ContentPreflight;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.MinecraftAdapters;
 import net.minecraft.resources.ResourceLocation;
 

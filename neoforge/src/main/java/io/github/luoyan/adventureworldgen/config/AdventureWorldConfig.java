@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.Set;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import java.util.Objects;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Immutable, normalized author configuration for planner-v2. */
 public record AdventureWorldConfig(

@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
 import io.github.luoyan.adventureworldgen.config.CanonicalConfigJson;
 import io.github.luoyan.adventureworldgen.config.ConfigErrorCode;
 import io.github.luoyan.adventureworldgen.config.ConfigException;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import net.minecraft.resources.ResourceLocation;

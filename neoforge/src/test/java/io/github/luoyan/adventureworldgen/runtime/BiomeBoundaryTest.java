@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 import java.io.StringReader;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class BiomeBoundaryTest {
     private GeneratedAdventurePlan plan(String land, boolean water) {

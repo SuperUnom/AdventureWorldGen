@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.erosion.ErodedTerrain;
 import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;

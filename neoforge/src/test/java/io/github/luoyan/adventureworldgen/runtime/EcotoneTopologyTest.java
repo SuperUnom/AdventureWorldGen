@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** A wavy line can cross a scanline many times. Test enclosed 2-D islands on BOTH sides instead. */
 class EcotoneTopologyTest {
