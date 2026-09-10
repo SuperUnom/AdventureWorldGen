@@ -3,6 +3,7 @@
 
 # 运行时日志
 /logs/
+/neoforge/logs/
 
 # 运行目录
 /neoforge/run-*/
