@@ -31,21 +31,19 @@ public final class ClimatePlan {
     private boolean frozen;
     private final TemperatureType spawnType;
     private final double[] ratios=new double[4], actual=new double[4];
-    private final List<Site> sites=new ArrayList<>();
+    private final List<ClimateDiagnostics.Site> sites=new ArrayList<>();
     private final List<Correction> corrections=new ArrayList<>();
-    private record Site(int x,int z,MacroSample sample) {}
     public record Correction(double x,double z,double radius,double delta) {}
-    public record Supply(String biome, long target, long legalArea, long climateArea) {}
-    private final List<Supply> supply=new ArrayList<>();
+    private final List<ClimateDiagnostics.Supply> supply=new ArrayList<>();
 
     public record State(int extent, double[] slopeHeight, double[] regionalHeight, double angle,
                         double low, double high, double[] thresholds, boolean snowBoundary,
                         TemperatureType spawnType, double[] ratios, double[] actual,
-                        List<Correction> corrections, List<Supply> supply, HumidityPlan.State humidity, String temperatureField) {
+                        List<Correction> corrections, List<ClimateDiagnostics.Supply> supply, HumidityPlan.State humidity, String temperatureField) {
         /** Source-compatible constructor for legacy plan states without an explicit temperature version. */
         public State(int extent,double[] slopeHeight,double[] regionalHeight,double angle,double low,double high,
                      double[] thresholds,boolean snowBoundary,TemperatureType spawnType,double[] ratios,double[] actual,
-                     List<Correction> corrections,List<Supply> supply,HumidityPlan.State humidity) {
+                     List<Correction> corrections,List<ClimateDiagnostics.Supply> supply,HumidityPlan.State humidity) {
             this(extent,slopeHeight,regionalHeight,angle,low,high,thresholds,snowBoundary,spawnType,ratios,actual,
                     corrections,supply,humidity,null);
         }
@@ -113,7 +111,7 @@ public final class ClimatePlan {
                 var s=terrain.sample(wx+2,wz+2);
                 heights[(z+extent)*heightWidth+x+extent]=s.groundSurface();
                 if(Math.hypot(wx,wz)>radius)continue;
-                if(s.waterKind()==WaterKind.NONE&&!s.hazardous())sites.add(new Site(wx,wz,s));
+                if(s.waterKind()==WaterKind.NONE&&!s.hazardous())sites.add(new ClimateDiagnostics.Site(wx,wz,s));
             }
             progress.accept(.2*(z+extent+1)/(2*extent+1));
         }
@@ -125,54 +123,23 @@ public final class ClimatePlan {
         spawnType=preferences(config,spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
                 .thenComparing(e->-e.getKey().ordinal())).orElseThrow().getKey();
         angle=(DeterministicRandom.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;
-        double[] required=new double[4],filler=new double[4];
-        for(var d:new RequirementExpander().expandMinimum(config).patches()) {
-            double[] weights=d.allowedBiomes().stream().mapToDouble(id->Math.sqrt(1+sites.stream().filter(site->config.biomes().allows(id,site.sample)).count())).toArray();
-            double total=Arrays.stream(weights).sum();
-            for(int i=0;i<weights.length;i++)distribute(d.allowedBiomes().get(i),d.area().target()*weights[i]/total,required);
-        }
-        for(var id:config.biomes().filler())distribute(id,weight(config,id),filler);
-        double rt=Arrays.stream(required).sum(),ft=Arrays.stream(filler).sum();
-        for(int i=0;i<4;i++)ratios[i]=.8*(rt>0?required[i]/rt:1.0/4)+.2*(ft>0?filler[i]/ft:1.0/4);
-        for(int i=1;i<4;i++)ratios[i]=Math.max(.04,ratios[i]);
-        if(required[0]+filler[0]>0)ratios[0]=Math.max(.04,ratios[0]);
+        var diagnostics=new ClimateDiagnostics(config,STEP);
+        var temperatureField=new ClimateDiagnostics.TemperatureField() {
+            public int band(int x,int z,MacroSample sample){ return typeAt(x,z,sample).ordinal(); }
+            public double value(int x,int z,MacroSample sample){ return base(x,z,sample); }
+        };
+        System.arraycopy(diagnostics.targetRatios(sites,temperatureField),0,ratios,0,4);
         // Kept in the serialized state for compatibility; temperature is configured, not a snow test.
         snowBoundary=false;
-        double sum=Arrays.stream(ratios).sum();for(int i=0;i<4;i++)ratios[i]/=sum;
         // Demand remains diagnostic. It does not reshape the accepted temperature field.
         angle=0;low=0;high=10;
         thresholds[0]=2.5;thresholds[1]=5;thresholds[2]=7.5;
         progress.accept(.8);
         this.frozen=true;
-        for(var s:sites)actual[typeAt(s.x,s.z,s.sample).ordinal()]++;
-        for(int i=0;i<4;i++)actual[i]/=sites.size();
-        for(var d:new RequirementExpander().expandMinimum(config).patches()) {
-            ContentId id=preferredBiome(d);
-            long legal=sites.stream().filter(s->config.biomes().allows(id,s.sample)).count()*STEP*STEP;
-            supply.add(new Supply(id.value(),d.area().target(),legal,climateArea(id)));
-        }
+        System.arraycopy(diagnostics.actualRatios(sites,temperatureField),0,actual,0,4);
+        supply.addAll(diagnostics.supply(sites,temperatureField));
         progress.accept(1);
         humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
-    }
-    private void distribute(ContentId id,double amount,double[] out) {
-        var prefs=preferences(config,id);
-        double[] shares=new double[4];
-        for(var e:prefs.entrySet()) {
-            double land=1;
-            if(prefs.size()>1)land+=sites.stream().filter(s->config.biomes().allows(id,s.sample))
-                    .filter(s->{double value=base(s.x,s.z,s.sample);return (value<2.5?TemperatureType.VERY_COLD:value<5?TemperatureType.COLD:value<7.5?TemperatureType.MEDIUM:TemperatureType.HOT)==e.getKey();}).count();
-            shares[e.getKey().ordinal()]=e.getValue()*Math.sqrt(land);
-        }
-        double total=Arrays.stream(shares).sum();
-        for(int i=0;i<4;i++)out[i]+=amount*shares[i]/total;
-    }
-    private ContentId preferredBiome(RequirementExpander.PatchDemand demand) {
-        return demand.allowedBiomes().stream().max(Comparator.comparingLong(this::climateArea)
-                .thenComparing(Comparator.reverseOrder())).orElseThrow();
-    }
-    private long climateArea(ContentId id) {
-        var prefs=preferences(config,id);
-        return sites.stream().filter(s->config.biomes().allows(id,s.sample)&&prefs.containsKey(typeAt(s.x,s.z,s.sample))).count()*STEP*STEP;
     }
     private static double[] blur(double[] source,int width,int radius) {
         double[] horizontal=new double[source.length],result=new double[source.length];
@@ -285,5 +252,5 @@ public final class ClimatePlan {
     }
     public double[] targetRatios(){return ratios.clone();}
     public double[] actualRatios(){return actual.clone();}
-    public List<Supply> supply(){return List.copyOf(supply);}
+    public List<ClimateDiagnostics.Supply> supply(){return List.copyOf(supply);}
 }
