@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.hydrology;
+package io.github.luoyan.adventureworldgen.surface;
 
 import io.github.luoyan.adventureworldgen.api.BiomeAdapter.SurfacePalette;
 import io.github.luoyan.adventureworldgen.api.MacroSample;

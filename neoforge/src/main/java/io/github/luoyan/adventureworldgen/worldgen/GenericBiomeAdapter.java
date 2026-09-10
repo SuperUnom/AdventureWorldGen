@@ -1,10 +1,14 @@
-package io.github.luoyan.adventureworldgen.api;
+package io.github.luoyan.adventureworldgen.worldgen;
 
+import io.github.luoyan.adventureworldgen.api.BiomeAdapter;
+import io.github.luoyan.adventureworldgen.api.MacroSample;
+import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.surface.RiverSediments;
 
 /** Conservative fallback surface policy; it deliberately makes no vegetation compatibility claim. */
 public final class GenericBiomeAdapter implements BiomeAdapter {
-    private final io.github.luoyan.adventureworldgen.hydrology.RiverSediments sediments = new io.github.luoyan.adventureworldgen.hydrology.RiverSediments();
+    private final RiverSediments sediments = new RiverSediments();
     private static final ContentId GENERIC = new ContentId("adventureworldgen:generic");
     private static final ContentId GRASS = new ContentId("minecraft:grass_block");
     private static final ContentId DIRT = new ContentId("minecraft:dirt");

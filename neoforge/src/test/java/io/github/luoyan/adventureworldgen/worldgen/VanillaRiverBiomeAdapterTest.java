@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class VanillaRiverBiomeAdapterTest {
     @Test void sedimentsFormDeterministicPatchesInBothRiverBiomes() {
-        var generic = new io.github.luoyan.adventureworldgen.api.GenericBiomeAdapter();
+        var generic = new io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter();
         for (String biome : new String[]{"minecraft:river", "minecraft:frozen_river"}) {
             var adapter = new VanillaRiverBiomeAdapter(new ContentId(biome));
             Set<String> materials = new HashSet<>();

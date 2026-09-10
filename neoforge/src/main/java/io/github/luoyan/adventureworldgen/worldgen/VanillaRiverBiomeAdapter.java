@@ -4,7 +4,7 @@ import io.github.luoyan.adventureworldgen.api.BiomeAdapter;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
-import io.github.luoyan.adventureworldgen.hydrology.RiverSediments;
+import io.github.luoyan.adventureworldgen.surface.RiverSediments;
 
 /** Vanilla materials adapted to local river depth, with coherent sediment deposits. */
 public final class VanillaRiverBiomeAdapter implements BiomeAdapter {

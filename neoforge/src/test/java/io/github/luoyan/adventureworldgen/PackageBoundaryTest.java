@@ -59,11 +59,27 @@ class PackageBoundaryTest {
 
     @Test
     void adapterAndConfigLayersDoNotDependOnPlanning() throws IOException {
-        // Adapters and author config describe intent; they must not reach into the solver.
+        // api is the third-party contract surface: it must not contain or reach built-in
+        // implementations, so a mod author's contract never pulls in our domain code.
         assertNoImport("api", "io.github.luoyan.adventureworldgen.planner",
-                "io.github.luoyan.adventureworldgen.runtime");
+                "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.hydrology",
+                "io.github.luoyan.adventureworldgen.terrain",
+                "io.github.luoyan.adventureworldgen.surface",
+                "io.github.luoyan.adventureworldgen.worldgen");
+        // Author config describes intent; it must not reach into the solver or the session.
         assertNoImport("config", "io.github.luoyan.adventureworldgen.planner",
                 "io.github.luoyan.adventureworldgen.runtime");
+    }
+
+    @Test
+    void surfaceMaterialsDoNotDependOnHydrologyOrExecution() throws IOException {
+        // Surface and river-bed material choice is separate from water geometry and from the
+        // Minecraft execution layer, so a material change never requires touching hydrology.
+        assertNoImport("surface", "io.github.luoyan.adventureworldgen.hydrology",
+                "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.worldgen");
     }
 
     @Test
@@ -88,8 +104,13 @@ class PackageBoundaryTest {
         List<String> violations = new ArrayList<>();
         try (Stream<Path> files = Files.walk(directory)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
-                for (String line : Files.readAllLines(file, StandardCharsets.UTF_8)) {
-                    if (!line.startsWith("import ")) continue;
+                // Scan the whole source, not just import lines: a fully qualified reference used
+                // inline creates exactly the same dependency and would otherwise go unnoticed.
+                // Comments are stripped first so documentation may still name other packages.
+                String code = stripComments(Files.readString(file, StandardCharsets.UTF_8));
+                for (String line : code.lines().toList()) {
+                    // A package declaration states where the file lives, it is not a dependency.
+                    if (line.stripLeading().startsWith("package ")) continue;
                     for (String forbidden : forbiddenPrefixes)
                         if (line.contains(forbidden)) violations.add(file + ": " + line.trim());
                 }
@@ -97,5 +118,9 @@ class PackageBoundaryTest {
         }
         assertTrue(violations.isEmpty(), () -> pkg + " must not depend on " + String.join(", ", forbiddenPrefixes)
                 + " but found:\n  " + String.join("\n  ", violations));
+    }
+
+    private static String stripComments(String source) {
+        return source.replaceAll("(?s)/\\*.*?\\*/", "").replaceAll("//[^\\n]*", "");
     }
 }

@@ -1,7 +1,6 @@
 package io.github.luoyan.adventureworldgen.worldgen;
 
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
-import io.github.luoyan.adventureworldgen.api.GenericBiomeAdapter;
 import io.github.luoyan.adventureworldgen.api.BiomeAdapter;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;

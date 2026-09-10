@@ -69,8 +69,8 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private final NoiseBasedChunkGenerator oceanDelegate;
     private final NoiseGeneratorSettings oceanSettings;
     private final SurfaceRules.RuleSource surfaceRule;
-    private final io.github.luoyan.adventureworldgen.hydrology.RiverSediments riverSediments =
-            new io.github.luoyan.adventureworldgen.hydrology.RiverSediments();
+    private final io.github.luoyan.adventureworldgen.surface.RiverSediments riverSediments =
+            new io.github.luoyan.adventureworldgen.surface.RiverSediments();
     private final HolderLookup.RegistryLookup<NormalNoise.NoiseParameters> noises;
     private volatile RandomState oceanRandomState;
 
