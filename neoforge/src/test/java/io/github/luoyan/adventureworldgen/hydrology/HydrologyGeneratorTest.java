@@ -19,7 +19,7 @@ class HydrologyGeneratorTest {
         }
         for (long seed : new long[]{72362148366599L, 1, 7331}) {
             var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, 1536, 185.6);
-            var capacities = io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.reserve(seed, config, coast.coastline(), coast.landBand());
+            var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(seed, config, coast.coastline(), coast.landBand());
             var island = new io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain(coast.coastline(),
                     new io.github.luoyan.adventureworldgen.terrain.RegionTerrain(seed, PlannerProfile.V2, capacities),
                     seed, 64, coast.landBand(), coast.seaBand(), "test");

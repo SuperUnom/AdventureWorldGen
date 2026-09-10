@@ -76,7 +76,7 @@ public final class RuntimePlanner {
         var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, radius, keep);
         metrics.finish("coast");
         LOGGER.info("AdventureWorldGen planning continuous regions for {}", loaded.id());
-        var capacities = io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.reserve(seed,loaded.config(),coast.coastline(),coast.landBand());
+        var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(seed,loaded.config(),coast.coastline(),coast.landBand());
         metrics.finish("capacity_reservation");
         var regions = new RegionTerrain(seed, PlannerProfile.V2,capacities,loaded.config().world().terrain(),loaded.config());
         var island = new IslandMacroTerrain(coast.coastline(), regions, seed, 64.0,

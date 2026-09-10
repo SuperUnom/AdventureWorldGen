@@ -34,6 +34,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver;
 
 /**
  * P0 reproducibility baseline for the structural refactor.
@@ -86,7 +87,7 @@ class PlanningBaselineTest {
         double keep = spawnRadius + StrictMath.min(32.0, radius / 20.0);
 
         var coast = new CoastGenerator(PlannerProfile.V2).generate(SEED, radius, keep);
-        var capacities = TerrainCapacityPlan.reserve(SEED, config, coast.coastline(), coast.landBand());
+        var capacities = TerrainCapacitySolver.reserve(SEED, config, coast.coastline(), coast.landBand());
         var regions = new RegionTerrain(SEED, PlannerProfile.V2, capacities, config.world().terrain(), config);
         var island = new IslandMacroTerrain(coast.coastline(), regions, SEED, 64.0,
                 coast.landBand(), coast.seaBand(), "terrain-r22");

@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.terrain;
+package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
@@ -6,8 +6,13 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.terrain.Coastline;
+import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
+import io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan;
+import io.github.luoyan.adventureworldgen.terrain.TerrainTemplate;
+import io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain;
 
-class TerrainCapacityPlanTest {
+class TerrainCapacitySolverTest {
     @Test void structureAlternativesReserveFeasibleTemplateAndOversizedTargetsFallBackToMinimum() {
         var config=new AdventureWorldConfigParser().parse("""
           {"world":{"radius":1536},"spawn":{"biome":"test:spawn"},"biomes":{
@@ -18,7 +23,7 @@ class TerrainCapacityPlanTest {
              "area":{"min":4096,"target":100000000}},"entrance":[0,0,0]}]}
           """);
         var coast=new Coastline(List.of(new Vec2(-1300,-1300),new Vec2(1300,-1300),new Vec2(1300,1300),new Vec2(-1300,1300)));
-        var plan=TerrainCapacityPlan.reserve(7331,config,coast,64);
+        var plan=TerrainCapacitySolver.reserve(7331,config,coast,64);
         assertTrue(plan.reservations().stream().anyMatch(r->r.recipe()==TerrainTemplate.BADLANDS));
         assertTrue(plan.reservations().stream().noneMatch(r->r.minHeight()!=null&&r.minHeight()==319));
         long area=plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum();
@@ -37,11 +42,11 @@ class TerrainCapacityPlanTest {
              "minecraft:jagged_peaks":{"allowed_terrain":["mountains"]}}}}
           """);
         var coast=new Coastline(List.of(new Vec2(-2000,-2000),new Vec2(2000,-2000),new Vec2(2000,2000),new Vec2(-2000,2000)));
-        var plan=TerrainCapacityPlan.reserve(7331,config,coast,128);
+        var plan=TerrainCapacitySolver.reserve(7331,config,coast,128);
         long target=new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(config).patches()
                 .stream().mapToLong(d->(long)Math.ceil(d.area().target()*1.25)).sum();
         assertEquals(target,plan.reservations().stream().mapToLong(TerrainCapacityPlan.Reservation::reservedArea).sum());
-        assertEquals(plan.reservations(),TerrainCapacityPlan.reserve(7331,config,coast,128).reservations());
+        assertEquals(plan.reservations(),TerrainCapacitySolver.reserve(7331,config,coast,128).reservations());
         assertTrue(plan.reservations().stream().anyMatch(r->r.template()==RegionTerrain.Template.MOUNTAINS));
         var regions=new RegionTerrain(7331,PlannerProfile.V2,plan);
         var terrain=new IslandMacroTerrain(coast,regions,7331,64,128,256,"test");

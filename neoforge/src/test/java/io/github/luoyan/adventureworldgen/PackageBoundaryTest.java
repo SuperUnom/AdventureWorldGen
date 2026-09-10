@@ -66,6 +66,14 @@ class PackageBoundaryTest {
                 "io.github.luoyan.adventureworldgen.runtime");
     }
 
+    @Test
+    void terrainConsumesReservedResultsWithoutDoingDemandSolving() throws IOException {
+        // Demand-driven capacity reservation lives in planner; terrain only consumes the frozen
+        // TerrainCapacityPlan. A terrain -> planner edge would mean quota solving leaked back in.
+        assertNoImport("terrain", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime");
+    }
+
     private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
         Path directory = SOURCE_ROOT.resolve(pkg);
         assumeTrue(Files.isDirectory(directory), "source tree not found at " + directory.toAbsolutePath());

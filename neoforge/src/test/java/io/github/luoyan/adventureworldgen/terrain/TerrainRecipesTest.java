@@ -23,7 +23,7 @@ class TerrainRecipesTest {
         assertEquals(1.1,settings.maximumShape(TerrainTemplate.HILLS_1,TerrainTemplate.PLATEAU));
         assertEquals(1.05,TerrainSettings.defaults().maximumShape(TerrainTemplate.PLATEAU,null));
         var coast=new Coastline(List.of(new Vec2(-1000,-1000),new Vec2(1000,-1000),new Vec2(1000,1000),new Vec2(-1000,1000)));
-        var capacity=TerrainCapacityPlan.reserve(7331,config,coast,64);
+        var capacity=TerrainCapacitySolver.reserve(7331,config,coast,64);
         assertFalse(capacity.reservations().isEmpty());
         for(var r:capacity.reservations()) {
             double high=64+r.baseElevation()+1.1*r.amplitude();
