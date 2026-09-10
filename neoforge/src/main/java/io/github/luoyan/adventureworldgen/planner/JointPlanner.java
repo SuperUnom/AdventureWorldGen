@@ -148,7 +148,7 @@ public final class JointPlanner {
                     levels.penalty(demand.adventureLevel(),p.x(),p.z())*4
                     +climate.cost(carrier.biomeId(),p.x()+2,p.z()+2,placementIndex.sample(p.x(),p.z()))*3
                     +Math.hypot(p.x()-carrier.anchorX(),p.z()-carrier.anchorZ())/Math.max(32,Math.sqrt(carrier.area()))
-                    +(PlacementIndex.mix(salt^p.cell())>>>11)*0x1.0p-53*.35).thenComparingLong(PlacementIndex.Point::cell));
+                    +(DeterministicRandom.mix(salt^p.cell())>>>11)*0x1.0p-53*.35).thenComparingLong(PlacementIndex.Point::cell));
             for(var point:candidates) {
                 attempted.add(point.cell());int x=point.x(),z=point.z();
                 if(!spacingAllows(new Center(x,z),demand.structureId(),settings.spacing(),structures))continue;
@@ -285,7 +285,7 @@ public final class JointPlanner {
             var candidates = new ArrayList<>(placementIndex.candidates(level,step));
             candidates.sort(java.util.Comparator.comparingDouble((PlacementIndex.Point p) ->
                     4 * levelConstraint.penalty(level,p.x(),p.z())
-                            + (PlacementIndex.mix(p.cell() ^ salt) >>> 11) * 0x1.0p-53));
+                            + (DeterministicRandom.mix(p.cell() ^ salt) >>> 11) * 0x1.0p-53));
             for (var point : candidates) {
                 if(++visited>profile.search().requiredCandidatePreparations())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,
                         "structure-candidates","indexed structure candidate budget exhausted",Map.of("visits",visited,"spacing",step));

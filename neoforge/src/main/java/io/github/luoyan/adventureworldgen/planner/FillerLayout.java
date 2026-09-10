@@ -11,6 +11,7 @@ import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** Frozen variable-spacing seeds and multi-source frontier growth over remaining land. */
 public final class FillerLayout {
@@ -93,7 +94,7 @@ public final class FillerLayout {
         List<Integer> candidates=new ArrayList<>();
         for(int i=0;i<labels.length;i++)if(environment[i]!=null&&labels[i]==-1)candidates.add(i);
         total=candidates.size();
-        candidates.sort(Comparator.comparingLong(i->PlacementIndex.mix(seed^i)));
+        candidates.sort(Comparator.comparingLong(i->DeterministicRandom.mix(seed^i)));
         Map<Long,List<Integer>> buckets=new HashMap<>();
         for(int i:candidates) {
             int bx=Math.floorDiv(x(i),768),bz=Math.floorDiv(z(i),768);
@@ -130,7 +131,7 @@ public final class FillerLayout {
             if(band>bestBand)continue;
             double density=0;
             for(var s:seeds)if(s.biome==b)density+=Math.exp(-Math.pow(Math.hypot(x(cell)-x(s.cell),z(cell)-z(s.cell))/384,2));
-            double u=Math.max(1e-12,(PlacementIndex.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
+            double u=Math.max(1e-12,(DeterministicRandom.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
             double value=climate.cost(id,x(cell)+2,z(cell)+2,environment[cell])*7+density*.12
                     +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,id));
             if(band<bestBand||value<score){score=value;best=b;bestBand=band;}

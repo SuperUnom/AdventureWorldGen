@@ -171,7 +171,7 @@ public final class BiomeAllocationPlanner {
                 }
                 int clearance=Math.max(16,(int)(scale*.55)/4*4);
                 for(int[] d:DIR)if(!legal(r,p.x()+d[0]*clearance/4,p.z()+d[1]*clearance/4))capacity+=2;
-                double u=Math.max(1e-12,(PlacementIndex.mix(p.cell()^salt)>>>11)*0x1.0p-53);
+                double u=Math.max(1e-12,(DeterministicRandom.mix(p.cell()^salt)>>>11)*0x1.0p-53);
                 // Temperature wins; deterministic jitter breaks close suitability ties.
                 double score=climate.cost(r.biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()))*3
                         +4*index.penalty(r.demand.adventureLevel(),p)+crowd+capacity+Math.log(-Math.log(u))*.35;
@@ -246,7 +246,7 @@ public final class BiomeAllocationPlanner {
     private void seedFillers(long seed) {
         if(regions.stream().allMatch(r->r.cells.size()>=r.maximum()))return;
         var points=new ArrayList<>(index.candidates(0));
-        points.sort(Comparator.comparingLong(p->PlacementIndex.mix(seed^p.cell())));
+        points.sort(Comparator.comparingLong(p->DeterministicRandom.mix(seed^p.cell())));
         for(var point:points) {
             if(owner.containsKey(point.cell()))continue;
             // Distant empty components are seeded by the final filler pass. Here only sites able
@@ -257,7 +257,7 @@ public final class BiomeAllocationPlanner {
                 if(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())<Math.sqrt(r.demand.area().target()/Math.PI)*2.5+128){nearby=true;break;}
             }
             if(!nearby)continue;
-            double spacing=320+192*((PlacementIndex.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
+            double spacing=320+192*((DeterministicRandom.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
             boolean close=false;
             for(var r:regions) {
                 double separation=r.filler?spacing:Math.sqrt(r.demand.area().target()/Math.PI)*2.0;
@@ -274,7 +274,7 @@ public final class BiomeAllocationPlanner {
                 var rule=config.biomes().terrainRules().get(biome);
                 double level=rule!=null&&rule.adventureLevel()!=null?rule.adventureLevel():config.biomes().required().stream()
                         .filter(r->r.id().equals(biome)).mapToInt(AdventureWorldConfig.RequiredBiome::adventureLevel).average().orElse(5);
-                double u=Math.max(1e-12,(PlacementIndex.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
+                double u=Math.max(1e-12,(DeterministicRandom.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
                 double cost=climate.cost(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()))*6+density*.15
                         +Math.pow((level-10*Math.hypot(point.x(),point.z())/config.world().radius())/5,2)
                         +Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,biome));

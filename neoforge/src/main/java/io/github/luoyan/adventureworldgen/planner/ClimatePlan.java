@@ -10,6 +10,7 @@ import java.util.*;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */
 public final class ClimatePlan {
@@ -123,7 +124,7 @@ public final class ClimatePlan {
                 .filter(s->s.id().equals(config.spawn().structure().id())).flatMap(s->s.allowedBiomes().ids().stream()).findFirst().orElse(config.biomes().filler().getFirst());
         spawnType=preferences(config,spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
                 .thenComparing(e->-e.getKey().ordinal())).orElseThrow().getKey();
-        angle=(PlacementIndex.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;
+        angle=(DeterministicRandom.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;
         double[] required=new double[4],filler=new double[4];
         for(var d:new RequirementExpander().expandMinimum(config).patches()) {
             double[] weights=d.allowedBiomes().stream().mapToDouble(id->Math.sqrt(1+sites.stream().filter(site->config.biomes().allows(id,site.sample)).count())).toArray();

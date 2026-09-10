@@ -31,6 +31,19 @@ public final class DeterministicRandom {
         return ByteBuffer.wrap(digest(worldSeed, algorithmVersion, stage, stableId, operationIndex), 0, Long.BYTES).getLong();
     }
 
+    /**
+     * Stateless 64-bit mixer (SplitMix64 finalizer) over an already-derived key.
+     *
+     * <p>Used where a cheap deterministic ordering or jitter is needed from a seed and a stable
+     * cell/id value rather than a fresh SHA-256 draw. It is a determinism contract: changing the
+     * constants or shifts changes every seeded ordering that uses it.
+     */
+    public static long mix(long x) {
+        x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
+        x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
+        return x ^ (x >>> 31);
+    }
+
     private static void addField(MessageDigest digest, String value) {
         if (value == null) {
             throw new IllegalArgumentException("random key fields must not be null");

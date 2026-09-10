@@ -1,6 +1,7 @@
 package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** Smooth anisotropic catchment preference. Connectivity comes from the legal-cell frontier. */
 public final class OrganicGrowth {
@@ -12,7 +13,7 @@ public final class OrganicGrowth {
         warpZ=new ValueNoise(seed,id+"/shape-z",StrictMath.max(64,size*1.6));
         lobes=new ValueNoise(seed,id+"/shape-lobes",StrictMath.max(48,size*0.8));
         wx=warpX.sample(x,z);wz=warpZ.sample(x,z);
-        double angle=(PlacementIndex.mix(seed^id.hashCode())>>>11)*0x1.0p-53*StrictMath.PI;
+        double angle=(DeterministicRandom.mix(seed^id.hashCode())>>>11)*0x1.0p-53*StrictMath.PI;
         cos=StrictMath.cos(angle);sin=StrictMath.sin(angle);
     }
     public double score(int x,int z,double ground) {

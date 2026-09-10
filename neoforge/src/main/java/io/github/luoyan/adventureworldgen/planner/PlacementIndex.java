@@ -116,9 +116,4 @@ public final class PlacementIndex {
         return cache.computeIfAbsent(p.cell(),ignored->levels.penalty(level,p.x,p.z));
     }
     public long queries() { return queries; }
-    public static long mix(long x) {
-        x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
-        x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
-        return x ^ (x >>> 31);
-    }
 }
