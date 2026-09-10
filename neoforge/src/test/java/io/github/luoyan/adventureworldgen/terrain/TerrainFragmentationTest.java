@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.erosion.*;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 

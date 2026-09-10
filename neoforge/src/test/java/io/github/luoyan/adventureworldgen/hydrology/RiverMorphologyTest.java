@@ -7,6 +7,7 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 class RiverMorphologyTest {
     @Test void tributaryDischargeWidensReceivingReachGradually() {
@@ -15,7 +16,7 @@ class RiverMorphologyTest {
                 List.of(0.0, 1000.0), List.of(100.0, 100.0), shape, null);
         var branch = new RiverNetwork.Channel("branch", 1, "parent", List.of(new Vec2(500, 1000), new Vec2(500, 0)),
                 List.of(0.0, 1000.0), List.of(100.0, 100.0), shape, null);
-        var morphology = new RiverMorphology(new RiverNetwork(List.of(parent, branch), List.of(), RiverMorphology.VERSION));
+        var morphology = new RiverMorphology(new RiverNetwork(List.of(parent, branch), List.of(), PlanVersions.HYDROLOGY));
         // Hold the sediment field fixed to isolate the effect of incoming discharge.
         double upstream = morphology.bedRadius(parent, 0.40, 500, 0, 500, 0);
         double downstream = morphology.bedRadius(parent, 0.60, 500, 0, 500, 0);
@@ -32,7 +33,7 @@ class RiverMorphologyTest {
         MacroTerrain land = (x, z) -> new MacroSample(120, Double.NaN, WaterKind.NONE, false, "test", "plains", "test");
         var channel = new RiverNetwork.Channel("broad", 0, null, List.of(new Vec2(-1000, 0), new Vec2(1000, 0)),
                 List.of(0.0, 2000.0), List.of(100.0, 100.0), new HydrologyProfile.RiverShape(8, 2, 6, 20, 30, 0.75), null);
-        var terrain = new HydrologyTerrain(land, new RiverNetwork(List.of(channel), List.of(), RiverMorphology.VERSION));
+        var terrain = new HydrologyTerrain(land, new RiverNetwork(List.of(channel), List.of(), PlanVersions.HYDROLOGY));
         int min = 1000, max = 0, asymmetric = 0, edgeTurns = 0, previousEdge = 0, previousDelta = 0;
         for (int x = -900; x <= 900; x += 2) {
             int left = 0, right = 0;

@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.cost;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.cost.AdjacentEdgeCache.Node;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 

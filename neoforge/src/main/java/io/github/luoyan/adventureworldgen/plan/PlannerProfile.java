@@ -1,8 +1,14 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.plan;
+
+import io.github.luoyan.adventureworldgen.spatial.AreaGrid;
 
 import java.util.List;
 
-/** Every non-author-tunable constant that affects planner-v2 output. */
+/**
+ * Every non-author-tunable constant that affects planner-v2 output, together with the version
+ * identities that make a plan addressable. Publishing this from the plan package lets generators,
+ * persistence and runtime share one parameter/version contract without depending on planner.
+ */
 public record PlannerProfile(
         String algorithmVersion,
         String planFormatVersion,
@@ -19,8 +25,8 @@ public record PlannerProfile(
     public static final PlannerProfile V2 = new PlannerProfile(
             "planner-v2",
             "plan-v2",
-            io.github.luoyan.adventureworldgen.hydrology.RiverMorphology.VERSION,
-            4,
+            PlanVersions.HYDROLOGY,
+            AreaGrid.CELL_SIDE,
             List.of(16, 8, 4),
             List.of(16, 8),
             8,

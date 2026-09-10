@@ -10,7 +10,7 @@ import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;

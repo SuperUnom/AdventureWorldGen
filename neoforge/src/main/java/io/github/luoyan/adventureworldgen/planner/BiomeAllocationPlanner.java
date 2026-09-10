@@ -10,6 +10,7 @@ import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 /** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {

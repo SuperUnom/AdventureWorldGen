@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 import org.junit.jupiter.api.Test;
 

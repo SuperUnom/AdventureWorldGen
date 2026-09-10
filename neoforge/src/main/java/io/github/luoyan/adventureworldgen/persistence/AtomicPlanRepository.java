@@ -4,7 +4,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import io.github.luoyan.adventureworldgen.api.PlanRepository;
 import io.github.luoyan.adventureworldgen.config.ContentId;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;

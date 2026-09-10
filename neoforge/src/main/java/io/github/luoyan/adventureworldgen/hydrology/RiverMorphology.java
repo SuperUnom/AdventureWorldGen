@@ -6,10 +6,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /** Continuous reach widths and independently irregular banks, derived from frozen geometry. */
 public final class RiverMorphology {
-    public static final String VERSION = "ftf-hydrology-adapted-v2";
     private final GradientNoise reaches, bars, banks, detail;
     private final Map<String, List<Inflow>> inflows;
 

@@ -4,7 +4,7 @@ import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.ContentId;
 import io.github.luoyan.adventureworldgen.erosion.*;
 import io.github.luoyan.adventureworldgen.hydrology.*;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import org.junit.jupiter.api.Test;

@@ -7,6 +7,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 /** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */
 public final class ClimatePlan {

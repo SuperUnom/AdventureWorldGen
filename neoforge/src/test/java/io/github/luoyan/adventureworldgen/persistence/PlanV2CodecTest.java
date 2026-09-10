@@ -5,7 +5,7 @@ import io.github.luoyan.adventureworldgen.config.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;

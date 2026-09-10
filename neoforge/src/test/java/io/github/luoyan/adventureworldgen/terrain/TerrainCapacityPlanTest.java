@@ -1,7 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.List;
 import org.junit.jupiter.api.Test;

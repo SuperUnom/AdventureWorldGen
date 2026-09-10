@@ -14,6 +14,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 class JointPlannerTest {
     @Test void softAdventurePreferenceOrdersBiomesWithoutAForbiddenLevelBand() {

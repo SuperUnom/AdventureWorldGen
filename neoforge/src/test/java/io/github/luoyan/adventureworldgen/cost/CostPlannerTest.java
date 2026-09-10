@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.cost;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;

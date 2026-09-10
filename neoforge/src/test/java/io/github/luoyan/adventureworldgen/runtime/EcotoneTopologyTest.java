@@ -4,7 +4,7 @@ import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.*;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;

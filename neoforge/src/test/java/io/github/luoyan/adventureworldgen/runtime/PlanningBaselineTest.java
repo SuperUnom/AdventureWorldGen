@@ -16,7 +16,7 @@ import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain;

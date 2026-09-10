@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.planner.*;
 import java.util.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 /** Pre-generation capacity commitments. No generated height is clipped to satisfy a biome rule. */
 public final class TerrainCapacityPlan {

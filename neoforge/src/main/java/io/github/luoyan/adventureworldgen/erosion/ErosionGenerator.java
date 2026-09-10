@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.erosion;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 
 import java.util.ArrayList;

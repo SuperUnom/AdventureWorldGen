@@ -4,7 +4,7 @@ import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyGenerator;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain;
 import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;

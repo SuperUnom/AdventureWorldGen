@@ -1,10 +1,15 @@
 package io.github.luoyan.adventureworldgen.spatial;
 
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 
-/** Coordinate conversion for the final world-aligned 4x4 biome ownership grid. */
+/**
+ * Coordinate conversion for the final world-aligned 4x4 biome ownership grid.
+ *
+ * <p>This class is the grid authority: the cell side is defined here and published as
+ * {@code PlannerProfile.finalAreaCellSide} for plan identity, so the spatial package does not
+ * need to depend on planning to know the grid it owns.
+ */
 public final class AreaGrid {
-    public static final int CELL_SIDE = PlannerProfile.V2.finalAreaCellSide();
+    public static final int CELL_SIDE = 4;
     public static final int CELL_AREA = CELL_SIDE * CELL_SIDE;
 
     private AreaGrid() {

@@ -7,6 +7,7 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 class TerrainRecipesTest {
     @Test void strongPlateauDetailIsIncludedInCapacityAndWorldHeightEnvelopes() {

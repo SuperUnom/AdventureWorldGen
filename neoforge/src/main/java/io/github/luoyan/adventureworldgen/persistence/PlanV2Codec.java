@@ -12,7 +12,7 @@ import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
