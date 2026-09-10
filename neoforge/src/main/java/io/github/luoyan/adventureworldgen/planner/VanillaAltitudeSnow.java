@@ -6,6 +6,10 @@ import java.util.Random;
 /** Vanilla 1.21.1's height-adjusted precipitation for temperate windswept and taiga biomes.
  * The one-octave simplex field uses the native permutation and float arithmetic; the planner
  * stays usable without Minecraft registries. GameTests compare this against real Biome instances.
+ *
+ * <p>Verification reference, not a production input: planning reads no value from this class, and
+ * the tests are the only callers. It stays in the main source set because the isolated game-test
+ * source set cannot see unit-test sources, and it must not grow into a second climate rule.
  */
 public final class VanillaAltitudeSnow {
     private VanillaAltitudeSnow() {}

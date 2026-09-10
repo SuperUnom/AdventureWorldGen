@@ -22,7 +22,6 @@ class VanillaAltitudeSnowTest {
             var rules=new BiomeEnvironmentRules(config,climate);
             for(int x=-200;x<=200;x+=32)for(int z=-200;z<=200;z+=32) {
                 var sample=terrain.sample(x+2,z+2);
-                assertTrue(climate.allowsSnowClass(id,x+2,z+2,sample));
                 assertEquals(climate.typeAt(x+2,z+2,sample)==TemperatureType.COLD,
                         rules.prefersType(id,x+2,z+2,sample));
             }

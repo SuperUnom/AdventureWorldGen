@@ -78,7 +78,6 @@ class DemandClimateTest {
             var t=climate.typeAt(x+2,z+2,FLAT.sample(x,z));types.add(t);
             assertEquals(t==TemperatureType.VERY_COLD,
                 rules.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
-            assertTrue(climate.allowsSnowClass(new ContentId("test:cold"),x,z,FLAT.sample(x,z)));
         }
         // Fixed geography does not manufacture all four bands on a small, flat island.
         assertFalse(types.contains(TemperatureType.VERY_COLD));

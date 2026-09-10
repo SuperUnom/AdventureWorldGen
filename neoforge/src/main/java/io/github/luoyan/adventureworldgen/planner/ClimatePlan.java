@@ -199,8 +199,6 @@ public final class ClimatePlan {
         double from=band==0?low:thresholds[band-1],to=band==3?high:thresholds[band];
         return Math.clamp(2.5*(band+(v-from)/Math.max(.01,to-from)),0,10);
     }
-    /** Legacy API: native snowfall never restricts configured biome ownership. */
-    public boolean allowsSnowClass(ContentId id,double x,double z,MacroSample sample) { return true; }
     public HumidityPlan humidity(){return humidity;}
     public double[] targetRatios(){return ratios.clone();}
     public double[] actualRatios(){return actual.clone();}
