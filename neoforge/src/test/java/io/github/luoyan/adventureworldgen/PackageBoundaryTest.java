@@ -113,6 +113,14 @@ class PackageBoundaryTest {
     }
 
     @Test
+    void runtimeIsMinecraftFree() throws IOException {
+        // The plan registry was keyed by a Minecraft ResourceLocation, which was the only reason this
+        // package imported the game. The key is plan vocabulary now and the worldgen boundary
+        // converts its serialized profile id once, so runtime is a pure session and query layer.
+        assertNoImport("runtime", "net.minecraft", "net.neoforged");
+    }
+
+    @Test
     void climateFieldsDoNotDependOnThePlanner() throws IOException {
         // The temperature and humidity fields publish demand statistics but must not compute them:
         // ClimateStatistics is injected, and the author preferences the field needs live on the

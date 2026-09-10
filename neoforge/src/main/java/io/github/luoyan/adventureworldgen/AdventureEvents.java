@@ -27,6 +27,11 @@ import net.minecraft.resources.ResourceLocation;
 public final class AdventureEvents {
     private AdventureEvents() {}
 
+    /** The plan-registry key for a generator's serialized profile id. */
+    private static io.github.luoyan.adventureworldgen.plan.ContentId planKey(AdventureChunkGenerator generator) {
+        return new io.github.luoyan.adventureworldgen.plan.ContentId(generator.profile().toString());
+    }
+
     @SubscribeEvent
     public static void addReloadListeners(AddReloadListenerEvent event) {
         event.addListener(new ProfileReloadListener());
@@ -58,7 +63,7 @@ public final class AdventureEvents {
         // Do not join before Minecraft creates its ChunkProgressListener: the client spins until
         // that listener exists and cannot render a loading screen during this event. Biome/chunk
         // queries and levelLoaded retain the READY barrier while the loading screen renders.
-        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
+        RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
                 adapters, RegisteredPieceSupport.INSTANCE));
     }
 
@@ -70,7 +75,7 @@ public final class AdventureEvents {
         long seed = server.getWorldData().worldGenOptions().seed();
         var worldDirectory = server.getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
-        var plan = RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
+        var plan = RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
                 adapters, RegisteredPieceSupport.INSTANCE)).join();
         var spawn = plan.spawnPosition();
         server.overworld().setDefaultSpawnPos(BlockPos.containing(spawn.x(), spawn.y(), spawn.z()), spawn.yaw());
@@ -84,7 +89,7 @@ public final class AdventureEvents {
         var loaded = ProfileReloadListener.current();
         var worldDirectory = level.getServer().getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
-        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory,
+        RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory,
                 adapters, RegisteredPieceSupport.INSTANCE)).join();
     }
 
@@ -92,7 +97,7 @@ public final class AdventureEvents {
     public static void createSpawn(LevelEvent.CreateSpawnPosition event) {
         if (!(event.getLevel() instanceof ServerLevel level) || level.dimension() != Level.OVERWORLD
                 || !(level.getChunkSource().getGenerator() instanceof AdventureChunkGenerator generator)) return;
-        var plan = RuntimePlanRegistry.await(generator.profile());
+        var plan = RuntimePlanRegistry.await(planKey(generator));
         var spawn = plan.spawnPosition();
         event.getSettings().setSpawn(BlockPos.containing(spawn.x(), spawn.y(), spawn.z()), spawn.yaw());
         event.setCanceled(true);

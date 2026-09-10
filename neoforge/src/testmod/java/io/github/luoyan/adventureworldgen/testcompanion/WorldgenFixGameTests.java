@@ -24,6 +24,7 @@ import net.minecraft.world.level.levelgen.structure.*;
 import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.pools.StructureTemplatePool;
 import net.neoforged.neoforge.gametest.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 @GameTestHolder("testcompanion_performance")
 @PrefixGameTestTemplate(false)
@@ -38,7 +39,7 @@ public final class WorldgenFixGameTests {
                         new Vec2(512,512), new Vec2(-512,512))),
                 new RiverNetwork(List.of(), List.of(), "test"), 64, 128, 256, "test", null);
         var id = ResourceLocation.fromNamespaceAndPath("testcompanion_performance", name);
-        RuntimePlanRegistry.start(id, () -> plan).join();
+        RuntimePlanRegistry.start(new ContentId(id.toString()), () -> plan).join();
         var registries = helper.getLevel().registryAccess();
         return new AdventureChunkGenerator(id, registries.lookupOrThrow(Registries.BIOME),
                 registries.lookupOrThrow(Registries.NOISE_SETTINGS), registries.lookupOrThrow(Registries.NOISE));

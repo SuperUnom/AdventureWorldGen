@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /**
  * Normal-world acceptance for the frozen-piece path, driven by {@code runTestCompanionServer}.
@@ -75,7 +76,7 @@ public final class WaystationAudit {
     }
 
     private static Map<String, String> run(ServerLevel level, String phase) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(ResourceLocation.parse(PROFILE));
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(new ContentId(PROFILE));
         AdventurePlanView.PlannedStructure planned = plan.structures().stream()
                 .filter(structure -> structure.structureId().equals(TestCompanionAdapters.WAYSTATION_ID))
                 .findFirst().orElseThrow(() -> new IllegalStateException("the plan contains no waystation"));

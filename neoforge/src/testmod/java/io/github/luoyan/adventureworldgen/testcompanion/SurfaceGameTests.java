@@ -24,6 +24,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
@@ -42,7 +43,7 @@ public final class SurfaceGameTests {
                     new Coastline(List.of(new Vec2(-512,-512),new Vec2(512,-512),new Vec2(512,512),new Vec2(-512,512))),
                     new RiverNetwork(List.of(),List.of(),"recipe-surface-test"),64,128,256,"terrain-r21",null);
             var id=ResourceLocation.fromNamespaceAndPath("testcompanion","recipe_"+recipe.id());
-            RuntimePlanRegistry.start(id,()->plan).join();
+            RuntimePlanRegistry.start(new ContentId(id.toString()),()->plan).join();
             var registries=helper.getLevel().registryAccess();
             var generator=new AdventureChunkGenerator(id,registries.lookupOrThrow(Registries.BIOME),
                     registries.lookupOrThrow(Registries.NOISE_SETTINGS),registries.lookupOrThrow(Registries.NOISE));
@@ -79,7 +80,7 @@ public final class SurfaceGameTests {
                             new Vec2(512, 512), new Vec2(-512, 512))),
                     new RiverNetwork(List.of(), List.of(), "surface-test"), 64, 128, 256, "surface-test", null);
             var id = ResourceLocation.fromNamespaceAndPath("testcompanion", "surface_" + entry.getKey());
-            RuntimePlanRegistry.start(id, () -> plan).join();
+            RuntimePlanRegistry.start(new ContentId(id.toString()), () -> plan).join();
             var registries = helper.getLevel().registryAccess();
             var generator = new AdventureChunkGenerator(id, registries.lookupOrThrow(Registries.BIOME),
                     registries.lookupOrThrow(Registries.NOISE_SETTINGS), registries.lookupOrThrow(Registries.NOISE));

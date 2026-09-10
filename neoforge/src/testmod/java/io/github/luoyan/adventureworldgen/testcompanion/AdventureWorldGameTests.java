@@ -45,6 +45,7 @@ import net.minecraft.world.level.levelgen.structure.StructureSet;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
@@ -125,7 +126,7 @@ public final class AdventureWorldGameTests {
         var level = helper.getLevel();
         var registries = level.registryAccess();
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "structure_injection");
-        RuntimePlanRegistry.start(id, () -> plan).join();
+        RuntimePlanRegistry.start(new ContentId(id.toString()), () -> plan).join();
         var generator = new AdventureChunkGenerator(id, registries.lookupOrThrow(Registries.BIOME),
                 registries.lookupOrThrow(Registries.NOISE_SETTINGS), registries.lookupOrThrow(Registries.NOISE));
         // This test is about the planned injection, so the vanilla pass gets no structure set to
@@ -286,7 +287,7 @@ public final class AdventureWorldGameTests {
     public static void plannedOceanColumnsPreserveDeepCavesAndContinuousWater(GameTestHelper helper) {
         var plan = plan();
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "ocean_regression");
-        io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry.start(id, () -> plan).join();
+        io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry.start(new ContentId(id.toString()), () -> plan).join();
         var registries = helper.getLevel().registryAccess();
         var generator = new io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator(id,
                 registries.lookupOrThrow(Registries.BIOME), registries.lookupOrThrow(Registries.NOISE_SETTINGS),
@@ -393,7 +394,7 @@ public final class AdventureWorldGameTests {
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("windswept")).count()==4,"new windswept filler candidates disappeared");
         helper.assertTrue(config.biomes().filler().stream().filter(id->id.value().contains("badlands")).count()==3,"new badlands filler candidates disappeared");
         int mountains = 0, openHotLand = 0;
-        var environmentRules = new io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules(config, plan.climate());
+        var environmentRules = new io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules(config, plan.climate());
         for (int z = -3000; z < 3000; z += 32) for (int x = -3000; x < 3000; x += 32) {
             var terrain = plan.terrainAt(x+2,z+2);
             if (terrain.waterKind() == io.github.luoyan.adventureworldgen.api.WaterKind.OCEAN) continue;
@@ -528,7 +529,7 @@ public final class AdventureWorldGameTests {
             assertTerrainBiomes(helper, generated, config);
         } catch (java.io.IOException failure) { throw new AssertionError(failure); }
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "river_regression");
-        io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry.start(id, () -> generated).join();
+        io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry.start(new ContentId(id.toString()), () -> generated).join();
         var level = helper.getLevel();
         var registries = level.registryAccess();
         var generator = new io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator(id,

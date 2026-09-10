@@ -87,12 +87,17 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     }
 
     public ResourceLocation profile() { return profile; }
+
+    /** The plan-registry key for this generator's serialized profile id. */
+    private io.github.luoyan.adventureworldgen.plan.ContentId planKey() {
+        return new io.github.luoyan.adventureworldgen.plan.ContentId(profile.toString());
+    }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return ModWorldgen.CHUNK_GENERATOR.get(); }
 
     @Override
     public CompletableFuture<ChunkAccess> fillFromNoise(Blender blender, RandomState randomState,
                                                          StructureManager structures, ChunkAccess chunk) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         if (hasOcean(chunk, plan)) {
             return oceanDelegate.fillFromNoise(blender, oceanState(plan), structures, chunk)
                     .thenApply(filled -> { composeColumns(filled, plan, randomState, true, structures); return filled; });
@@ -159,7 +164,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
 
     /** The same surface pass is used in production and chunk-level integration checks. */
     public void buildPlannedSurface(RegistryAccess registries, ChunkAccess chunk) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         // Surface noises use the world seed and our sea-level datum. Rules come from the
         // registered overworld settings, including datapack changes, not adapter palettes.
         RandomState state = oceanState(plan);
@@ -186,7 +191,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override public void applyCarvers(WorldGenRegion region, long seed, RandomState randomState,
                                        BiomeManager biomeManager, StructureManager structures,
                                        ChunkAccess chunk, GenerationStep.Carving step) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         if (!new StructureTerrain(structures, chunk.getPos()).isEmpty()) return;
         // Ocean caves and aquifers already come from native density generation. Carvers using
         // an unrelated overworld aquifer can drain custom river surfaces, so exclude wet chunks.
@@ -203,7 +208,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                                  StructureManager manager, ChunkAccess chunk, StructureTemplateManager templates) {
         // Generate non-controlled vanilla structures normally, then erase the controlled native candidate before publish.
         super.createStructures(registries, state, manager, chunk, templates);
-        AdventurePlanView plan = RuntimePlanRegistry.await(profile);
+        AdventurePlanView plan = RuntimePlanRegistry.await(planKey());
         var structureRegistry = registries.registryOrThrow(Registries.STRUCTURE);
         for (var controlledId : plan.controlledStructureIds()) {
             Structure controlled = structureRegistry.get(ResourceLocation.parse(controlledId.value()));
@@ -232,7 +237,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override
     public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor level,
                              RandomState randomState) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
         int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
         int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
@@ -243,7 +248,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
 
     @Override
     public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor level, RandomState randomState) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(profile);
+        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
         NoiseColumn nativeOcean = sample.waterKind() == WaterKind.OCEAN
                 ? oceanDelegate.getBaseColumn(x, z, level, oceanState(plan)) : null;
@@ -271,7 +276,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     }
 
     @Override public void addDebugScreenInfo(List<String> lines, RandomState randomState, BlockPos pos) {
-        MacroSample sample = RuntimePlanRegistry.await(profile).terrainAt(pos.getX(), pos.getZ());
+        MacroSample sample = RuntimePlanRegistry.await(planKey()).terrainAt(pos.getX(), pos.getZ());
         lines.add("AdventureWorldGen " + sample.terrainVersion());
         lines.add(io.github.luoyan.adventureworldgen.runtime.PlanIdentity.IMPLEMENTATION_REVISION);
         lines.add("Region " + sample.regionId() + " / " + sample.terrainTemplate() + " / " + sample.recipe());
