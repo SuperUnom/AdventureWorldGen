@@ -45,7 +45,8 @@ record PlanTerrain(RegionTerrain regions, MacroTerrain island, HydrologyTerrain 
     static Foundation foundation(long seed, AdventureWorldConfig config, TerrainCapacityPlan capacities,
                                  Coastline coastline, double seaSurface, double landBand, double seaBand,
                                  String terrainVersion) {
-        RegionTerrain regions = new RegionTerrain(seed, PlannerProfile.V2, capacities, config.world().terrain(), config);
+        RegionTerrain regions = new RegionTerrain(seed, PlannerProfile.V2, capacities, config.world().terrain(),
+                config.fillerTerrainPolicy());
         MacroTerrain island = new IslandMacroTerrain(coastline, regions, seed, seaSurface, landBand, seaBand, terrainVersion);
         return new Foundation(regions, island);
     }

@@ -32,7 +32,7 @@ class TerrainRecipesTest {
         }
         var templates=new EnumMap<TerrainTemplate,TerrainTemplate.Settings>(TerrainTemplate.class);
         for(var t:TerrainTemplate.values())templates.put(t,new TerrainTemplate.Settings(t==TerrainTemplate.PLATEAU?1:0,1,220,2));
-        var terrain=new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),new TerrainSettings(templates,false,false),null);
+        var terrain=new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),new TerrainSettings(templates,false,false),FillerTerrainPolicy.CATEGORY_ONLY);
         var r=terrain.region(2,2);
         assertTrue(64+r.baseElevation()+1.1*r.amplitude()<=310+1e-9);
     }

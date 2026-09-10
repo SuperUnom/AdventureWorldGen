@@ -100,6 +100,15 @@ class PackageBoundaryTest {
     }
 
     @Test
+    void terrainDoesNotDependOnTheAuthorModel() throws IOException {
+        // config <-> terrain was the last package cycle: the region sampler took the whole
+        // AdventureWorldConfig just to ask which recipes a filler biome admits. It now receives a
+        // one-method FillerTerrainPolicy, so the edge is one-way again: the author model names
+        // terrain vocabulary, and terrain never sees the model.
+        assertNoImport("terrain", "io.github.luoyan.adventureworldgen.config");
+    }
+
+    @Test
     void storageLayerOnlyHandlesFrozenData() throws IOException {
         // persistence encodes and decodes PlanSnapshot: frozen data only. Reaching the runtime
         // session object would make the storage layer depend on executable query state, and a READY

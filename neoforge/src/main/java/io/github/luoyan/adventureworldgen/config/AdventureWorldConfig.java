@@ -44,6 +44,21 @@ public record AdventureWorldConfig(
         }
     }
 
+    /**
+     * The author's filler rules, reduced to the single question the terrain sampler asks: may these
+     * two recipes meet inside one filler biome? Kept on the author model so terrain only ever sees
+     * the answer, never the config type.
+     */
+    public io.github.luoyan.adventureworldgen.terrain.FillerTerrainPolicy fillerTerrainPolicy() {
+        return (first, second) -> biomes().filler().stream().anyMatch(id -> {
+            var rule = biomes().terrainRules().get(id);
+            return rule == null || (!rule.shoreOnly() && rule.landforms().isEmpty()
+                    && rule.minHeight() == null && rule.maxHeight() == null
+                    && rule.effectiveTemplates().contains(first.id())
+                    && rule.effectiveTemplates().contains(second.id()));
+        });
+    }
+
     public record BiomeSettings(List<RequiredBiome> required, List<ContentId> filler,
                                 Map<ContentId, TerrainRule> terrainRules, int blendRadius) {
         public BiomeSettings(List<RequiredBiome> required, List<ContentId> filler, Map<ContentId, TerrainRule> rules) {

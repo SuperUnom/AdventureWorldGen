@@ -38,7 +38,7 @@ public final class TerrainCapacitySolver {
     public static TerrainCapacityPlan reserve(long seed,AdventureWorldConfig config,Coastline coast,double landBand) {
         var settings=config.world().terrain();
         var ranges=MountainRangePlan.create(seed,config.world().radius(),settings);
-        var geometry=new RegionTerrain(seed,PlannerProfile.V2,new TerrainCapacityPlan(List.of(),ranges),settings,config);
+        var geometry=new RegionTerrain(seed,PlannerProfile.V2,new TerrainCapacityPlan(List.of(),ranges),settings,config.fillerTerrainPolicy());
         Map<RegionTerrain.GridKey,Bin> bins=new HashMap<>();
         int extent=(int)StrictMath.ceil(config.world().radius()/32)*32;
         for(int z=-extent;z<extent;z+=32)for(int x=-extent;x<extent;x+=32) {

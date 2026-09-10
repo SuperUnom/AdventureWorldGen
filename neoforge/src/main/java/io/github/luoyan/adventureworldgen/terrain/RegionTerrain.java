@@ -22,7 +22,7 @@ public final class RegionTerrain {
     private final EcotoneNoise recipeEcotone;
     private final TerrainSettings settings;
     private final ValueNoise compositeNoise;
-    private final io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config;
+    private final FillerTerrainPolicy fillerTerrainPolicy;
     private final Map<GridKey, Region> regions = new ConcurrentHashMap<>();
     private record Neighborhood(long x, long z, Region[] regions) {}
     private final ThreadLocal<Neighborhood> neighborhoodCache = new ThreadLocal<>();
@@ -43,9 +43,10 @@ public final class RegionTerrain {
         this(seed,plannerProfile,capacities,TerrainSettings.defaults(),null);
     }
     public RegionTerrain(long seed, PlannerProfile plannerProfile,TerrainCapacityPlan capacities,
-                         TerrainSettings settings,io.github.luoyan.adventureworldgen.config.AdventureWorldConfig config) {
+                         TerrainSettings settings,FillerTerrainPolicy fillerTerrainPolicy) {
         this.capacities=capacities;
-        this.settings=settings; this.config=config;
+        this.settings=settings;
+        this.fillerTerrainPolicy=fillerTerrainPolicy==null?FillerTerrainPolicy.CATEGORY_ONLY:fillerTerrainPolicy;
         this.seed = seed;
         this.algorithmVersion = plannerProfile.algorithmVersion();
         this.profile = plannerProfile.terrain();
@@ -267,12 +268,7 @@ public final class RegionTerrain {
         return new Region(key,id,new Vec2(x,z),recipe.planningCategory(),recipe,secondary,elevation,amplitude);
     }
     private boolean commonFiller(TerrainTemplate a,TerrainTemplate b) {
-        if(config==null)return a.category().equals(b.category());
-        return config.biomes().filler().stream().anyMatch(id->{
-            var rule=config.biomes().terrainRules().get(id);
-            return rule==null||(!rule.shoreOnly()&&rule.landforms().isEmpty()&&rule.minHeight()==null&&rule.maxHeight()==null
-                &&rule.effectiveTemplates().contains(a.id())&&rule.effectiveTemplates().contains(b.id()));
-        });
+        return fillerTerrainPolicy.sharesFiller(a,b);
     }
     private TerrainTemplate choose(String id,java.util.List<TerrainTemplate> choices,int operation) {
         double total=choices.stream().mapToDouble(t->settings.get(t).weight()).sum();
