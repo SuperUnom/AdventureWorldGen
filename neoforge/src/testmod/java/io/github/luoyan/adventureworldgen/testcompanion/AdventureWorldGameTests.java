@@ -13,6 +13,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
@@ -249,7 +250,7 @@ public final class AdventureWorldGameTests {
             var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn());
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
-                    && progress.stage()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,
+                    && progress.stage()==PlanningStage.CACHE,
                     "READY reload reran filling or transition");
             for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
                 helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");
@@ -294,7 +295,7 @@ public final class AdventureWorldGameTests {
             var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn());
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
-                    && progress.stage()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,
+                    && progress.stage()==PlanningStage.CACHE,
                     "READY reload reran filling or transition");
             for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
                 helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");

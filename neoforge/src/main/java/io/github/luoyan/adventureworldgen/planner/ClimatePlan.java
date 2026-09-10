@@ -3,6 +3,8 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
 import java.util.*;
 
@@ -55,6 +57,10 @@ public final class ClimatePlan {
         this(seed,config,terrain,progress,null);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,State frozen) {
+        this(seed,config,terrain,progress,PlanningObserver.NONE,frozen);
+    }
+    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
+                       PlanningObserver observer,State frozen) {
         shores=config.biomes().filler().stream().filter(id->{var r=config.biomes().terrainRules().get(id);return r!=null&&r.shoreOnly();}).toList();
         this.config=config;
         temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
@@ -142,8 +148,7 @@ public final class ClimatePlan {
             supply.add(new Supply(id.value(),d.area().target(),legal,climateArea(id)));
         }
         progress.accept(1);
-        humidity=new HumidityPlan(seed,config,terrain,this,
-                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.HUMIDITY),null);
+        humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
     }
     private void distribute(ContentId id,double amount,double[] out) {
         var prefs=preferences(config,id);

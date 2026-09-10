@@ -14,6 +14,7 @@ import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.erosion.ErosionGenerator;
@@ -71,7 +72,7 @@ public final class RuntimePlanner {
                 loaded.config().spawn().structure().spawnPoint().z()) : 0.0;
         double keep = spawnRadius + spawnFootprint + StrictMath.min(32.0, radius / 20.0);
         LOGGER.info("AdventureWorldGen planning coast for {} with seed {}", loaded.id(), seed);
-        progress.stage(PlanningProgress.Stage.COAST);
+        progress.stage(PlanningStage.COAST);
         var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, radius, keep);
         metrics.finish("coast");
         LOGGER.info("AdventureWorldGen planning continuous regions for {}", loaded.id());
@@ -81,16 +82,16 @@ public final class RuntimePlanner {
         var island = new IslandMacroTerrain(coast.coastline(), regions, seed, 64.0,
                 coast.landBand(), coast.seaBand(), "terrain-r22");
         LOGGER.info("AdventureWorldGen simulating and freezing erosion delta field for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.EROSION);
+        progress.stage(PlanningStage.EROSION);
         int erosionSpacing = 8;
         int erosionExtent = (int) StrictMath.ceil((radius + 256.0) / erosionSpacing) * erosionSpacing;
         int erosionSize = erosionExtent * 2 / erosionSpacing + 1;
         var erosion = new ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
-                .generate(seed, island, -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningProgress.Stage.EROSION));
+                .generate(seed, island, -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningStage.EROSION));
         metrics.finish("erosion");
         var erodedIsland = new io.github.luoyan.adventureworldgen.erosion.ErodedTerrain(island, erosion, "erosion-v2");
         LOGGER.info("AdventureWorldGen planning {} hydrology for {}", PlannerProfile.V2.hydrologyVersion(), loaded.id());
-        progress.stage(PlanningProgress.Stage.RIVERS);
+        progress.stage(PlanningStage.RIVERS);
         var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, radius, 64.0, coast.coastline(), erodedIsland);
         metrics.finish("rivers");
@@ -98,13 +99,13 @@ public final class RuntimePlanner {
         var erodedTerrain = new io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain(
                 new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain),262144);
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.COSTS);
-        var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningProgress.Stage.COSTS));
+        progress.stage(PlanningStage.COSTS);
+        var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
         metrics.finish("cost_graph");
         LOGGER.info("AdventureWorldGen cost graph has {} nodes and {} canonical edges for {}",
                 costs.nodeCount(), costs.edgeStats().computations(), loaded.id());
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.PLACEMENT);
+        progress.stage(PlanningStage.PLACEMENT);
         var jointPlanner = new JointPlanner(PlannerProfile.V2);
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
                 (demand, x, y, z, structureSeed) -> {
@@ -129,7 +130,7 @@ public final class RuntimePlanner {
                                 costs.normalizedPreferenceAt(x,z,loaded.config().world().radius()));
                     }
                 }, (biome, x, z) -> adapters.biome(biome)
-                        .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress.within(PlanningProgress.Stage.PLACEMENT), metrics::finish);
+                        .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress, progress.within(PlanningStage.PLACEMENT), metrics::finish);
         GeneratedAdventurePlan plan = new GeneratedAdventurePlan(seed, loaded.config(), coast.coastline(), rivers,
                 64.0, coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
                 joint.patches(), joint.structures(), new GeneratedAdventurePlan.PlanDiagnostics(
@@ -138,9 +139,9 @@ public final class RuntimePlanner {
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
                 costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                 "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,null,
-                new GeneratedAdventurePlan.PlanningInputs(regions,island,waterTerrain,erodedTerrain,jointPlanner.climate()));
+                new GeneratedAdventurePlan.PlanningInputs(regions,island,waterTerrain,erodedTerrain,jointPlanner.climate()), progress);
         metrics.finish("filler_and_transition");
-        progress.stage(PlanningProgress.Stage.VALIDATION);
+        progress.stage(PlanningStage.VALIDATION);
         for(var demand:new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(loaded.config()).patches()) {
             var patch=plan.biomePatches().stream().filter(p->p.patchId().equals(demand.patchId())).findFirst().orElse(null);
             if(patch==null) {
@@ -155,7 +156,7 @@ public final class RuntimePlanner {
         }
         metrics.finish("validation");
         metrics.adventure(joint.patches(),costs,radius);
-        progress.stage(PlanningProgress.Stage.SAVE);
+        progress.stage(PlanningStage.SAVE);
         try {
             repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan), inputHash);
         } catch (IOException failure) {

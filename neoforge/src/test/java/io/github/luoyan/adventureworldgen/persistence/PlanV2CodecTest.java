@@ -19,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
 class PlanV2CodecTest {
     @Test
@@ -47,7 +48,7 @@ class PlanV2CodecTest {
         GeneratedAdventurePlan restored;
         try {
             restored=codec.decode(encoded,profile,"sparse-input",config);
-            assertEquals(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.CACHE,progress.snapshot().stage());
+            assertEquals(PlanningStage.CACHE,progress.snapshot().stage());
             assertEquals(0,progress.snapshot().percent());
         } finally {io.github.luoyan.adventureworldgen.runtime.PlanningProgress.clear();}
         assertEquals(original.fillerSeedCount(),restored.fillerSeedCount());

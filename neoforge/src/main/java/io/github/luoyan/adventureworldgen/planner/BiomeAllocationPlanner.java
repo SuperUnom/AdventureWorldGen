@@ -2,6 +2,7 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
 import java.util.*;
 import java.util.function.DoubleConsumer;
@@ -27,6 +28,7 @@ public final class BiomeAllocationPlanner {
     private final Long2IntOpenHashMap owner=new Long2IntOpenHashMap();
     private final List<Region> regions=new ArrayList<>();
     private DoubleConsumer progress;
+    private PlanningObserver observer=PlanningObserver.NONE;
     private int requiredCount;
     private static final class Region {
         final RequirementExpander.PatchDemand demand;
@@ -50,12 +52,18 @@ public final class BiomeAllocationPlanner {
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations) {
-        return allocate(seed,config,index,demands,reservations,new ClimatePlan(seed,config,index::sampleAt),ignored->{});
+        return allocate(seed,config,index,demands,reservations,new ClimatePlan(seed,config,index::sampleAt),PlanningObserver.NONE,ignored->{});
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
                            ClimatePlan climate,DoubleConsumer progress) {
+        return allocate(seed,config,index,demands,reservations,climate,PlanningObserver.NONE,progress);
+    }
+    public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
+                           List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
+                           ClimatePlan climate,PlanningObserver observer,DoubleConsumer progress) {
         this.config=config;this.index=index;this.reservations=reservations;this.climate=climate;this.progress=progress;
+        this.observer=observer;
         operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
         String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
@@ -99,7 +107,7 @@ public final class BiomeAllocationPlanner {
                 var r=regions.get(i);if(r.cells.size()>=r.minimum())continue;
                 var point=nextSupplement(r);if(point==null)continue;
                 claim(i,point.cell(),0);r.seedCount++;added=true;
-                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.detailCurrent(
+                observer.detail(
                         "补充区域 "+r.biome+"："+r.seedCount+" 个种子，保留温湿度与地形限制");
             }
             if(!added)break;

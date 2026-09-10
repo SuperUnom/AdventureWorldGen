@@ -6,6 +6,8 @@ import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -47,6 +49,12 @@ public final class JointPlanner {
     public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, java.util.function.DoubleConsumer progress,
                        java.util.function.Consumer<String> checkpoint) {
+        return plan(seed,config,terrain,freezer,levelConstraint,adapterConstraint,PlanningObserver.NONE,progress,checkpoint);
+    }
+
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+                       LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, PlanningObserver observer,
+                       java.util.function.DoubleConsumer progress, java.util.function.Consumer<String> checkpoint) {
         var demands = new RequirementExpander().expandMinimum(config);
         List<PlannedBiomePatch> patches = new ArrayList<>();
         List<AdventurePlanView.PlannedStructure> structures = new ArrayList<>();
@@ -55,19 +63,19 @@ public final class JointPlanner {
         long indexStart = System.nanoTime();
         placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, value -> progress.accept(value * 0.2));
         checkpoint.accept("index");
-        io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE);
-        climate=new ClimatePlan(seed,config,placementIndex::sampleAt,io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.TEMPERATURE));
+        observer.stage(PlanningStage.TEMPERATURE);
+        climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null);
         checkpoint.accept("climate");
-        io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS);
+        observer.stage(PlanningStage.SEEDS);
         BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&climate.allowsEnvironment(biome,x,z,placementIndex.sample(x,z));
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
                 "Placement index built in {0} ms", (System.nanoTime() - indexStart) / 1_000_000);
 
         progress.accept(0.4);
         long assignmentStart = System.nanoTime();
-        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),climate,value -> {
-            var stage=value<.18?io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.SEEDS:io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.GROWTH;
-            io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(stage).accept(value<.18?value/.18:(value-.18)/.82);
+        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),climate,observer,value -> {
+            var stage=value<.18?PlanningStage.SEEDS:PlanningStage.GROWTH;
+            observer.within(stage).accept(value<.18?value/.18:(value-.18)/.82);
         });
         patches.addAll(assigned.patches());
         operations += assigned.operations();
@@ -77,7 +85,7 @@ public final class JointPlanner {
                 (System.nanoTime()-assignmentStart)/1_000_000,placementIndex.queries(),assigned.operations());
 
         checkpoint.accept("biomes");
-        io.github.luoyan.adventureworldgen.runtime.PlanningProgress.stageCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.STRUCTURES);
+        observer.stage(PlanningStage.STRUCTURES);
         // The entire required biome layout is frozen before any required structure is prepared.
         var structureOrder=new ArrayList<>(demands.structures());
         structureOrder.sort(java.util.Comparator.comparing((RequirementExpander.StructureInstanceDemand d)->!d.spawnInstance())
@@ -87,7 +95,7 @@ public final class JointPlanner {
             var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(demand.instanceId()))).findFirst().orElseThrow();
             placeRequiredStructure(seed,config,terrain,freezer,levelConstraint,carrier,structures,demand);
             operations++;
-            io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.STRUCTURES)
+            observer.within(PlanningStage.STRUCTURES)
                     .accept(structures.size()/(double)structureOrder.size());
         }
         checkpoint.accept("structures");

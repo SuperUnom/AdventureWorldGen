@@ -7,6 +7,8 @@ import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
@@ -90,6 +92,17 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout, PlanningInputs prepared) {
+        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,prepared,PlanningObserver.NONE);
+    }
+    GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
+                                  RiverNetwork riverNetwork, double seaSurface, double landBand,
+                                  double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  PlanDiagnostics diagnostics, ErosionDeltaField erosion,
+                                  io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
+                                  BiomeLayout frozenLayout, PlanningInputs prepared, PlanningObserver observer) {
+        java.util.Objects.requireNonNull(observer,"observer");
         this.capacities=capacities;
         this.seed = seed;
         this.blockBlend=new io.github.luoyan.adventureworldgen.terrain.LocalBiomeBlend(seed,config.biomes().blendRadius());
@@ -118,10 +131,10 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         }
         if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
             throw new IllegalArgumentException("incomplete frozen biome layout");
-        climate=prepared!=null?prepared.climate():new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},frozenLayout==null?null:frozenLayout.climate());
-        if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.FILLER);
-        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate,frozenLayout==null?null:frozenLayout.filler());
-        if(frozenLayout==null)PlanningProgress.stageCurrent(PlanningProgress.Stage.TRANSITION);
+        climate=prepared!=null?prepared.climate():new io.github.luoyan.adventureworldgen.planner.ClimatePlan(seed,config,terrain,ignored->{},observer,frozenLayout==null?null:frozenLayout.climate());
+        if(frozenLayout==null)observer.stage(PlanningStage.FILLER);
+        filler=new io.github.luoyan.adventureworldgen.planner.FillerLayout(seed,config,terrain,this.biomePatches,climate,observer,frozenLayout==null?null:frozenLayout.filler());
+        if(frozenLayout==null)observer.stage(PlanningStage.TRANSITION);
         double y = terrain.sample(0, 0).groundSurface() + 1.0;
         this.spawn = frozenSpawn == null ? new SpawnPosition(0.5, StrictMath.ceil(y), 0.5, 0) : frozenSpawn;
         if(frozenLayout==null)protectMinimumAreas();

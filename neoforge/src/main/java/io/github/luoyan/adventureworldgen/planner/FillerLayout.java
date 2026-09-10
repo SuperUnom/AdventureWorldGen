@@ -3,6 +3,8 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
 import java.util.*;
 
@@ -28,11 +30,16 @@ public final class FillerLayout {
     private int restoredSeedCount=-1;
     public record State(int extent,int[] labels,int seedCount) {}
     public State snapshot(){return new State(extent,labels.clone(),seedCount());}
-    private final java.util.function.DoubleConsumer progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.FILLER);
+    private final java.util.function.DoubleConsumer progress;
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate) {
         this(seed,config,terrain,patches,climate,null);
     }
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,State frozen) {
+        this(seed,config,terrain,patches,climate,PlanningObserver.NONE,frozen);
+    }
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,
+                        PlanningObserver observer,State frozen) {
+        this.progress=observer.within(PlanningStage.FILLER);
         this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
         boundaryWarp=new io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp(seed,"filler/boundary",1);
         shape=new ValueNoise(seed,"filler/frontier",128);
