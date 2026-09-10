@@ -23,11 +23,15 @@ import io.github.luoyan.adventureworldgen.terrain.TerrainMorphology;
  * the plan; READY restore recomputes the same stack from frozen data. Both go through this record,
  * so the order and the wrappers cannot drift apart unnoticed.
  *
- * <p>The query terrain is the one step the two entries still differ on, and it is deliberate:
- * first planning keeps a half-block memoizing wrapper warm from its own planning queries, restore
- * uses the plain morphology. The wrapper is a cache, not a formula — sampled results are identical
- * (see {@code PlanV2CodecTest}) — but the object graph is not, and unifying it is an open decision
- * that needs a performance comparison.
+ * <p>Both entries share the formula and this order; they differ only in whether the query terrain
+ * carries a half-block memoizing wrapper. First planning reuses the wrapper its own queries already
+ * warmed, for the rest of assembly, the final check and the runtime queries that follow. A READY
+ * reload starts from the plain morphology: the wrapper's saving is not established for that path,
+ * so it does not create a second, plan-sized cache. Both paths keep the plan's own 16384-entry
+ * column caches.
+ *
+ * <p>The wrapper is a cache and never a formula: {@code PlanTerrainTest} pins that both answer
+ * identically, off-grid coordinates included, so this difference can never change a sampled result.
  */
 record PlanTerrain(RegionTerrain regions, MacroTerrain island, HydrologyTerrain water, MacroTerrain terrain) {
     /** Regions and the island surface: exactly the inputs erosion and hydrology are generated from. */
@@ -60,8 +64,10 @@ record PlanTerrain(RegionTerrain regions, MacroTerrain island, HydrologyTerrain 
     }
 
     /**
-     * The memoizing query wrapper the first planning run hands to the plan, so the validation stage
-     * and the immediate runtime queries reuse the samples planning already took. Caching only.
+     * The query terrain the first planning run hands to the plan: a half-block memoizing wrapper
+     * around the morphology, already warm from planning. This is an accepted optimization, not a
+     * requirement — a READY reload reads the plain morphology and gets the same answers without
+     * carrying the extra cache.
      */
     PlanTerrain withMemoizedQueries() {
         return new PlanTerrain(regions, island, water, new ExactGridTerrain(terrain, 262144));

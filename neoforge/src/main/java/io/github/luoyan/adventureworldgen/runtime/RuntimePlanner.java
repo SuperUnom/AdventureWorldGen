@@ -81,7 +81,8 @@ public final class RuntimePlanner {
         var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, radius, 64.0, coast.coastline(), erodedIsland);
         metrics.finish(PlanningMetrics.Stage.RIVERS);
-        // Planning queries keep the memoizing wrapper warm; the same stack is handed to the plan.
+        // Planning queries keep the memoizing wrapper warm and the same stack is handed to the
+        // plan; a READY reload composes this stack without the wrapper (accepted optimization).
         var planningTerrain = PlanTerrain.compose(terrainFoundation, erodedIsland, rivers).withMemoizedQueries();
         var erodedTerrain = planningTerrain.terrain();
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
