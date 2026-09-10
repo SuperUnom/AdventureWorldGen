@@ -163,11 +163,5 @@ class StructureAdapterBridgeTest {
             validatedAgainst = terrain;
             return validate ? List.of() : List.of("test rejection");
         }
-
-        @Override public byte[] serializePieces(Prepared structure) { return new byte[]{1, 2, 3}; }
-
-        @Override public void placeChunk(Prepared structure, int chunkX, int chunkZ, PlacementTarget target) {
-            throw new AssertionError("planning must not place chunks");
-        }
     }
 }

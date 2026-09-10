@@ -65,23 +65,6 @@ public final class TestCompanionAdapters {
             }
             return List.copyOf(errors);
         }
-        @Override public byte[] serializePieces(Prepared structure) {
-            int length = structure.pieces().stream().mapToInt(piece -> piece.canonicalNbt().length).sum();
-            byte[] result = new byte[length]; int offset = 0;
-            for (var piece : structure.pieces()) {
-                System.arraycopy(piece.canonicalNbt(), 0, result, offset, piece.canonicalNbt().length);
-                offset += piece.canonicalNbt().length;
-            }
-            return result;
-        }
-        @Override public void placeChunk(Prepared structure, int chunkX, int chunkZ, PlacementTarget target) {
-            int minX = chunkX << 4, minZ = chunkZ << 4, maxX = minX + 15, maxZ = minZ + 15;
-            for (var piece : structure.pieces()) {
-                if (piece.minX() > maxX || piece.maxX() < minX || piece.minZ() > maxZ || piece.maxZ() < minZ) continue;
-                if (target.beginOnce(structure.candidate().instanceId(), piece.pieceId(), chunkX, chunkZ))
-                    target.placeCanonicalPiece(piece);
-            }
-        }
     };
 
     private TestCompanionAdapters() {}

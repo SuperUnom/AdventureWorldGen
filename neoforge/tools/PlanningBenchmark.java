@@ -30,8 +30,6 @@ public final class PlanningBenchmark {
                 return new Prepared(c, List.of(piece), List.of(box), List.of(box), c.originX(), c.originY(), c.originZ());
             }
             public List<String> validatePrepared(Prepared p, MacroTerrain t) { return List.of(); }
-            public byte[] serializePieces(Prepared p) { return new byte[]{1}; }
-            public void placeChunk(Prepared p, int x, int z, PlacementTarget t) { throw new UnsupportedOperationException(); }
         }).build();
         var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters);
         System.out.printf("PLANNING seconds=%.3f patches=%d structures=%d%n",

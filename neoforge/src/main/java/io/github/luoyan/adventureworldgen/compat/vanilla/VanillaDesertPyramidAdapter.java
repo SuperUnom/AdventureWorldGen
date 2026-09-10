@@ -84,14 +84,4 @@ public final class VanillaDesertPyramidAdapter implements StructureAdapter {
         }
         return List.copyOf(errors);
     }
-
-    @Override public byte[] serializePieces(Prepared structure) {
-        if (structure.pieces().size() != 1) throw new IllegalArgumentException("desert pyramid must have one piece");
-        return structure.pieces().getFirst().canonicalNbt();
-    }
-
-    @Override public void placeChunk(Prepared structure, int chunkX, int chunkZ, PlacementTarget target) {
-        for (var piece : structure.pieces()) if (target.beginOnce(structure.candidate().instanceId(), piece.pieceId(), chunkX, chunkZ))
-            target.placeCanonicalPiece(piece);
-    }
 }
