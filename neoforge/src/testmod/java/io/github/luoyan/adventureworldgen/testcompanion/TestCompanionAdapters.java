@@ -10,8 +10,6 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.core.Direction;
-import net.minecraft.util.RandomSource;
-import net.minecraft.world.level.levelgen.structure.structures.DesertPyramidPiece;
 
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
@@ -38,16 +36,27 @@ public final class TestCompanionAdapters {
 
     public static final StructureAdapter WAYSTATION = new StructureAdapter() {
         @Override public ContentId structureId() { return WAYSTATION_ID; }
-        @Override public String adapterVersion() { return "testcompanion-waystation-v1"; }
+        // v2 freezes WaystationPiece instead of a vanilla pyramid piece. The version is part of the
+        // plan identity, so an old companion READY reloads as a miss and is planned again; the
+        // production adapter set is untouched by this bump.
+        @Override public String adapterVersion() { return "testcompanion-waystation-v2"; }
         @Override public Descriptor describe() {
             return new Descriptor(List.of("north", "east", "south", "west"), 32.0, true, true);
         }
         @Override public Prepared prepare(Candidate candidate, long structureSeed) {
+            Direction orientation = switch (candidate.rotation()) {
+                case "north" -> Direction.NORTH;
+                case "east" -> Direction.EAST;
+                case "south" -> Direction.SOUTH;
+                case "west" -> Direction.WEST;
+                default -> throw new IllegalArgumentException("unsupported test waystation rotation " + candidate.rotation());
+            };
+            int variant = Math.floorMod((int) structureSeed, WaystationPiece.VARIANTS);
             List<AdventurePlanView.PlannedPiece> pieces = new ArrayList<>();
-            pieces.add(piece(candidate, 0, candidate.originX() - 12, candidate.originZ() - 6,
-                    candidate.originX() + 12, candidate.originZ() + 6, structureSeed));
-            pieces.add(piece(candidate, 1, candidate.originX() + 5, candidate.originZ() - 4,
-                    candidate.originX() + 25, candidate.originZ() + 4, structureSeed));
+            pieces.add(freeze(new WaystationPiece(0, variant, structureSeed, WaystationPiece.SIMPLE_DUNGEON_LOOT,
+                    orientation, box(candidate, -12, -6, 12, 6)), candidate, 0));
+            pieces.add(freeze(new WaystationPiece(1, variant, structureSeed ^ 1L, WaystationPiece.SIMPLE_DUNGEON_LOOT,
+                    orientation, box(candidate, 5, -4, 25, 4)), candidate, 1));
             List<HorizontalBox> footprint = pieces.stream().map(piece -> new HorizontalBox(
                     piece.minX(), piece.minZ(), piece.maxX(), piece.maxZ())).toList();
             return new Prepared(candidate, pieces, footprint,
@@ -69,33 +78,28 @@ public final class TestCompanionAdapters {
 
     private TestCompanionAdapters() {}
 
-    private static AdventurePlanView.PlannedPiece piece(StructureAdapter.Candidate candidate, int index,
-                                                         int minX, int minZ, int maxX, int maxZ, long seed) {
-        DesertPyramidPiece vanillaPiece = new DesertPyramidPiece(RandomSource.create(seed ^ index), minX, minZ);
-        vanillaPiece.setOrientation(switch (candidate.rotation()) {
-            case "north" -> Direction.NORTH;
-            case "east" -> Direction.EAST;
-            case "south" -> Direction.SOUTH;
-            case "west" -> Direction.WEST;
-            default -> throw new IllegalArgumentException("unsupported test waystation rotation " + candidate.rotation());
-        });
-        vanillaPiece.move(0, candidate.originY() - vanillaPiece.getBoundingBox().minY(), 0);
-        CompoundTag tag = vanillaPiece.createTag(null);
-        tag.putInt("HPos", candidate.originY());
-        tag.putString("rotation", candidate.rotation());
-        tag.putLong("structure_seed", seed);
-        tag.putString("LootTable", "minecraft:chests/simple_dungeon");
-        tag.putLong("LootTableSeed", seed ^ index);
+    /** The piece's world box, anchored so both waystation pieces keep the plan's origin inside them. */
+    private static net.minecraft.world.level.levelgen.structure.BoundingBox box(
+            StructureAdapter.Candidate candidate, int offsetX1, int offsetZ1, int offsetX2, int offsetZ2) {
+        return new net.minecraft.world.level.levelgen.structure.BoundingBox(
+                candidate.originX() + offsetX1, candidate.originY(), candidate.originZ() + offsetZ1,
+                candidate.originX() + offsetX2, candidate.originY() + WaystationPiece.HEIGHT - 1,
+                candidate.originZ() + offsetZ2);
+    }
+
+    private static AdventurePlanView.PlannedPiece freeze(WaystationPiece piece,
+                                                         StructureAdapter.Candidate candidate, int index) {
+        CompoundTag tag = piece.createTag(null);
+        var bounds = piece.getBoundingBox();
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
              DataOutputStream output = new DataOutputStream(bytes)) {
             NbtIo.write(tag, output);
             output.flush();
             return new AdventurePlanView.PlannedPiece(candidate.instanceId() + "/piece/" + index,
-                    vanillaPiece.getBoundingBox().minX(), vanillaPiece.getBoundingBox().minY(),
-                    vanillaPiece.getBoundingBox().minZ(), vanillaPiece.getBoundingBox().maxX(),
-                    vanillaPiece.getBoundingBox().maxY(), vanillaPiece.getBoundingBox().maxZ(), bytes.toByteArray());
+                    bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ(),
+                    bytes.toByteArray());
         } catch (IOException failure) {
-            throw new IllegalStateException("could not freeze test waystation", failure);
+            throw new IllegalStateException("could not freeze test waystation piece", failure);
         }
     }
 }

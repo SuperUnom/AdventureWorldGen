@@ -11,6 +11,9 @@ public final class TestCompanion {
     public static final String ID = "testcompanion";
 
     public TestCompanion(IEventBus modBus) {
+        // The piece type goes through the game's own registration phase, and the adapter through the
+        // public registration contract, so neither needs a change in the production mod.
+        WaystationPiece.register(modBus);
         AdapterRegistrations.register(TestCompanionAdapters.ASHEN_GROVE);
         AdapterRegistrations.register(TestCompanionAdapters.WAYSTATION);
         modBus.addListener(TestCompanion::registerGameTests);

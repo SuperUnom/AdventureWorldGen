@@ -124,6 +124,14 @@ class PackageBoundaryTest {
         String restoreCode = stripComments(Files.readString(restore, StandardCharsets.UTF_8));
         assertTrue(restoreCode.contains("BuiltInRegistries.STRUCTURE_PIECE"),
                 "frozen pieces must be resolved in the registry the game registers piece types in");
+        // P4.4: the companion mod's piece type proves the extension point. If the core named it -
+        // or named the companion mod at all - the test would be proving a branch instead.
+        for (String code : new String[]{generatorCode, restoreCode}) {
+            assertFalse(code.contains("testcompanion"),
+                    "the core must not name the test companion mod or its piece type");
+            assertFalse(code.contains("waystation"),
+                    "the core must not name the test companion's structure or piece");
+        }
     }
 
     private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
