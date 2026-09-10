@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ClimateState;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 class HumidityPlanTest {
     private static final ContentId DESERT=new ContentId("minecraft:desert");
@@ -48,7 +50,7 @@ class HumidityPlanTest {
         assertTrue(h.actualRatios()[1]>0);assertTrue(h.actualRatios()[2]>0);
         // A synthetic legacy state forces hot values while retaining the same weather and water fields.
         var state=temperature.snapshot();
-        var hotter=new ClimatePlan(7331,c,TERRAIN,ignored->{},new ClimatePlan.State(state.extent(),state.slopeHeight(),state.regionalHeight(),
+        var hotter=new ClimatePlan(7331,c,TERRAIN,ignored->{},new ClimateState(state.extent(),state.slopeHeight(),state.regionalHeight(),
                 state.angle(),-101,-97,new double[]{-100,-99,-98},state.snowBoundary(),
                 state.spawnType(),state.ratios(),state.actual(),state.corrections(),state.supply(),state.humidity()));
         assertTrue(hotter.humidity().valueAt(-400,300,land(66))<h.valueAt(-400,300,land(66)));
@@ -65,7 +67,7 @@ class HumidityPlanTest {
                 if(x==246){if(beach)riverBeaches++;else riverOther++;}
                 else {if(beach)oceanBeaches++;else oceanOther++;}
                 if(id.equals(SNOW_BEACH))snowBeaches++;
-                if(beach)assertEquals(id.equals(SNOW_BEACH),climate.typeAt(x,z,s)==AdventureWorldConfig.TemperatureType.VERY_COLD);
+                if(beach)assertEquals(id.equals(SNOW_BEACH),climate.typeAt(x,z,s)==TemperatureType.VERY_COLD);
                 assertTrue(rules.allows(id,x,z,s));
             }
         }

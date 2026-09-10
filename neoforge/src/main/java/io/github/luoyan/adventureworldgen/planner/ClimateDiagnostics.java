@@ -2,8 +2,9 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType;
+import io.github.luoyan.adventureworldgen.plan.ClimateSupply;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,14 +20,12 @@ import java.util.List;
  * the layout for that reason. Keeping the computation in one named place makes that independence
  * explicit and lets the statistics be verified on their own.
  *
- * <p>Wire format: {@link Supply} is serialized reflectively as part of the plan-v2 layout state, so
- * its component names and order are part of the persisted format and must not be changed casually.
- * {@code ClimatePlan.State} deliberately keeps flat {@code ratios} / {@code actual} / {@code supply}
- * components rather than nesting this object, because that is the existing wire shape.
+ * <p>Wire format: {@link ClimateSupply} is serialized reflectively as part of the plan-v2 layout
+ * state, so its component names and order are part of the persisted format and must not be changed
+ * casually. {@code ClimateState} deliberately keeps flat {@code ratios} / {@code actual} /
+ * {@code supply} components rather than nesting this object, because that is the existing wire shape.
  */
 public final class ClimateDiagnostics {
-    public record Supply(String biome, long target, long legalArea, long climateArea) {}
-
     /** Read-only temperature observations the statistics need from the field. */
     public interface TemperatureField {
         /** Band ordinal of the accepted field at a coordinate. */
@@ -77,12 +76,12 @@ public final class ClimateDiagnostics {
     }
 
     /** Per-demand legal and climate area accounting. */
-    public List<Supply> supply(List<Site> sites, TemperatureField field) {
-        List<Supply> supply = new ArrayList<>();
+    public List<ClimateSupply> supply(List<Site> sites, TemperatureField field) {
+        List<ClimateSupply> supply = new ArrayList<>();
         for (var d : new RequirementExpander().expandMinimum(config).patches()) {
             ContentId id = preferredBiome(sites, field, d);
             long legal = sites.stream().filter(s -> config.biomes().allows(id, s.sample)).count() * step * step;
-            supply.add(new Supply(id.value(), d.area().target(), legal, climateArea(sites, field, id)));
+            supply.add(new ClimateSupply(id.value(), d.area().target(), legal, climateArea(sites, field, id)));
         }
         return List.copyOf(supply);
     }

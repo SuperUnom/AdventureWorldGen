@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.planner;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.FillerState;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;
@@ -33,17 +34,16 @@ public final class FillerLayout {
     private final double[] levels;
     private int visited,assigned,total;
     private int restoredSeedCount=-1;
-    public record State(int extent,int[] labels,int seedCount) {}
-    public State snapshot(){return new State(extent,labels.clone(),seedCount());}
+    public FillerState snapshot(){return new FillerState(extent,labels.clone(),seedCount());}
     private final java.util.function.DoubleConsumer progress;
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules) {
         this(seed,config,terrain,patches,rules,null);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,State frozen) {
+    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,FillerState frozen) {
         this(seed,config,terrain,patches,rules,PlanningObserver.NONE,frozen);
     }
     public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,
-                        PlanningObserver observer,State frozen) {
+                        PlanningObserver observer,FillerState frozen) {
         this.progress=observer.within(PlanningStage.FILLER);
         this.worldSeed=seed;this.config=config;this.rules=rules;pool=config.biomes().filler();
         boundaryWarp=new io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp(seed,"filler/boundary",1);

@@ -8,6 +8,8 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
+import io.github.luoyan.adventureworldgen.plan.ClimateState;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 class GreedyBiomePlanningTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");
@@ -53,8 +55,8 @@ class GreedyBiomePlanningTest {
                 CellMask.x(c)+2,CellMask.z(c)+2,FLAT.sample(0,0))).count();
         assertEquals(hot.mask().size(),preferred,"every claimed cell must satisfy its configured temperature");
         var s=climate.snapshot();
-        var medium=new ClimatePlan(7331,config,FLAT,v->{},new ClimatePlan.State(s.extent(),s.slopeHeight(),s.regionalHeight(),
-                s.angle(),-101,101,new double[]{-100,-99,100},false,AdventureWorldConfig.TemperatureType.MEDIUM,
+        var medium=new ClimatePlan(7331,config,FLAT,v->{},new ClimateState(s.extent(),s.slopeHeight(),s.regionalHeight(),
+                s.angle(),-101,101,new double[]{-100,-99,100},false,TemperatureType.MEDIUM,
                 s.ratios(),s.actual(),List.of(),s.supply(),s.humidity()));
         var relaxed=new BiomeAllocationPlanner().allocate(7331,config,
                 new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true),demands,List.of(),new BiomeEnvironmentRules(config,medium),v->{});

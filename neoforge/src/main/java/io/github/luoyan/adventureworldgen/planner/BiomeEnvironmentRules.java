@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.util.List;

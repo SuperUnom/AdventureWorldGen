@@ -6,6 +6,7 @@ import java.util.Set;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import java.util.Objects;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 /** Immutable, normalized author configuration for planner-v2. */
 public record AdventureWorldConfig(
@@ -66,13 +67,7 @@ public record AdventureWorldConfig(
         }
     }
 
-    public enum TemperatureType {
-        VERY_COLD, COLD, MEDIUM, HOT;
-        public static TemperatureType fromLevel(int level) { return level <= 1 ? VERY_COLD : level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
-        public static Map<TemperatureType, Double> unrestricted() {
-            return Map.of(VERY_COLD,1.0,COLD,1.0,MEDIUM,1.0,HOT,1.0);
-        }
-    }
+    // The temperature classification is shared with the frozen climate state and lives in plan.
 
     public enum HumidityType { DRY, MEDIUM, WET }
 

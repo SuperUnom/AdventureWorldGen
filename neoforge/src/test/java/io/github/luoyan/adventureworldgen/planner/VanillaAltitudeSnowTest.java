@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 class VanillaAltitudeSnowTest {
     @Test void nativeSnowDoesNotOverrideConfiguredTemperature() {
@@ -22,7 +23,7 @@ class VanillaAltitudeSnowTest {
             for(int x=-200;x<=200;x+=32)for(int z=-200;z<=200;z+=32) {
                 var sample=terrain.sample(x+2,z+2);
                 assertTrue(climate.allowsSnowClass(id,x+2,z+2,sample));
-                assertEquals(climate.typeAt(x+2,z+2,sample)==AdventureWorldConfig.TemperatureType.COLD,
+                assertEquals(climate.typeAt(x+2,z+2,sample)==TemperatureType.COLD,
                         rules.prefersType(id,x+2,z+2,sample));
             }
         }

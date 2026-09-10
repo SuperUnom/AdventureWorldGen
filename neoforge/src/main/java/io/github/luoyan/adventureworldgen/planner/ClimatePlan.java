@@ -2,7 +2,11 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.TemperatureType;
+import io.github.luoyan.adventureworldgen.plan.ClimateCorrection;
+import io.github.luoyan.adventureworldgen.plan.ClimateState;
+import io.github.luoyan.adventureworldgen.plan.ClimateSupply;
+import io.github.luoyan.adventureworldgen.plan.HumidityState;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;
@@ -31,24 +35,11 @@ public final class ClimatePlan {
     private final TemperatureType spawnType;
     private final double[] ratios=new double[4], actual=new double[4];
     private final List<ClimateDiagnostics.Site> sites=new ArrayList<>();
-    private final List<Correction> corrections=new ArrayList<>();
-    public record Correction(double x,double z,double radius,double delta) {}
-    private final List<ClimateDiagnostics.Supply> supply=new ArrayList<>();
+    private final List<ClimateCorrection> corrections=new ArrayList<>();
+    private final List<ClimateSupply> supply=new ArrayList<>();
 
-    public record State(int extent, double[] slopeHeight, double[] regionalHeight, double angle,
-                        double low, double high, double[] thresholds, boolean snowBoundary,
-                        TemperatureType spawnType, double[] ratios, double[] actual,
-                        List<Correction> corrections, List<ClimateDiagnostics.Supply> supply, HumidityPlan.State humidity, String temperatureField) {
-        /** Source-compatible constructor for legacy plan states without an explicit temperature version. */
-        public State(int extent,double[] slopeHeight,double[] regionalHeight,double angle,double low,double high,
-                     double[] thresholds,boolean snowBoundary,TemperatureType spawnType,double[] ratios,double[] actual,
-                     List<Correction> corrections,List<ClimateDiagnostics.Supply> supply,HumidityPlan.State humidity) {
-            this(extent,slopeHeight,regionalHeight,angle,low,high,thresholds,snowBoundary,spawnType,ratios,actual,
-                    corrections,supply,humidity,null);
-        }
-    }
-    public State snapshot() {
-        return new State(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
+    public ClimateState snapshot() {
+        return new ClimateState(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
                 thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot(),temperatureField);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain) {
@@ -57,11 +48,11 @@ public final class ClimatePlan {
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress) {
         this(seed,config,terrain,progress,null);
     }
-    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,State frozen) {
+    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,ClimateState frozen) {
         this(seed,config,terrain,progress,PlanningObserver.NONE,frozen);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
-                       PlanningObserver observer,State frozen) {
+                       PlanningObserver observer,ClimateState frozen) {
         this.config=config;
         temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
         if(temperatureField!=null&&!OrganicTemperatureField.VERSION.equals(temperatureField))
@@ -184,7 +175,7 @@ public final class ClimatePlan {
     private double computeRaw(double x,double z,MacroSample s) {
         double value=base(x,z,s);
         if(organic!=null)return value;
-        for(var c:corrections)value+=c.delta*Math.exp(-Math.pow(Math.hypot(x-c.x,z-c.z)/c.radius,2)*2);
+        for(var c:corrections)value+=c.delta()*Math.exp(-Math.pow(Math.hypot(x-c.x(),z-c.z())/c.radius(),2)*2);
         double d=Math.hypot(x,z),influence=1-Math.clamp((d-core)/(core*3),0,1);
         influence=influence*influence*(3-2*influence);
         double target=rawCenter(spawnType);
@@ -213,5 +204,5 @@ public final class ClimatePlan {
     public HumidityPlan humidity(){return humidity;}
     public double[] targetRatios(){return ratios.clone();}
     public double[] actualRatios(){return actual.clone();}
-    public List<ClimateDiagnostics.Supply> supply(){return List.copyOf(supply);}
+    public List<ClimateSupply> supply(){return List.copyOf(supply);}
 }

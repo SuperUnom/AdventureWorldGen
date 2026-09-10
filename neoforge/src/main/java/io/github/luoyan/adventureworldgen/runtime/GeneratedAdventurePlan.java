@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
@@ -70,9 +71,6 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
                 biomePatches,structures,diagnostics,erosion,capacities,null);
     }
-    public record BiomeLayout(io.github.luoyan.adventureworldgen.planner.ClimatePlan.State climate,
-                              io.github.luoyan.adventureworldgen.planner.FillerLayout.State filler,
-                              List<String> protectedPatches) {}
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
     /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
     record PlanningInputs(RegionTerrain regions,MacroTerrain island,HydrologyTerrain water,

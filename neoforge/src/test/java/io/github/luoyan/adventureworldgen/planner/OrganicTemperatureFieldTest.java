@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ClimateState;
 
 class OrganicTemperatureFieldTest {
     @Test void matchesAcceptedV7PreviewSamples() {
@@ -36,7 +37,7 @@ class OrganicTemperatureFieldTest {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN);var field=new OrganicTemperatureField(7331);
         var json=new Gson();String encoded=json.toJson(original.snapshot());
         var restored=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},v->{},
-                json.fromJson(encoded,ClimatePlan.State.class));
+                json.fromJson(encoded,ClimateState.class));
         assertEquals(OrganicTemperatureField.VERSION,restored.snapshot().temperatureField());
         assertArrayEquals(new double[]{2.5,5,7.5},restored.snapshot().thresholds());
         assertTrue(restored.snapshot().corrections().isEmpty());
@@ -51,14 +52,14 @@ class OrganicTemperatureFieldTest {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN);var gson=new Gson();
         var tree=gson.toJsonTree(original.snapshot()).getAsJsonObject();
         tree.remove("temperatureField");
-        var legacy=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError();},v->{},gson.fromJson(tree,ClimatePlan.State.class));
+        var legacy=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError();},v->{},gson.fromJson(tree,ClimateState.class));
         assertNull(legacy.snapshot().temperatureField());
-        var again=new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(gson.toJson(legacy.snapshot()),ClimatePlan.State.class));
+        var again=new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(gson.toJson(legacy.snapshot()),ClimateState.class));
         assertEquals(legacy.valueAt(150,100,TERRAIN.sample(150,100)),again.valueAt(150,100,TERRAIN.sample(150,100)));
         tree.addProperty("temperatureField","unknown-version");
-        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimatePlan.State.class)));
+        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class)));
         tree.addProperty("temperatureField",OrganicTemperatureField.VERSION);
         tree.getAsJsonArray("thresholds").set(0,new com.google.gson.JsonPrimitive(2));
-        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimatePlan.State.class)));
+        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class)));
     }
 }

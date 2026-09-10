@@ -8,6 +8,7 @@ import java.util.*;
 import java.util.function.DoubleConsumer;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.HumidityState;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 /** Continuous moisture over frozen terrain; water proximity is prepared before any biome grows. */
@@ -24,13 +25,11 @@ public final class HumidityPlan {
     private final FrozenQuartField frozenValues;
     private final HumiditySupplyCorrection supplyCorrection;
 
-    public record State(int extent,double[] freshDistance,double[] oceanDistance,
-                        double[] freshLevel,double[] oceanLevel,double[] actual,double weatherOffset) {}
-    public State snapshot() {
-        return new State(extent,freshDistance.clone(),oceanDistance.clone(),freshLevel.clone(),oceanLevel.clone(),actual.clone(),weatherOffset);
+    public HumidityState snapshot() {
+        return new HumidityState(extent,freshDistance.clone(),oceanDistance.clone(),freshLevel.clone(),oceanLevel.clone(),actual.clone(),weatherOffset);
     }
     public HumidityPlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,ClimatePlan temperature,
-                        DoubleConsumer progress,State frozen) {
+                        DoubleConsumer progress,HumidityState frozen) {
         this.config=config;this.temperature=temperature;supplyCorrection=new HumiditySupplyCorrection(config);
         double radius=config.world().radius();
         frozenValues=new FrozenQuartField(radius+128);

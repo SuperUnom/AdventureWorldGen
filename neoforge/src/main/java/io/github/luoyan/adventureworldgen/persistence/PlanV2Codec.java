@@ -11,6 +11,7 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
+import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
@@ -63,7 +64,7 @@ public final class PlanV2Codec {
             json.endArray();
             json.name("seed").value(plan.seed());
             json.name("biome_layout");
-            LAYOUT_JSON.toJson(plan.biomeLayout(),GeneratedAdventurePlan.BiomeLayout.class,json);
+            LAYOUT_JSON.toJson(plan.biomeLayout(),BiomeLayout.class,json);
             writeSpawn(json, plan.spawnPosition());
             writeTerrain(json, plan);
             writeStructures(json, plan.structures());
@@ -109,7 +110,7 @@ public final class PlanV2Codec {
             List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
             var restored = new GeneratedAdventurePlan(seed, config, coast, network, seaSurface, landBand, seaBand,
                     terrainVersion, spawn, patches, structures, diagnostics, erosion, readCapacities(terrain),
-                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),GeneratedAdventurePlan.BiomeLayout.class),"missing frozen biome layout"));
+                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),BiomeLayout.class),"missing frozen biome layout"));
             if(!settingsJson(config.world().terrain()).equals(terrain.get("recipe_settings")))
                 throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
             // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.

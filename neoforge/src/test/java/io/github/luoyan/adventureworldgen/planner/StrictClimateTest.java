@@ -9,6 +9,8 @@ import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.FillerState;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 class StrictClimateTest {
     @Test void seed7331SnowyFillerCannotCrossTemperatureBoundaryEvenAfterQueryWarp() {
@@ -27,7 +29,7 @@ class StrictClimateTest {
         var state=filler.snapshot();int[] snowyLabels=state.labels().clone();
         Arrays.fill(snowyLabels,config.biomes().filler().indexOf(new ContentId("minecraft:snowy_slopes")));
         var warped=new FillerLayout(7331,config,terrain,List.of(),rules,
-                new FillerLayout.State(state.extent(),snowyLabels,1));
+                new FillerState(state.extent(),snowyLabels,1));
         Set<TemperatureType> seen=EnumSet.noneOf(TemperatureType.class);
         for(int z=-242;z<244;z+=4)for(int x=-242;x<244;x+=4) {
             if(Math.hypot(x,z)>248)continue;
