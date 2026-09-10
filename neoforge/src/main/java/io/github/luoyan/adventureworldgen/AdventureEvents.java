@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen;
 
-import io.github.luoyan.adventureworldgen.config.ProfileManager;
+import io.github.luoyan.adventureworldgen.worldgen.ProfileReloadListener;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanner;
 import io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator;
@@ -28,7 +28,7 @@ public final class AdventureEvents {
 
     @SubscribeEvent
     public static void addReloadListeners(AddReloadListenerEvent event) {
-        event.addListener(new ProfileManager());
+        event.addListener(new ProfileReloadListener());
     }
 
     /** Starts before ServerLevel construction, because structure-ring futures may query biomes in that constructor. */
@@ -38,7 +38,7 @@ public final class AdventureEvents {
         var stems = server.registryAccess().registryOrThrow(Registries.LEVEL_STEM);
         var overworld = stems.get(LevelStem.OVERWORLD);
         if (overworld == null || !(overworld.generator() instanceof AdventureChunkGenerator generator)) return;
-        var loaded = ProfileManager.current();
+        var loaded = ProfileReloadListener.current();
         long seed = server.getWorldData().worldGenOptions().seed();
         var worldDirectory = server.getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
@@ -64,7 +64,7 @@ public final class AdventureEvents {
     public static void serverStarting(ServerStartingEvent event) {
         var server = event.getServer();
         if (!(server.overworld().getChunkSource().getGenerator() instanceof AdventureChunkGenerator generator)) return;
-        var loaded = ProfileManager.current();
+        var loaded = ProfileReloadListener.current();
         long seed = server.getWorldData().worldGenOptions().seed();
         var worldDirectory = server.getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
@@ -78,7 +78,7 @@ public final class AdventureEvents {
     public static void levelLoaded(LevelEvent.Load event) {
         if (!(event.getLevel() instanceof ServerLevel level) || level.dimension() != Level.OVERWORLD
                 || !(level.getChunkSource().getGenerator() instanceof AdventureChunkGenerator generator)) return;
-        var loaded = ProfileManager.current();
+        var loaded = ProfileReloadListener.current();
         var worldDirectory = level.getServer().getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
         RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory, adapters)).join();

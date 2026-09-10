@@ -1,5 +1,12 @@
-package io.github.luoyan.adventureworldgen.config;
+package io.github.luoyan.adventureworldgen.worldgen;
 
+import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
+import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
+import io.github.luoyan.adventureworldgen.config.CanonicalConfigJson;
+import io.github.luoyan.adventureworldgen.config.ConfigErrorCode;
+import io.github.luoyan.adventureworldgen.config.ConfigException;
+import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
@@ -11,8 +18,14 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
-/** Strict resource reload owner for the one fixed v1 profile. */
-public final class ProfileManager extends SimplePreparableReloadListener<ProfileManager.LoadedProfile> {
+/**
+ * Strict resource reload owner for the one fixed v1 profile.
+ *
+ * <p>This is the integration layer the config boundary defers to: it reads datapack resources and
+ * produces the pure {@link LoadedProfile}, so author-config parsing and semantic validation stay
+ * free of Minecraft datapack and registry access.
+ */
+public final class ProfileReloadListener extends SimplePreparableReloadListener<LoadedProfile> {
     public static final ContentId DEFAULT_ID = new ContentId("adventureworldgen:default");
     private static final ResourceLocation DEFAULT_RESOURCE = ResourceLocation.fromNamespaceAndPath(
             "adventureworldgen", "adventureworldgen/profiles/default.json");
@@ -50,7 +63,4 @@ public final class ProfileManager extends SimplePreparableReloadListener<Profile
         if (loaded == null) throw new IllegalStateException("adventureworldgen:default has not completed resource loading");
         return loaded;
     }
-
-    public record LoadedProfile(ContentId id, AdventureWorldConfig config, String canonicalJson,
-                                String configHash, String sourcePack) {}
 }

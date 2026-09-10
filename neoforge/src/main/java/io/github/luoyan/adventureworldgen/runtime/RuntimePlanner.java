@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.runtime;
 
-import io.github.luoyan.adventureworldgen.config.ProfileManager;
+import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyGenerator;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
@@ -32,7 +32,7 @@ public final class RuntimePlanner {
     public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-shelves-diverse-defaults-r33";
     private RuntimePlanner() {}
 
-    public static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,
+    public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                               AdapterRegistry adapters) {
         var progress = PlanningProgress.begin(loaded.id().toString());
         try {
@@ -45,7 +45,7 @@ public final class RuntimePlanner {
         }
     }
 
-    private static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,
+    private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                                AdapterRegistry adapters, PlanningProgress.Run progress) {
         String inputHash = inputHash(seed, loaded, adapters);
         AtomicPlanRepository repository = new AtomicPlanRepository();
@@ -169,7 +169,7 @@ public final class RuntimePlanner {
         return plan;
     }
 
-    public static String inputHash(long seed, ProfileManager.LoadedProfile loaded, AdapterRegistry adapters) {
+    public static String inputHash(long seed, LoadedProfile loaded, AdapterRegistry adapters) {
         String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
                 + "\nimplementation=" + IMPLEMENTATION_REVISION
                 + "\nhydrology=" + PlannerProfile.V2.hydrologyVersion() + "\nterrain=terrain-r22\nadapters="
