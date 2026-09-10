@@ -1,6 +1,6 @@
 # FreeTerraForged 地形生成移植算法手册
 
-[文档总览](../README.md) · [本项目地形候选边界](生成流程候选.md#terrain-candidate)
+[文档总览](../../README.md) · [本项目地形候选边界](../生成流程候选.md#terrain-candidate)
 
 > 固定源码参考。AdventureWorldGen v1 已采用本文河网、湖泊、湿地、海床思想及水滴侵蚀/平滑的明确子集，版本名为 `ftf-hydrology-adapted-v1`；稳定随机键、星形海岸交点、区域高度和水体查询由本项目替换。其余章节仍是参考，不自动进入实现契约，也不声称与上游世界逐点一致。
 
