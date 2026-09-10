@@ -90,20 +90,19 @@ class PlanningBaselineTest {
 
         var coast = new CoastGenerator(PlannerProfile.V2).generate(SEED, radius, keep);
         var capacities = TerrainCapacitySolver.reserve(SEED, config, coast.coastline(), coast.landBand());
-        var regions = new RegionTerrain(SEED, PlannerProfile.V2, capacities, config.world().terrain(), config);
-        var island = new IslandMacroTerrain(coast.coastline(), regions, SEED, 64.0,
+        var foundation = PlanTerrain.foundation(SEED, config, capacities, coast.coastline(), 64.0,
                 coast.landBand(), coast.seaBand(), "terrain-r22");
 
         int erosionSpacing = 8;
         int erosionExtent = (int) StrictMath.ceil((radius + 256.0) / erosionSpacing) * erosionSpacing;
         int erosionSize = erosionExtent * 2 / erosionSpacing + 1;
         ErosionDeltaField erosion = new ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
-                .generate(SEED, island, -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize);
-        var erodedIsland = new ErodedTerrain(island, erosion, "erosion-v2");
+                .generate(SEED, foundation.island(), -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize);
+        var erodedIsland = foundation.eroded(erosion);
         var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(SEED, radius, 64.0, coast.coastline(), erodedIsland);
-        var waterTerrain = new HydrologyTerrain(erodedIsland, rivers);
-        MacroTerrain erodedTerrain = new ExactGridTerrain(new TerrainMorphology(waterTerrain), 262144);
+        var planningTerrain = PlanTerrain.compose(foundation, erodedIsland, rivers).withMemoizedQueries();
+        MacroTerrain erodedTerrain = planningTerrain.terrain();
         var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5));
 
         var jointPlanner = new JointPlanner(PlannerProfile.V2);
@@ -125,8 +124,7 @@ class PlanningBaselineTest {
                         costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                         "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"),
                 erosion, capacities, null,
-                new GeneratedAdventurePlan.PlanningInputs(regions, island, waterTerrain, erodedTerrain,
-                        jointPlanner.climate()));
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()));
     }
 
     /**

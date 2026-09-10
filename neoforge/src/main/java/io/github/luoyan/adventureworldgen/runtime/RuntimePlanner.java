@@ -3,11 +3,8 @@ package io.github.luoyan.adventureworldgen.runtime;
 import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyGenerator;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
-import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
-import io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain;
-import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
@@ -69,26 +66,25 @@ public final class RuntimePlanner {
         LOGGER.info("AdventureWorldGen planning continuous regions for {}", loaded.id());
         var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(seed,loaded.config(),coast.coastline(),coast.landBand());
         metrics.finish("capacity_reservation");
-        var regions = new RegionTerrain(seed, PlannerProfile.V2,capacities,loaded.config().world().terrain(),loaded.config());
-        var island = new IslandMacroTerrain(coast.coastline(), regions, seed, 64.0,
-                coast.landBand(), coast.seaBand(), "terrain-r22");
+        var terrainFoundation = PlanTerrain.foundation(seed, loaded.config(), capacities, coast.coastline(),
+                64.0, coast.landBand(), coast.seaBand(), "terrain-r22");
         LOGGER.info("AdventureWorldGen simulating and freezing erosion delta field for {}", loaded.id());
         progress.stage(PlanningStage.EROSION);
         int erosionSpacing = 8;
         int erosionExtent = (int) StrictMath.ceil((radius + 256.0) / erosionSpacing) * erosionSpacing;
         int erosionSize = erosionExtent * 2 / erosionSpacing + 1;
         var erosion = new ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
-                .generate(seed, island, -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningStage.EROSION));
+                .generate(seed, terrainFoundation.island(), -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningStage.EROSION));
         metrics.finish("erosion");
-        var erodedIsland = new io.github.luoyan.adventureworldgen.erosion.ErodedTerrain(island, erosion, "erosion-v2");
+        var erodedIsland = terrainFoundation.eroded(erosion);
         LOGGER.info("AdventureWorldGen planning {} hydrology for {}", PlannerProfile.V2.hydrologyVersion(), loaded.id());
         progress.stage(PlanningStage.RIVERS);
         var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, radius, 64.0, coast.coastline(), erodedIsland);
         metrics.finish("rivers");
-        var waterTerrain = new HydrologyTerrain(erodedIsland, rivers);
-        var erodedTerrain = new io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain(
-                new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain),262144);
+        // Planning queries keep the memoizing wrapper warm; the same stack is handed to the plan.
+        var planningTerrain = PlanTerrain.compose(terrainFoundation, erodedIsland, rivers).withMemoizedQueries();
+        var erodedTerrain = planningTerrain.terrain();
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
         progress.stage(PlanningStage.COSTS);
         var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
@@ -116,7 +112,7 @@ public final class RuntimePlanner {
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
                 costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
                 "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,null,
-                new GeneratedAdventurePlan.PlanningInputs(regions,island,waterTerrain,erodedTerrain,jointPlanner.climate()), progress);
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
         metrics.finish("filler_and_transition");
         progress.stage(PlanningStage.VALIDATION);
         for(var demand:new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(loaded.config()).patches()) {
