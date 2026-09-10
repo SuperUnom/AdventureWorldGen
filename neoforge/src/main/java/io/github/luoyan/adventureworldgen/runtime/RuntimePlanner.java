@@ -54,7 +54,8 @@ public final class RuntimePlanner {
             var existing = repository.loadReady(worldDirectory, loaded.id(), inputHash);
             if (existing.isPresent()) {
                 LOGGER.info("AdventureWorldGen loading READY {} for {}", PlannerProfile.V2.planFormatVersion(), loaded.id());
-                return codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash, loaded.config());
+                return GeneratedAdventurePlan.restore(loaded.config(),
+                        codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash));
             }
         } catch (IOException failure) {
             throw new IllegalStateException("could not load AdventureWorldGen plan", failure);
@@ -133,7 +134,7 @@ public final class RuntimePlanner {
                         .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress, progress.within(PlanningStage.PLACEMENT), metrics::finish);
         GeneratedAdventurePlan plan = new GeneratedAdventurePlan(seed, loaded.config(), coast.coastline(), rivers,
                 64.0, coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
-                joint.patches(), joint.structures(), new GeneratedAdventurePlan.PlanDiagnostics(
+                joint.patches(), joint.structures(), new io.github.luoyan.adventureworldgen.plan.PlanDiagnostics(
                 coast.vertexCount(), rivers.channels().size(),
                 rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
@@ -158,7 +159,7 @@ public final class RuntimePlanner {
         metrics.adventure(joint.patches(),costs,radius);
         progress.stage(PlanningStage.SAVE);
         try {
-            repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan), inputHash);
+            repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan.snapshot()), inputHash);
         } catch (IOException failure) {
             throw new IllegalStateException("could not atomically publish AdventureWorldGen plan", failure);
         }

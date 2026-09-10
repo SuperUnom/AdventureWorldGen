@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
@@ -42,8 +43,10 @@ class DeterminismAcceptanceTest {
         for (int run = 0; run < 10; run++) {
             var plan = new GeneratedAdventurePlan(0x5EEDL, config, coast, rivers, 64, 64, 128,
                     "terrain-v2", null, patches, List.of(),
-                    GeneratedAdventurePlan.PlanDiagnostics.basic(coast, rivers), null);
-            byte[] encoded = new PlanV2Codec().encode(new ContentId("adventureworldgen:default"), "same-input", plan);
+                    PlanDiagnostics.basic(coast.vertices().size(), rivers.channels().size(),
+                            rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
+                            "terrain-r22+" + rivers.version()), null);
+            byte[] encoded = new PlanV2Codec().encode(new ContentId("adventureworldgen:default"), "same-input", plan.snapshot());
             String planHash = AtomicPlanRepository.sha256(encoded);
             if (expectedPlanHash == null) expectedPlanHash = planHash;
             assertEquals(expectedPlanHash, planHash);

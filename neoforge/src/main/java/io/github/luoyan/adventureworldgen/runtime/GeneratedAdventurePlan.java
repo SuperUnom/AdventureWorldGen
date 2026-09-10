@@ -11,7 +11,10 @@ import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.persistence.PlanSnapshot;
 import io.github.luoyan.adventureworldgen.spatial.ColumnQueryCache;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
@@ -153,7 +156,53 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn) {
         this(seed, config, coastline, riverNetwork, seaSurface, landBand, seaBand, terrainVersion,
-                frozenSpawn, List.of(), List.of(), PlanDiagnostics.basic(coastline, riverNetwork), null);
+                frozenSpawn, List.of(), List.of(), coastAndRiverDiagnostics(coastline, riverNetwork), null);
+    }
+
+    /** Counts available before the expensive stages: coast vertices, channels and their points. */
+    private static PlanDiagnostics coastAndRiverDiagnostics(Coastline coast, RiverNetwork rivers) {
+        return PlanDiagnostics.basic(coast.vertices().size(), rivers.channels().size(),
+                rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
+                "terrain-r22+" + rivers.version());
+    }
+
+    /**
+     * The frozen data of this plan: everything a plan-v2 document stores, as data.
+     *
+     * <p>The first planning run publishes exactly this, and a READY reload rebuilds a query object
+     * from exactly this, so the two paths cannot drift apart.
+     */
+    public PlanSnapshot snapshot() {
+        return new PlanSnapshot(seed, diagnostics, spawn, coastline, riverNetwork, seaSurface, landBand, seaBand,
+                terrainVersion, config.world().terrain(), recipeRegions(), biomePatches, structures, erosion,
+                capacities, biomeLayout());
+    }
+
+    /**
+     * The READY reload entry point: rebuild a query object from frozen data.
+     *
+     * <p>Only the recipe sections are cross-checked against the live profile, because they are the
+     * inputs terrain is regenerated from. Everything else comes from the snapshot, so a reload
+     * never re-runs coast, erosion, hydrology, capacity, biome or structure solving.
+     */
+    public static GeneratedAdventurePlan restore(AdventureWorldConfig config, PlanSnapshot snapshot) {
+        try {
+            GeneratedAdventurePlan plan = new GeneratedAdventurePlan(snapshot.seed(), config, snapshot.coastline(),
+                    snapshot.riverNetwork(), snapshot.seaSurface(), snapshot.landBand(), snapshot.seaBand(),
+                    snapshot.terrainVersion(), snapshot.spawn(), snapshot.biomePatches(), snapshot.structures(),
+                    snapshot.diagnostics(), snapshot.erosion(), snapshot.capacities(), snapshot.biomeLayout());
+            if (!snapshot.recipeSettings().equals(config.world().terrain()))
+                throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
+            // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.
+            if (!plan.recipeRegions().equals(snapshot.recipeRegions()))
+                throw new IllegalArgumentException("recipe region manifest does not match frozen terrain inputs");
+            return plan;
+        } catch (PlanningFailure failure) {
+            throw failure;
+        } catch (RuntimeException malformed) {
+            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "plan-load",
+                    "READY plan-v2 payload is invalid", java.util.Map.of("reason", String.valueOf(malformed.getMessage())));
+        }
     }
 
     @Override public ContentId biomeAt(int blockX, int blockY, int blockZ) {
@@ -291,15 +340,4 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     }
 
     private ContentId fillerAt(int x,int z,MacroSample sample) { return filler.biomeAt(x,z,sample); }
-
-    public record PlanDiagnostics(long coastVertices, long riverChannels, long riverPoints,
-                                  long erosionSamples, long erosionOperations,
-                                  long costNodes, long costEdges, long jointOperations,
-                                  String terrainVersion) {
-        public static PlanDiagnostics basic(Coastline coast, RiverNetwork rivers) {
-            return new PlanDiagnostics(coast.vertices().size(), rivers.channels().size(),
-                    rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
-                    0, 0, 0, 0, 0, "terrain-r22+" + rivers.version());
-        }
-    }
 }

@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
@@ -22,6 +23,12 @@ import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
 class PlanV2CodecTest {
+    private static PlanDiagnostics diagnostics(Coastline coast, RiverNetwork network) {
+        return PlanDiagnostics.basic(coast.vertices().size(), network.channels().size(),
+                network.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
+                "terrain-r22+" + network.version());
+    }
+
     @Test
     void restoresExactOwnershipAnchorsCapacityAndTemperatureLayout() {
         var config=new AdventureWorldConfigParser().parse("""
@@ -41,18 +48,18 @@ class PlanV2CodecTest {
                 new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation(0,0,
                         io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Template.MOUNTAINS,null,180.0,48)));
         var original=new GeneratedAdventurePlan(42,config,coast,network,64,128,256,"terrain-v2",null,
-                List.of(patch),List.of(),GeneratedAdventurePlan.PlanDiagnostics.basic(coast,network),null,capacities);
+                List.of(patch),List.of(),diagnostics(coast,network),null,capacities);
         var codec=new PlanV2Codec(); var profile=new ContentId("adventureworldgen:default");
-        byte[] encoded=codec.encode(profile,"sparse-input",original);
+        byte[] encoded=codec.encode(profile,"sparse-input",original.snapshot());
         var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.begin("reload-test");
         GeneratedAdventurePlan restored;
         try {
-            restored=codec.decode(encoded,profile,"sparse-input",config);
+            restored=GeneratedAdventurePlan.restore(config,codec.decode(encoded,profile,"sparse-input"));
             assertEquals(PlanningStage.CACHE,progress.snapshot().stage());
             assertEquals(0,progress.snapshot().percent());
         } finally {io.github.luoyan.adventureworldgen.runtime.PlanningProgress.clear();}
         assertEquals(original.fillerSeedCount(),restored.fillerSeedCount());
-        assertArrayEquals(encoded,codec.encode(profile,"sparse-input",restored));
+        assertArrayEquals(encoded,codec.encode(profile,"sparse-input",restored.snapshot()));
         assertEquals(original.biomePatches(),restored.biomePatches());
         assertEquals(original.capacities().reservations(),restored.capacities().reservations());
         assertArrayEquals(original.climate().actualRatios(),restored.climate().actualRatios());
@@ -62,13 +69,16 @@ class PlanV2CodecTest {
         assertEquals(original.capacities().ranges(),restored.capacities().ranges());
         var badRecipe=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
         badRecipe.getAsJsonObject("terrain").getAsJsonArray("recipe_regions").get(0).getAsJsonObject().addProperty("recipe","VOLCANO");
-        assertThrows(RuntimeException.class,()->codec.decode(badRecipe.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
+        assertThrows(RuntimeException.class,()->GeneratedAdventurePlan.restore(config,
+                codec.decode(badRecipe.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input")));
         var badSettings=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
         badSettings.getAsJsonObject("terrain").getAsJsonObject("recipe_settings").getAsJsonObject("templates").getAsJsonObject("plains").addProperty("horizontal_scale",2);
-        assertThrows(RuntimeException.class,()->codec.decode(badSettings.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
+        assertThrows(RuntimeException.class,()->GeneratedAdventurePlan.restore(config,
+                codec.decode(badSettings.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input")));
         var malformed=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
         malformed.getAsJsonObject("biome_layout").getAsJsonObject("climate").remove("humidity");
-        assertThrows(RuntimeException.class,()->codec.decode(malformed.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input",config));
+        assertThrows(RuntimeException.class,()->GeneratedAdventurePlan.restore(config,
+                codec.decode(malformed.toString().getBytes(StandardCharsets.UTF_8),profile,"sparse-input")));
         for(int z=-128;z<128;z+=4)for(int x=-128;x<256;x+=4) {
             assertEquals(original.landBiomeAt(x,z),restored.landBiomeAt(x,z));
             assertEquals(original.terrainAt(x,z),restored.terrainAt(x,z));
@@ -93,10 +103,10 @@ class PlanV2CodecTest {
         var original = new GeneratedAdventurePlan(42, config, coast, network, 64, 128, 256, "terrain-v2", null);
         PlanV2Codec codec = new PlanV2Codec();
         ContentId profile = new ContentId("adventureworldgen:default");
-        byte[] encoded = codec.encode(profile, "input", original);
-        var restored = codec.decode(encoded, profile, "input", config);
+        byte[] encoded = codec.encode(profile, "input", original.snapshot());
+        var restored = GeneratedAdventurePlan.restore(config, codec.decode(encoded, profile, "input"));
 
-        assertArrayEquals(encoded, codec.encode(profile, "input", restored));
+        assertArrayEquals(encoded, codec.encode(profile, "input", restored.snapshot()));
         assertEquals(original.spawnPosition(), restored.spawnPosition());
         assertEquals(network, restored.riverNetwork());
         for (int x = -750; x <= 750; x += 16) for (int z = 250; z <= 450; z += 4)
@@ -112,7 +122,7 @@ class PlanV2CodecTest {
                 """));
         byte[] malformed = "{\"format\":\"plan-v1\"}".getBytes(StandardCharsets.UTF_8);
         assertThrows(RuntimeException.class, () -> new PlanV2Codec().decode(malformed,
-                new ContentId("adventureworldgen:default"), "input", config));
+                new ContentId("adventureworldgen:default"), "input"));
     }
 
     @Test
@@ -133,12 +143,12 @@ class PlanV2CodecTest {
                 List.of(box), List.of(protection), List.of(new AdventurePlanView.PlannedPiece(
                 "instance/example:waystation/0/piece/0", 90, 80, 190, 130, 94, 220, new byte[]{3, 1, 4})));
         var original = new GeneratedAdventurePlan(77, config, coast, network, 64, 128, 256, "terrain-v2",
-                null, List.of(), List.of(structure), GeneratedAdventurePlan.PlanDiagnostics.basic(coast, network), null);
+                null, List.of(), List.of(structure), diagnostics(coast, network), null);
         var codec = new PlanV2Codec();
         var profile = new ContentId("adventureworldgen:default");
-        byte[] encoded = codec.encode(profile, "frozen-input", original);
-        var restored = codec.decode(encoded, profile, "frozen-input", config);
-        assertArrayEquals(encoded, codec.encode(profile, "frozen-input", restored));
+        byte[] encoded = codec.encode(profile, "frozen-input", original.snapshot());
+        var restored = GeneratedAdventurePlan.restore(config, codec.decode(encoded, profile, "frozen-input"));
+        assertArrayEquals(encoded, codec.encode(profile, "frozen-input", restored.snapshot()));
         assertEquals(structure, restored.structures().getFirst());
     }
 }

@@ -16,6 +16,7 @@ import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
@@ -67,12 +68,13 @@ class PlanningBaselineTest {
         var codec = new PlanV2Codec();
         var plan = buildPlan(config);
 
-        byte[] encoded = codec.encode(PROFILE, INPUT_HASH, plan);
+        byte[] encoded = codec.encode(PROFILE, INPUT_HASH, plan.snapshot());
         String planHash = sha256(encoded);
 
         // READY reload must reproduce the same canonical bytes: restore never re-plans.
-        GeneratedAdventurePlan reloaded = codec.decode(encoded, PROFILE, INPUT_HASH, config);
-        byte[] reencoded = codec.encode(PROFILE, INPUT_HASH, reloaded);
+        GeneratedAdventurePlan reloaded = GeneratedAdventurePlan.restore(config,
+                codec.decode(encoded, PROFILE, INPUT_HASH));
+        byte[] reencoded = codec.encode(PROFILE, INPUT_HASH, reloaded.snapshot());
         assertArrayEquals(encoded, reencoded, "READY reload changed the canonical plan bytes");
 
         assertEquals(List.of(EXPECTED_PLAN_SHA256, EXPECTED_FIELD_SHA256, EXPECTED_SPAWN),
@@ -117,7 +119,7 @@ class PlanningBaselineTest {
         return new GeneratedAdventurePlan(SEED, config, coast.coastline(), rivers, 64.0,
                 coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
                 joint.patches(), joint.structures(),
-                new GeneratedAdventurePlan.PlanDiagnostics(coast.vertexCount(), rivers.channels().size(),
+                new PlanDiagnostics(coast.vertexCount(), rivers.channels().size(),
                         rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
                         (long) erosion.width() * erosion.height(), erosion.operationCount(),
                         costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),

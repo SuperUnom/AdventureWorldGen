@@ -98,6 +98,14 @@ class PackageBoundaryTest {
                 "io.github.luoyan.adventureworldgen.runtime");
     }
 
+    @Test
+    void storageLayerOnlyHandlesFrozenData() throws IOException {
+        // persistence encodes and decodes PlanSnapshot: frozen data only. Reaching the runtime
+        // session object would make the storage layer depend on executable query state, and a READY
+        // reload could then re-enter layout solving through the codec instead of restoring it.
+        assertNoImport("persistence", "io.github.luoyan.adventureworldgen.runtime");
+    }
+
     private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
         Path directory = SOURCE_ROOT.resolve(pkg);
         assumeTrue(Files.isDirectory(directory), "source tree not found at " + directory.toAbsolutePath());
