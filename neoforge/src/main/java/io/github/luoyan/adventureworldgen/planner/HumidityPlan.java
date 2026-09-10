@@ -22,8 +22,7 @@ public final class HumidityPlan {
     private final double[] freshDistance,oceanDistance,freshLevel,oceanLevel;
     private final double[] actual=new double[3];
     private final FrozenQuartField frozenValues;
-    private record SupplyKey(String category,String recipe,String secondary,String landform) {}
-    private final Map<SupplyKey,Integer> moistureSupply=new java.util.concurrent.ConcurrentHashMap<>();
+    private final HumiditySupplyCorrection supplyCorrection;
 
     public record State(int extent,double[] freshDistance,double[] oceanDistance,
                         double[] freshLevel,double[] oceanLevel,double[] actual,double weatherOffset) {}
@@ -32,7 +31,7 @@ public final class HumidityPlan {
     }
     public HumidityPlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,ClimatePlan temperature,
                         DoubleConsumer progress,State frozen) {
-        this.config=config;this.temperature=temperature;
+        this.config=config;this.temperature=temperature;supplyCorrection=new HumiditySupplyCorrection(config);
         double radius=config.world().radius();
         frozenValues=new FrozenQuartField(radius+128);
         regional=new ValueNoise(seed,"humidity/region",Math.max(160,radius*.35));
@@ -132,6 +131,15 @@ public final class HumidityPlan {
         return frozenValues.get(x,z,()->computeValue(x,z,s));
     }
     private double computeValue(double x,double z,MacroSample s) {
+        double natural=naturalValue(x,z,s);
+        // Wet columns keep the natural value: the filler pool does not own river or lake beds.
+        return s.wet()?natural:supplyCorrection.correct(natural,s);
+    }
+    /**
+     * Natural moisture before any supply correction: broad weather, evaporation, elevation and
+     * nearby fresh/salt water. Independent of which biomes the author selected.
+     */
+    private double naturalValue(double x,double z,MacroSample s) {
         double ocean=oceanDistanceAt(x,z);
         double maritime=s.waterKind()==WaterKind.OCEAN?1:Math.exp(-ocean/200);
         double value=.44+weather(x,z)-weatherOffset
@@ -141,28 +149,7 @@ public final class HumidityPlan {
         // channel pass through an otherwise legal dry biome instead of becoming a wet stripe.
         value=Math.max(value,.64*Math.clamp(1-ocean/96,0,1));
         value=Math.clamp(value,0,1);
-        if(s.wet())return value;
-        // Plan moisture inside the feasible template/landform domain before assigning biomes.
-        // This never changes a biome's allowed humidity set, nor the final terrain or water geometry.
-        var key=new SupplyKey(s.terrainTemplate(),s.recipe(),s.secondaryWeight()>0?s.secondaryRecipe():"",s.landform());
-        int mask=moistureSupply.computeIfAbsent(key,ignored->{
-            int result=0;
-            for(var id:config.biomes().filler()) {
-                var rule=config.biomes().terrainRules().get(id);
-                if(rule!=null&&(rule.shoreOnly()||rule.minHeight()!=null||rule.maxHeight()!=null||!rule.accepts(s)))continue;
-                if(rule==null||rule.humidities().isEmpty())result=7;
-                else for(var type:rule.humidities().keySet())result|=1<<type.ordinal();
-            }
-            return result;
-        });
-        int type=value<.38?0:value<.68?1:2;
-        if(mask==0||(mask&(1<<type))!=0)return value;
-        double best=value,distance=Double.POSITIVE_INFINITY;
-        for(int i=0;i<3;i++)if((mask&(1<<i))!=0) {
-            double candidate=Math.clamp(value,i==0?0:i==1?.380001:.680001,i==0?.379999:i==1?.679999:1);
-            if(Math.abs(candidate-value)<distance){best=candidate;distance=Math.abs(candidate-value);}
-        }
-        return best;
+        return value;
     }
     public HumidityType typeAt(double x,double z,MacroSample s) {
         double value=valueAt(x,z,s);
