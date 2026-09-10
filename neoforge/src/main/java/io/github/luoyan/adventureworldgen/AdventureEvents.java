@@ -20,6 +20,7 @@ import net.minecraft.world.level.storage.LevelResource;
 import io.github.luoyan.adventureworldgen.config.ContentPreflight;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.MinecraftAdapters;
+import io.github.luoyan.adventureworldgen.worldgen.RegisteredPieceSupport;
 import net.minecraft.resources.ResourceLocation;
 
 @EventBusSubscriber(modid = AdventureWorldGen.MOD_ID)
@@ -57,7 +58,8 @@ public final class AdventureEvents {
         // Do not join before Minecraft creates its ChunkProgressListener: the client spins until
         // that listener exists and cannot render a loading screen during this event. Biome/chunk
         // queries and levelLoaded retain the READY barrier while the loading screen renders.
-        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory, adapters));
+        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
+                adapters, RegisteredPieceSupport.INSTANCE));
     }
 
     @SubscribeEvent
@@ -68,7 +70,8 @@ public final class AdventureEvents {
         long seed = server.getWorldData().worldGenOptions().seed();
         var worldDirectory = server.getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
-        var plan = RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory, adapters)).join();
+        var plan = RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
+                adapters, RegisteredPieceSupport.INSTANCE)).join();
         var spawn = plan.spawnPosition();
         server.overworld().setDefaultSpawnPos(BlockPos.containing(spawn.x(), spawn.y(), spawn.z()), spawn.yaw());
     }
@@ -81,7 +84,8 @@ public final class AdventureEvents {
         var loaded = ProfileReloadListener.current();
         var worldDirectory = level.getServer().getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
-        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory, adapters)).join();
+        RuntimePlanRegistry.start(generator.profile(), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory,
+                adapters, RegisteredPieceSupport.INSTANCE)).join();
     }
 
     @SubscribeEvent

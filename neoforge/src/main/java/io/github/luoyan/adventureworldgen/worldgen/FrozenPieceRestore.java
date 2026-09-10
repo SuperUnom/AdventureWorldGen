@@ -60,18 +60,14 @@ public final class FrozenPieceRestore {
     private static StructurePiece restorePiece(String instanceId, AdventurePlanView.PlannedPiece frozen,
                                                StructurePieceSerializationContext context) {
         CompoundTag tag;
-        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(frozen.canonicalNbt()))) {
-            tag = NbtIo.read(input);
-        } catch (IOException | RuntimeException failure) {
+        try {
+            tag = readFrozenTag(frozen.canonicalNbt());
+        } catch (IllegalStateException unreadable) {
             throw new IllegalStateException("could not read frozen piece " + frozen.pieceId()
-                    + " of " + instanceId, failure);
+                    + " of " + instanceId, unreadable);
         }
         String frozenType = tag.getString("id");
-        // Our adapters write the canonical registry key. Vanilla's legacy piece renames are not
-        // applied, so an id we did not freeze fails here instead of restoring as something else.
-        ResourceLocation pieceTypeId = ResourceLocation.tryParse(frozenType.toLowerCase(Locale.ROOT));
-        StructurePieceType pieceType = pieceTypeId == null ? null
-                : BuiltInRegistries.STRUCTURE_PIECE.get(pieceTypeId);
+        StructurePieceType pieceType = pieceType(frozenType);
         if (pieceType == null) {
             throw new IllegalStateException("unsupported frozen piece type " + frozenType
                     + " for piece " + frozen.pieceId() + " of " + instanceId
@@ -81,7 +77,32 @@ public final class FrozenPieceRestore {
             return pieceType.load(context, tag);
         } catch (RuntimeException failure) {
             throw new IllegalStateException("could not restore frozen piece " + frozen.pieceId()
-                    + " of " + instanceId + " as " + pieceTypeId, failure);
+                    + " of " + instanceId + " as " + frozenType, failure);
+        }
+    }
+
+    /** The piece type id frozen into a piece; throws when the bytes are not readable NBT. */
+    public static String frozenPieceType(byte[] canonicalNbt) {
+        return readFrozenTag(canonicalNbt).getString("id");
+    }
+
+    /** True when this environment registers a piece type under that frozen id. */
+    public static boolean registeredPieceType(String frozenType) {
+        return pieceType(frozenType) != null;
+    }
+
+    private static StructurePieceType pieceType(String frozenType) {
+        // Our adapters write the canonical registry key. Vanilla's legacy piece renames are not
+        // applied, so an id we did not freeze fails instead of restoring as something else.
+        ResourceLocation id = ResourceLocation.tryParse(frozenType.toLowerCase(Locale.ROOT));
+        return id == null ? null : BuiltInRegistries.STRUCTURE_PIECE.get(id);
+    }
+
+    private static CompoundTag readFrozenTag(byte[] canonicalNbt) {
+        try (DataInputStream input = new DataInputStream(new ByteArrayInputStream(canonicalNbt))) {
+            return NbtIo.read(input);
+        } catch (IOException | RuntimeException failure) {
+            throw new IllegalStateException("could not read frozen piece NBT", failure);
         }
     }
 }

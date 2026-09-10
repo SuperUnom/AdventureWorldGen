@@ -15,8 +15,18 @@ import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
+import io.github.luoyan.adventureworldgen.api.FrozenPieceSupport;
+import io.github.luoyan.adventureworldgen.api.MacroTerrain;
+import io.github.luoyan.adventureworldgen.api.StructureAdapter;
+import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
+import io.github.luoyan.adventureworldgen.config.CanonicalConfigJson;
+import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
+import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
+import io.github.luoyan.adventureworldgen.worldgen.RegisteredPieceSupport;
 import io.github.luoyan.adventureworldgen.worldgen.AdventureChunkGenerator;
 import io.github.luoyan.adventureworldgen.worldgen.FrozenPieceRestore;
 import net.minecraft.core.Holder;
@@ -122,15 +132,17 @@ public final class AdventureWorldGameTests {
         // assemble: only the shared generator's own start injection runs here.
         var state = ChunkGeneratorStructureState.createForNormal(level.getChunkSource().randomState(),
                 plan.seed(), generator.getBiomeSource(), noStructureSets());
-        var planned = pyramidOf(plan);
-        var pyramid = registries.registryOrThrow(Registries.STRUCTURE)
+        // The subject is the companion mod's own piece type: the generator restores it without
+        // naming it, which is what "a new structure is a registration, not a branch" has to mean.
+        var planned = waystationOf(plan);
+        var waystation = registries.registryOrThrow(Registries.STRUCTURE)
                 .get(ResourceLocation.parse(planned.structureId().value()));
-        helper.assertTrue(pyramid != null, "the controlled structure is missing from the registry");
+        helper.assertTrue(waystation != null, "the controlled structure is missing from the registry");
 
         var origin = new ChunkPos(Math.floorDiv(planned.originX(), 16), Math.floorDiv(planned.originZ(), 16));
         var chunk = protoChunk(level, registries, origin);
         generator.createStructures(registries, state, level.structureManager(), chunk, level.getStructureManager());
-        var injected = chunk.getStartForStructure(pyramid);
+        var injected = chunk.getStartForStructure(waystation);
         helper.assertTrue(injected != null && injected.isValid(),
                 "the planned structure was not injected into its origin chunk");
         helper.assertTrue(injected.getPieces().size() == planned.pieces().size(),
@@ -138,8 +150,8 @@ public final class AdventureWorldGameTests {
         for (int index = 0; index < injected.getPieces().size(); index++) {
             var frozen = planned.pieces().get(index);
             var piece = injected.getPieces().get(index);
-            helper.assertTrue(piece.getType() == StructurePieceType.DESERT_PYRAMID_PIECE,
-                    "injected piece did not come from the registered piece type");
+            helper.assertTrue(piece instanceof WaystationPiece,
+                    "injected piece did not come back as the registered companion type: " + piece.getClass().getName());
             assertFrozenBox(helper, frozen, piece.getBoundingBox(), "injected piece " + frozen.pieceId());
         }
 
@@ -147,12 +159,92 @@ public final class AdventureWorldGameTests {
         // chunk alone, and a native candidate under the controlled id is erased wherever it appears.
         var neighbourPos = new ChunkPos(origin.x + 1, origin.z);
         var neighbour = protoChunk(level, registries, neighbourPos);
-        neighbour.setStartForStructure(pyramid, new StructureStart(pyramid, neighbourPos, 0,
+        neighbour.setStartForStructure(waystation, new StructureStart(waystation, neighbourPos, 0,
                 new PiecesContainer(java.util.List.of(injected.getPieces().getFirst()))));
         generator.createStructures(registries, state, level.structureManager(), neighbour, level.getStructureManager());
-        var erased = neighbour.getStartForStructure(pyramid);
+        var erased = neighbour.getStartForStructure(waystation);
         helper.assertTrue(erased == null || !erased.isValid(),
                 "a controlled native candidate survived the planned structure pass");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
+    public static void waystationRestoresAsCompanionPieceAfterReadyReload(GameTestHelper helper) {
+        var generated = plan();
+        // Same seed, profile, adapters and directory: this second call takes the READY path, so it
+        // compares a fresh planning result against a decode of the frozen bytes, not two plannings.
+        var reloaded = RuntimePlanner.plan(0x41D0_2026_0907L, ProfileReloadListener.current(),
+                java.nio.file.Path.of("testcompanion-plan"), MinecraftAdapters.builtIn(),
+                RegisteredPieceSupport.INSTANCE);
+        var progress = io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
+        helper.assertTrue(progress.status() == io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
+                        && progress.stage() == PlanningStage.CACHE,
+                "the second call replanned instead of restoring the frozen plan");
+
+        var before = waystationOf(generated);
+        var after = waystationOf(reloaded);
+        helper.assertTrue(before.rotation().equals(after.rotation()),
+                "READY reload changed the structure rotation");
+        helper.assertTrue(before.entranceX() == after.entranceX() && before.entranceY() == after.entranceY()
+                        && before.entranceZ() == after.entranceZ(),
+                "READY reload changed the entrance");
+        helper.assertTrue(before.footprint().equals(after.footprint())
+                        && before.biomeProtection().equals(after.biomeProtection()),
+                "READY reload changed the footprint or the biome protection");
+        helper.assertTrue(before.pieces().size() == after.pieces().size(),
+                "READY reload changed the frozen piece count");
+        for (int index = 0; index < before.pieces().size(); index++)
+            helper.assertTrue(before.pieces().get(index).equals(after.pieces().get(index)),
+                    "READY reload changed frozen piece " + index + " or its order");
+
+        var level = helper.getLevel();
+        var context = FrozenPieceRestore.context(level.registryAccess(), level.getStructureManager());
+        var restored = FrozenPieceRestore.restore(after, context);
+        helper.assertTrue(restored.size() == after.pieces().size(),
+                "companion pieces did not all come back");
+        for (int index = 0; index < restored.size(); index++) {
+            var frozen = after.pieces().get(index);
+            var piece = restored.get(index);
+            helper.assertTrue(piece instanceof WaystationPiece,
+                    "frozen companion piece restored as " + piece.getClass().getName());
+            var waystation = (WaystationPiece) piece;
+            helper.assertTrue(waystation.index() == index,
+                    "restored companion piece lost its frozen index");
+            assertFrozenBox(helper, frozen, waystation.getBoundingBox(), "restored " + frozen.pieceId());
+            // Rotation, index, variant, loot table and loot seed all live in the frozen NBT, so an
+            // identical re-serialization is the whole round trip in one comparison.
+            helper.assertTrue(waystation.createTag(context).equals(frozenTag(frozen)),
+                    "restored companion piece does not re-serialize to the frozen NBT");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
+    public static void coldPlanningRejectsUnregisteredFrozenPiece(GameTestHelper helper) {
+        var directory = java.nio.file.Path.of(PIECE_CHECK_DIRECTORY);
+        var failure = planWithPoisonedPiece(directory, RegisteredPieceSupport.INSTANCE);
+        assertPieceRestoreFailure(helper, failure);
+        helper.assertTrue(!java.nio.file.Files.exists(readyFile(directory)),
+                "a plan whose pieces cannot be restored still published READY");
+        restoreSharedProgress();
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
+    public static void readyDecodeRejectsUnregisteredFrozenPiece(GameTestHelper helper) {
+        var directory = java.nio.file.Path.of(PIECE_CHECK_READY_DIRECTORY);
+        // First pass accepts any piece type, so a READY plan exists and the decode-time check can be
+        // isolated. The support answer is a runtime property: it is not part of the input identity.
+        var accepted = planWithPoisonedPiece(directory, structure -> java.util.Optional.empty());
+        helper.assertTrue(accepted == null,
+                "the permissive pass unexpectedly failed: " + (accepted == null ? "" : accepted.getMessage()));
+        helper.assertTrue(java.nio.file.Files.exists(readyFile(directory)),
+                "the permissive pass did not publish a READY plan");
+        var failure = planWithPoisonedPiece(directory, RegisteredPieceSupport.INSTANCE);
+        assertPieceRestoreFailure(helper, failure);
+        helper.assertTrue(java.nio.file.Files.exists(readyFile(directory)),
+                "the failed decode consumed or rewrote the READY plan");
+        restoreSharedProgress();
         helper.succeed();
     }
 
@@ -359,9 +451,9 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "crash-seed-r11");
-            var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn());
+            var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
-            var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn());
+            var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
                     && progress.stage()==PlanningStage.CACHE,
@@ -382,7 +474,7 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "capacity-seed-r12");
-            var generated = RuntimePlanner.plan(1, loaded, java.nio.file.Path.of("capacity-seed-r12"), MinecraftAdapters.builtIn());
+            var generated = RuntimePlanner.plan(1, loaded, java.nio.file.Path.of("capacity-seed-r12"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
             helper.assertTrue(Math.abs(java.util.Arrays.stream(generated.climate().actualRatios()).sum()-1)<1e-9, "climate land ratios do not sum to one");
             helper.assertTrue(generated.biomePatches().stream().filter(p -> p.mask()!=null).allMatch(p -> p.contains(p.anchorX(),p.anchorZ())), "frozen ownership lost a required anchor");
@@ -404,9 +496,9 @@ public final class AdventureWorldGameTests {
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(
                             canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "production-profile-test");
-            var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn());
+            var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
-            var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn());
+            var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
                     && progress.stage()==PlanningStage.CACHE,
@@ -433,7 +525,7 @@ public final class AdventureWorldGameTests {
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
                     io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(
                             canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "reported-river-seed");
-            generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"), MinecraftAdapters.builtIn());
+            generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
         } catch (java.io.IOException failure) { throw new AssertionError(failure); }
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "river_regression");
@@ -530,7 +622,8 @@ public final class AdventureWorldGameTests {
         synchronized (AdventureWorldGameTests.class) {
             if (planned == null) {
                 planned = RuntimePlanner.plan(0x41D0_2026_0907L, ProfileReloadListener.current(),
-                        java.nio.file.Path.of("testcompanion-plan"), MinecraftAdapters.builtIn());
+                        java.nio.file.Path.of("testcompanion-plan"), MinecraftAdapters.builtIn(),
+                        RegisteredPieceSupport.INSTANCE);
             }
             return planned;
         }
@@ -542,6 +635,111 @@ public final class AdventureWorldGameTests {
                         structure.structureId().equals(new ContentId("minecraft:desert_pyramid")))
                 .findFirst().orElseThrow();
     }
+
+    /** The companion waystation the profile requires, in plan order. */
+    private static AdventurePlanView.PlannedStructure waystationOf(GeneratedAdventurePlan plan) {
+        return plan.structures().stream().filter(structure ->
+                        structure.structureId().equals(TestCompanionAdapters.WAYSTATION_ID))
+                .findFirst().orElseThrow();
+    }
+
+    private static final String PIECE_CHECK_PROFILE = "testcompanion:piece_check";
+    private static final String POISONED_PIECE_TYPE = "testcompanion:not_a_registered_piece";
+    private static final String PIECE_CHECK_DIRECTORY = "testcompanion-piece-check-cold";
+    private static final String PIECE_CHECK_READY_DIRECTORY = "testcompanion-piece-check-ready";
+
+    /**
+     * Plans a throwaway profile whose only structure freezes {@link #POISONED_PIECE_TYPE}, which no
+     * environment registers. Returns the failure instead of throwing so a test can assert on it.
+     */
+    private static PlanningFailure planWithPoisonedPiece(java.nio.file.Path directory,
+                                                         FrozenPieceSupport pieceSupport) {
+        var config = new AdventureWorldConfigParser().parse("""
+                {"world":{"radius":512},"spawn":{"biome":"minecraft:plains"},
+                 "biomes":{"required":[{"id":"minecraft:plains","adventure_level":1,
+                                        "area":{"min":1024,"max":4096}}],
+                           "filler":["minecraft:plains"]},
+                 "structures":[{"id":"testcompanion:waystation","adventure_level":1,
+                                "count":{"min":1,"max":1},
+                                "allowed_biomes":{"id":["minecraft:plains"],"area":{"min":1024,"max":4096}},
+                                "placement_mode":"scattered","entrance":[0,1,-7]}]}
+                """);
+        String canonical = CanonicalConfigJson.write(config);
+        var loaded = new LoadedProfile(new ContentId(PIECE_CHECK_PROFILE), config, canonical,
+                AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                "piece-check-r1");
+        var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).add(POISONED_WAYSTATION).build();
+        try {
+            RuntimePlanner.plan(0x5EED_0001L, loaded, directory, adapters, pieceSupport);
+            return null;
+        } catch (PlanningFailure expected) {
+            return expected;
+        }
+    }
+
+    private static void assertPieceRestoreFailure(GameTestHelper helper, PlanningFailure failure) {
+        helper.assertTrue(failure != null,
+                "planning accepted a frozen piece type that no environment registers");
+        helper.assertTrue(failure.code() == PlanningFailure.Code.UNSUPPORTED_CONTENT,
+                "wrong failure code for an unrestorable frozen piece: " + failure.code());
+        helper.assertTrue(failure.stage().equals("structure-piece-restore"),
+                "wrong failure stage for an unrestorable frozen piece: " + failure.stage());
+        var diagnostics = failure.diagnostics();
+        helper.assertTrue(TestCompanionAdapters.WAYSTATION_ID.value().equals(diagnostics.get("structure_id")),
+                "the failure does not name the structure: " + diagnostics);
+        helper.assertTrue(diagnostics.get("instance_id") != null && diagnostics.get("piece_id") != null,
+                "the failure does not name the instance and the piece: " + diagnostics);
+        helper.assertTrue(POISONED_PIECE_TYPE.equals(diagnostics.get("piece_type")),
+                "the failure does not name the frozen piece type: " + diagnostics);
+    }
+
+    /** {@code testcompanion:piece_check} plan directory, matching AtomicPlanRepository's layout. */
+    private static java.nio.file.Path readyFile(java.nio.file.Path directory) {
+        return directory.resolve("adventureworldgen").resolve("plans")
+                .resolve(PIECE_CHECK_PROFILE.replace(':', '_').replace('/', '_')).resolve("READY");
+    }
+
+    /**
+     * PlanningProgress is a process-wide display hook and these tests deliberately fail a plan, so
+     * they finish by taking the READY path once more. That leaves the shared hook in the completed
+     * state the other tests assert on.
+     */
+    private static void restoreSharedProgress() {
+        RuntimePlanner.plan(0x41D0_2026_0907L, ProfileReloadListener.current(),
+                java.nio.file.Path.of("testcompanion-plan"), MinecraftAdapters.builtIn(),
+                RegisteredPieceSupport.INSTANCE);
+    }
+
+    /** An adapter that freezes a piece type no environment registers, for the early-diagnostic tests. */
+    private static final StructureAdapter POISONED_WAYSTATION = new StructureAdapter() {
+        @Override public ContentId structureId() { return TestCompanionAdapters.WAYSTATION_ID; }
+        @Override public String adapterVersion() { return "testcompanion-waystation-poisoned-v1"; }
+        @Override public Descriptor describe() {
+            return new Descriptor(java.util.List.of("north"), 16.0, true, true);
+        }
+        @Override public Prepared prepare(Candidate candidate, long structureSeed) {
+            var tag = new CompoundTag();
+            tag.putString("id", POISONED_PIECE_TYPE);
+            tag.putInt("GD", 0);
+            try (var bytes = new java.io.ByteArrayOutputStream();
+                 var output = new java.io.DataOutputStream(bytes)) {
+                NbtIo.write(tag, output);
+                output.flush();
+                var piece = new AdventurePlanView.PlannedPiece(candidate.instanceId() + "/piece/0",
+                        candidate.originX() - 4, candidate.originY(), candidate.originZ() - 4,
+                        candidate.originX() + 4, candidate.originY() + 4, candidate.originZ() + 4,
+                        bytes.toByteArray());
+                var box = new StructureAdapter.HorizontalBox(piece.minX(), piece.minZ(), piece.maxX(), piece.maxZ());
+                return new Prepared(candidate, java.util.List.of(piece), java.util.List.of(box),
+                        java.util.List.of(box), candidate.originX(), candidate.originY() + 1, candidate.originZ() - 4);
+            } catch (java.io.IOException failure) {
+                throw new IllegalStateException("could not freeze the poisoned piece", failure);
+            }
+        }
+        @Override public java.util.List<String> validatePrepared(Prepared structure, MacroTerrain terrain) {
+            return java.util.List.of();
+        }
+    };
 
     private static void assertFrozenBox(GameTestHelper helper, AdventurePlanView.PlannedPiece frozen,
                                         net.minecraft.world.level.levelgen.structure.BoundingBox box, String what) {

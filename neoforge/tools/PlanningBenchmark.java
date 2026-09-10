@@ -31,7 +31,11 @@ public final class PlanningBenchmark {
             }
             public List<String> validatePrepared(Prepared p, MacroTerrain t) { return List.of(); }
         }).build();
-        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters);
+        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters,
+                // The benchmark freezes a placeholder piece it never restores, and it must not boot
+                // the game registries to answer a piece-type question. Production planning passes
+                // RegisteredPieceSupport, which is the same lookup the restore path uses.
+                structure -> java.util.Optional.empty());
         System.out.printf("PLANNING seconds=%.3f patches=%d structures=%d%n",
                 (System.nanoTime() - start) / 1e9, plan.biomePatches().size(), plan.structures().size());
     }

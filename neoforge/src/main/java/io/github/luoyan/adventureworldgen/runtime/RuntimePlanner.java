@@ -8,14 +8,19 @@ import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
+import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
+import io.github.luoyan.adventureworldgen.api.FrozenPieceSupport;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.erosion.ErosionGenerator;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,10 +30,10 @@ public final class RuntimePlanner {
     private RuntimePlanner() {}
 
     public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
-                                              AdapterRegistry adapters) {
+                                              AdapterRegistry adapters, FrozenPieceSupport pieceSupport) {
         var progress = PlanningProgress.begin(loaded.id().toString());
         try {
-            var result = plan(seed, loaded, worldDirectory, adapters, progress);
+            var result = plan(seed, loaded, worldDirectory, adapters, pieceSupport, progress);
             progress.complete();
             return result;
         } catch (RuntimeException | Error failure) {
@@ -38,7 +43,8 @@ public final class RuntimePlanner {
     }
 
     private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
-                                               AdapterRegistry adapters, PlanningProgress.Run progress) {
+                                               AdapterRegistry adapters, FrozenPieceSupport pieceSupport,
+                                               PlanningProgress.Run progress) {
         String inputHash = PlanIdentity.hash(seed, loaded, adapters);
         AtomicPlanRepository repository = new AtomicPlanRepository();
         PlanV2Codec codec = new PlanV2Codec();
@@ -46,8 +52,11 @@ public final class RuntimePlanner {
             var existing = repository.loadReady(worldDirectory, loaded.id(), inputHash);
             if (existing.isPresent()) {
                 LOGGER.info("AdventureWorldGen loading READY {} for {}", PlannerProfile.V2.planFormatVersion(), loaded.id());
-                return GeneratedAdventurePlan.restore(loaded.config(),
+                var restored = GeneratedAdventurePlan.restore(loaded.config(),
                         codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash));
+                // A READY plan is handed back only if this environment can rebuild every piece in it.
+                checkFrozenPieces(restored.structures(), pieceSupport);
+                return restored;
             }
         } catch (IOException failure) {
             throw new IllegalStateException("could not load AdventureWorldGen plan", failure);
@@ -126,6 +135,8 @@ public final class RuntimePlanner {
                 });
         metrics.finish(PlanningMetrics.Stage.VALIDATION);
         metrics.adventure(joint.patches(),costs,radius);
+        // Nothing is published unless every frozen piece can be rebuilt in this environment.
+        checkFrozenPieces(plan.structures(), pieceSupport);
         progress.stage(PlanningStage.SAVE);
         try {
             repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan.snapshot()), inputHash);
@@ -137,5 +148,24 @@ public final class RuntimePlanner {
         try { metrics.write(worldDirectory,seed,plan); }
         catch(IOException unavailable) { LOGGER.warn("Could not write planning timing diagnostics",unavailable); }
         return plan;
+    }
+
+    /**
+     * Every frozen piece must have a registered piece type before a plan is published or restored.
+     * The environment answers this; the frozen NBT, not a descriptor or a plan field, names the
+     * type, so a companion mod is covered by registering its piece type.
+     */
+    private static void checkFrozenPieces(List<AdventurePlanView.PlannedStructure> structures,
+                                          FrozenPieceSupport pieceSupport) {
+        for (var structure : structures) {
+            var unsupported = pieceSupport.firstUnsupported(structure);
+            if (unsupported.isEmpty()) continue;
+            throw new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "structure-piece-restore",
+                    "frozen structure piece has no registered piece type",
+                    Map.of("structure_id", structure.structureId().value(),
+                            "instance_id", structure.instanceId(),
+                            "piece_id", unsupported.get().pieceId(),
+                            "piece_type", unsupported.get().pieceType()));
+        }
     }
 }
