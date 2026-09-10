@@ -14,6 +14,9 @@ import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.StableIds;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.biome.OrganicGrowth;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 /** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {
@@ -58,7 +61,8 @@ public final class BiomeAllocationPlanner {
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations) {
-        return allocate(seed,config,index,demands,reservations,new BiomeEnvironmentRules(config,new ClimatePlan(seed,config,index::sampleAt)),PlanningObserver.NONE,ignored->{});
+        return allocate(seed,config,index,demands,reservations,new BiomeEnvironmentRules(config,new ClimatePlan(seed,config,index::sampleAt,
+                new ClimateDiagnostics(config,ClimatePlan.STEP))),PlanningObserver.NONE,ignored->{});
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,

@@ -8,6 +8,8 @@ import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.TemperatureType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 class DemandClimateTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");
@@ -20,7 +22,7 @@ class DemandClimateTest {
           """.formatted(target));
     }
     @Test void increasingHotTargetDoesNotRewriteAcceptedTemperatureField() {
-        var a=new ClimatePlan(7331,config(8192),FLAT);var b=new ClimatePlan(7331,config(262144),FLAT);
+        var a=new ClimatePlan(7331,config(8192),FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config(8192),ClimatePlan.STEP));var b=new ClimatePlan(7331,config(262144),FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config(262144),ClimatePlan.STEP));
         assertArrayEquals(a.actualRatios(),b.actualRatios());
         for(int z=-700;z<=700;z+=100)for(int x=-700;x<=700;x+=100)
             assertEquals(a.valueAt(x,z,FLAT.sample(x,z)),b.valueAt(x,z,FLAT.sample(x,z)));
@@ -71,7 +73,7 @@ class DemandClimateTest {
             "test:cold":{"temperatures":{"cold":1}},"test:hot":{"temperatures":{"hot":1}}}}}
           """);
         assertEquals(c,parser.parse(CanonicalConfigJson.write(c)));
-        var climate=new ClimatePlan(7331,c,FLAT);
+        var climate=new ClimatePlan(7331,c,FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(c,climate);
         var types=java.util.EnumSet.noneOf(TemperatureType.class);
         for(int x=-500;x<500;x+=16)for(int z=-500;z<500;z+=16) {
@@ -87,7 +89,7 @@ class DemandClimateTest {
     @Test void mountainMassCoolsContinuouslyAndValleysRemainWarmer() {
         var config=config(131072);
         MacroTerrain ridge=(x,z)->new MacroSample(80+160*Math.exp(-x*x/(120.0*120)),Double.NaN,WaterKind.NONE,false,"r","mountains","test");
-        var climate=new ClimatePlan(7331,config,ridge);
+        var climate=new ClimatePlan(7331,config,ridge,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         assertTrue(climate.elevationCooling(0,400,ridge.sample(0,400))>
                 climate.elevationCooling(300,400,ridge.sample(300,400))+.4,"ridge has too little altitude influence");
         for(int x=-400;x<400;x++) {

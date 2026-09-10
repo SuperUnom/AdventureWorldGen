@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
@@ -11,6 +11,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.FillerState;
 import io.github.luoyan.adventureworldgen.plan.TemperatureType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.planner.JointPlanner;
+import io.github.luoyan.adventureworldgen.planner.FillerLayout;
 
 class StrictClimateTest {
     @Test void seed7331SnowyFillerCannotCrossTemperatureBoundaryEvenAfterQueryWarp() {
@@ -22,7 +26,7 @@ class StrictClimateTest {
           """);
         MacroTerrain terrain=(x,z)->new MacroSample(80+150*Math.exp(-x*x/(80.0*80)),
                 Double.NaN,WaterKind.NONE,false,"r","mountains","test");
-        var climate=new ClimatePlan(7331,config,terrain);
+        var climate=new ClimatePlan(7331,config,terrain,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(config,climate);
         var filler=new FillerLayout(7331,config,terrain,List.of(),rules);
         // Also exercise query fallback when every nearby stored label is snowy.

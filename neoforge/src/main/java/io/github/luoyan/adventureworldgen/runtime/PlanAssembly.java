@@ -7,8 +7,8 @@ import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
-import io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules;
-import io.github.luoyan.adventureworldgen.planner.ClimatePlan;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 import io.github.luoyan.adventureworldgen.planner.FillerLayout;
 
 import java.util.List;
@@ -41,7 +41,8 @@ final class PlanAssembly {
                          PlanningObserver observer) {
         ClimatePlan climate = reuseClimate != null ? reuseClimate
                 : new ClimatePlan(seed, config, terrain, ignored -> {}, observer,
-                        frozenLayout == null ? null : frozenLayout.climate());
+                        frozenLayout == null ? null : frozenLayout.climate(),
+                        new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config, ClimatePlan.STEP));
         if (frozenLayout == null) observer.stage(PlanningStage.FILLER);
         BiomeEnvironmentRules rules = new BiomeEnvironmentRules(config, climate);
         FillerLayout filler = new FillerLayout(seed, config, terrain, patches, rules, observer,

@@ -1,7 +1,8 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.biome;
 
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.biome.OrganicGrowth;
 
 class OrganicGrowthTest {
     @Test void equalDistanceDirectionsDoNotProduceACircle() {

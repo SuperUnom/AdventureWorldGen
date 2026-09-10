@@ -26,13 +26,15 @@ import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Comparator;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 /** Immutable executable snapshot produced by the first end-to-end planner pipeline. */
 public final class GeneratedAdventurePlan implements AdventurePlanView {
     private static final ContentId OCEAN = new ContentId("minecraft:ocean");
     private final long seed;
-    private final io.github.luoyan.adventureworldgen.planner.ClimatePlan climate;
-    private final io.github.luoyan.adventureworldgen.planner.BiomeEnvironmentRules environmentRules;
+    private final io.github.luoyan.adventureworldgen.climate.ClimatePlan climate;
+    private final io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules environmentRules;
     private final io.github.luoyan.adventureworldgen.planner.FillerLayout filler;
     private final java.util.Set<String> blendProtectedPatches=new java.util.HashSet<>();
     private final AdventureWorldConfig config;
@@ -75,7 +77,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     }
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
     /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
-    record PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.planner.ClimatePlan climate) {}
+    record PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate) {}
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
@@ -315,7 +317,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public PlanDiagnostics diagnostics() { return diagnostics; }
     public ErosionDeltaField erosion() { return erosion; }
     public io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities() { return capacities; }
-    public io.github.luoyan.adventureworldgen.planner.ClimatePlan climate(){return climate;}
+    public io.github.luoyan.adventureworldgen.climate.ClimatePlan climate(){return climate;}
     public int fillerSeedCount(){return filler.seedCount();}
     public long effectiveArea(PlannedBiomePatch patch) {
         long cells=0;

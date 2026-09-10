@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.biome;
 
 import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;

@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 import java.util.function.DoubleBinaryOperator;

@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
@@ -17,7 +17,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 
 /** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */
-public final class ClimatePlan {
+public final class ClimatePlan implements ClimateField {
     public static final int STEP=32;
     private final AdventureWorldConfig config;
     private final String temperatureField;
@@ -34,7 +34,8 @@ public final class ClimatePlan {
     private boolean frozen;
     private final TemperatureType spawnType;
     private final double[] ratios=new double[4], actual=new double[4];
-    private final List<ClimateDiagnostics.Site> sites=new ArrayList<>();
+    private final List<ClimateField.Site> sites=new ArrayList<>();
+    private final ClimateStatistics demandStatistics;
     private final List<ClimateCorrection> corrections=new ArrayList<>();
     private final List<ClimateSupply> supply=new ArrayList<>();
 
@@ -42,18 +43,21 @@ public final class ClimatePlan {
         return new ClimateState(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
                 thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot(),temperatureField);
     }
-    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain) {
-        this(seed,config,terrain,ignored->{});
-    }
-    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress) {
-        this(seed,config,terrain,progress,null);
-    }
-    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,ClimateState frozen) {
-        this(seed,config,terrain,progress,PlanningObserver.NONE,frozen);
+    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,ClimateStatistics statistics) {
+        this(seed,config,terrain,ignored->{},statistics);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
-                       PlanningObserver observer,ClimateState frozen) {
+                       ClimateStatistics statistics) {
+        this(seed,config,terrain,progress,null,statistics);
+    }
+    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
+                       ClimateState frozen,ClimateStatistics statistics) {
+        this(seed,config,terrain,progress,PlanningObserver.NONE,frozen,statistics);
+    }
+    public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
+                       PlanningObserver observer,ClimateState frozen,ClimateStatistics statistics) {
         this.config=config;
+        this.demandStatistics=Objects.requireNonNull(statistics,"statistics");
         temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
         if(temperatureField!=null&&!OrganicTemperatureField.VERSION.equals(temperatureField))
             throw new IllegalArgumentException("unsupported frozen temperature field: "+temperatureField);
@@ -100,7 +104,7 @@ public final class ClimatePlan {
                 var s=terrain.sample(wx+2,wz+2);
                 heights[(z+extent)*heightWidth+x+extent]=s.groundSurface();
                 if(Math.hypot(wx,wz)>radius)continue;
-                if(s.waterKind()==WaterKind.NONE&&!s.hazardous())sites.add(new ClimateDiagnostics.Site(wx,wz,s));
+                if(s.waterKind()==WaterKind.NONE&&!s.hazardous())sites.add(new ClimateField.Site(wx,wz,s));
             }
             progress.accept(.2*(z+extent+1)/(2*extent+1));
         }
@@ -109,15 +113,11 @@ public final class ClimatePlan {
         ContentId spawn=config.spawn().biome();
         if(spawn==null&&config.spawn().hasStructure())spawn=config.structures().stream()
                 .filter(s->s.id().equals(config.spawn().structure().id())).flatMap(s->s.allowedBiomes().ids().stream()).findFirst().orElse(config.biomes().filler().getFirst());
-        spawnType=BiomeEnvironmentRules.preferences(config,spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
+        spawnType=config.temperaturePreferences(spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
                 .thenComparing(e->-e.getKey().ordinal())).orElseThrow().getKey();
         angle=(DeterministicRandom.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;
-        var diagnostics=new ClimateDiagnostics(config,STEP);
-        var temperatureField=new ClimateDiagnostics.TemperatureField() {
-            public int band(int x,int z,MacroSample sample){ return typeAt(x,z,sample).ordinal(); }
-            public double value(int x,int z,MacroSample sample){ return base(x,z,sample); }
-        };
-        System.arraycopy(diagnostics.targetRatios(sites,temperatureField),0,ratios,0,4);
+        var statisticsSites=List.copyOf(sites);
+        System.arraycopy(demandStatistics.targetRatios(this,statisticsSites),0,ratios,0,4);
         // Kept in the serialized state for compatibility; temperature is configured, not a snow test.
         snowBoundary=false;
         // Demand remains diagnostic. It does not reshape the accepted temperature field.
@@ -125,11 +125,14 @@ public final class ClimatePlan {
         thresholds[0]=2.5;thresholds[1]=5;thresholds[2]=7.5;
         progress.accept(.8);
         this.frozen=true;
-        System.arraycopy(diagnostics.actualRatios(sites,temperatureField),0,actual,0,4);
-        supply.addAll(diagnostics.supply(sites,temperatureField));
+        System.arraycopy(demandStatistics.actualRatios(this,statisticsSites),0,actual,0,4);
+        supply.addAll(demandStatistics.supply(this,statisticsSites));
         progress.accept(1);
         humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
     }
+    @Override public int band(int x,int z,MacroSample sample){ return typeAt(x,z,sample).ordinal(); }
+    @Override public double value(int x,int z,MacroSample sample){ return base(x,z,sample); }
+
     private static double[] blur(double[] source,int width,int radius) {
         double[] horizontal=new double[source.length],result=new double[source.length];
         for(int z=0;z<width;z++)for(int x=0;x<width;x++) {

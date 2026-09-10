@@ -45,6 +45,24 @@ public record AdventureWorldConfig(
     }
 
     /**
+     * Temperature preference weights for one biome. These are author semantics, so they live on the
+     * author model: the climate field reads them to pick the spawn band, and the biome rules read
+     * them for admission and scoring, without either layer depending on the other.
+     */
+    public java.util.Map<io.github.luoyan.adventureworldgen.plan.TemperatureType, Double> temperaturePreferences(
+            io.github.luoyan.adventureworldgen.plan.ContentId id) {
+        var rule = biomes().terrainRules().get(id);
+        return rule == null ? io.github.luoyan.adventureworldgen.plan.TemperatureType.unrestricted()
+                : rule.temperatures();
+    }
+
+    /** Filler weight used to rank and seed filler candidates. */
+    public double fillerWeight(io.github.luoyan.adventureworldgen.plan.ContentId id) {
+        var rule = biomes().terrainRules().get(id);
+        return rule == null ? 1 : rule.fillerWeight();
+    }
+
+    /**
      * The author's filler rules, reduced to the single question the terrain sampler asks: may these
      * two recipes meet inside one filler biome? Kept on the author model so terrain only ever sees
      * the answer, never the config type.

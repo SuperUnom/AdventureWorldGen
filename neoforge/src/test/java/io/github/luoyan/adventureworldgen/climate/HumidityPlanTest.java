@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
@@ -10,6 +10,10 @@ import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.ClimateState;
 import io.github.luoyan.adventureworldgen.plan.TemperatureType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.planner.FillerLayout;
+import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 
 class HumidityPlanTest {
     private static final ContentId DESERT=new ContentId("minecraft:desert");
@@ -37,11 +41,11 @@ class HumidityPlanTest {
           """);
     }
     @Test void moistureIsContinuousAndFreshwaterDoesNotRedrawBiomeClimate() {
-        var c=config();var temperature=new ClimatePlan(7331,c,TERRAIN);var h=temperature.humidity();
-        var noRiver=new ClimatePlan(7331,c,NO_RIVER).humidity();
+        var c=config();var temperature=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var h=temperature.humidity();
+        var noRiver=new ClimatePlan(7331,c,NO_RIVER,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP)).humidity();
         assertEquals(noRiver.valueAt(246,300,land(66)),h.valueAt(246,300,land(66)),1e-9);
         assertEquals(noRiver.valueAt(302,300,land(66)),h.valueAt(302,300,land(66)),1e-9);
-        var dry=new ClimatePlan(7331,c,(x,z)->land(66)).humidity();
+        var dry=new ClimatePlan(7331,c,(x,z)->land(66),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP)).humidity();
         assertTrue(h.valueAt(630,300,land(66))>dry.valueAt(630,300,land(66))+.1);
         assertTrue(h.valueAt(200,300,land(66))>h.valueAt(200,300,land(300)));
         for(int x=-800;x<640;x++)assertTrue(Math.abs(h.valueAt(x+1,300,land(66))-h.valueAt(x,300,land(66)))<.05);
@@ -52,11 +56,11 @@ class HumidityPlanTest {
         var state=temperature.snapshot();
         var hotter=new ClimatePlan(7331,c,TERRAIN,ignored->{},new ClimateState(state.extent(),state.slopeHeight(),state.regionalHeight(),
                 state.angle(),-101,-97,new double[]{-100,-99,-98},state.snowBoundary(),
-                state.spawnType(),state.ratios(),state.actual(),state.corrections(),state.supply(),state.humidity()));
+                state.spawnType(),state.ratios(),state.actual(),state.corrections(),state.supply(),state.humidity()),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         assertTrue(hotter.humidity().valueAt(-400,300,land(66))<h.valueAt(-400,300,land(66)));
     }
     @Test void beachesOnlyUseOceanShoresAndRemainIntermittent() {
-        var c=config();var climate=new ClimatePlan(7331,c,TERRAIN);var h=climate.humidity();
+        var c=config();var climate=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var h=climate.humidity();
         var rules=new BiomeEnvironmentRules(c,climate);
         var filler=new FillerLayout(7331,c,TERRAIN,List.of(),rules);
         int riverBeaches=0,riverOther=0,oceanBeaches=0,oceanOther=0,snowBeaches=0;
@@ -85,7 +89,7 @@ class HumidityPlanTest {
         var c=new AdventureWorldConfig(base.world(),base.spawn(),new AdventureWorldConfig.BiomeSettings(
                 List.of(new AdventureWorldConfig.RequiredBiome("desert",DESERT,3,new AdventureWorldConfig.AreaRange(4096,8192))),
                 base.biomes().filler(),base.biomes().terrainRules()),List.of());
-        var climate=new ClimatePlan(7331,c,TERRAIN);
+        var climate=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(c,climate);
         var result=new JointPlanner(PlannerProfile.V2).plan(7331,c,TERRAIN,(d,x,y,z,s)->{throw new AssertionError();});
         assertTrue(result.patches().stream().anyMatch(p->p.biomeId().equals(DESERT)&&p.area()>=4096));
@@ -97,8 +101,8 @@ class HumidityPlanTest {
         }
     }
     @Test void humidityAndFillerReloadWithoutResamplingTerrain() {
-        var c=config();var original=new ClimatePlan(7331,c,TERRAIN);
-        var frozen=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},ignored->{},original.snapshot());
+        var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
+        var frozen=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},ignored->{},original.snapshot(),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var filler=new FillerLayout(7331,c,TERRAIN,List.of(),new BiomeEnvironmentRules(c,original));
         var restored=new FillerLayout(7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),new BiomeEnvironmentRules(c,frozen),filler.snapshot());
         assertArrayEquals(original.humidity().actualRatios(),frozen.humidity().actualRatios());
@@ -115,7 +119,7 @@ class HumidityPlanTest {
             """);
         MacroTerrain composite=(x,z)->new MacroSample(100,Double.NaN,WaterKind.NONE,false,"r","plains","r21",
                 "plains","hills_2",.3,0,0,0,0);
-        var climate=new ClimatePlan(9,c,composite);
+        var climate=new ClimatePlan(9,c,composite,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(c,climate);
         var filler=new FillerLayout(9,c,composite,List.of(),rules);
         for(int x=-450;x<450;x+=19)for(int z=-450;z<450;z+=19) {

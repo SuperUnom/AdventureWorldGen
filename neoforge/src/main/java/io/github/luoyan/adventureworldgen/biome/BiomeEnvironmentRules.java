@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.biome;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
@@ -7,6 +7,8 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.util.List;
 import java.util.Map;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.climate.HumidityPlan;
 
 /**
  * The single shared answer to "may this biome be placed here" and "how well does it fit".
@@ -19,10 +21,10 @@ import java.util.Map;
  * ({@link HumidityPlan}) plus the author's terrain rules. It never generates either field, and it
  * holds no search state: the methods are pure queries over frozen inputs.
  *
- * <p>Package note: the target layout gives this responsibility to a {@code biome} package. It stays
- * in {@code planner} for now because it reads {@link ClimatePlan} and {@link HumidityPlan}, which
- * still live here; moving it first would create a {@code biome <-> planner} cycle. The
- * responsibility boundary, which is what the plan's exit condition is about, is already in place.
+ * <p>It reads the fields but never depends on the planner: the fields live in {@code climate}, the
+ * two author derivations it needs ({@code temperaturePreferences}, {@code fillerWeight}) live on the
+ * author model, and the demand statistics the planner computes are injected into the field. That is
+ * what lets this service sit in {@code biome} with a one-way {@code biome -> climate} edge.
  */
 public final class BiomeEnvironmentRules {
     private final AdventureWorldConfig config;
@@ -86,13 +88,11 @@ public final class BiomeEnvironmentRules {
 
     /** Allowed temperature bands for a biome: unrestricted unless the author narrowed them. */
     public static Map<TemperatureType, Double> preferences(AdventureWorldConfig config, ContentId id) {
-        var rule = config.biomes().terrainRules().get(id);
-        return rule == null ? TemperatureType.unrestricted() : rule.temperatures();
+        return config.temperaturePreferences(id);
     }
 
     /** Filler weight used to rank and seed filler candidates. */
     public static double weight(AdventureWorldConfig config, ContentId id) {
-        var rule = config.biomes().terrainRules().get(id);
-        return rule == null ? 1 : rule.fillerWeight();
+        return config.fillerWeight(id);
     }
 }

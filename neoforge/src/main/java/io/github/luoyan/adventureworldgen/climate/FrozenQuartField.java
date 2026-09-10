@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;

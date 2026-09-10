@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import com.google.gson.Gson;
 import io.github.luoyan.adventureworldgen.api.*;
@@ -6,6 +6,8 @@ import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 import io.github.luoyan.adventureworldgen.plan.ClimateState;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
 
 class OrganicTemperatureFieldTest {
     @Test void matchesAcceptedV7PreviewSamples() {
@@ -34,10 +36,10 @@ class OrganicTemperatureFieldTest {
             80+150*Math.exp(-x*x/(80.0*80)),Double.NaN,WaterKind.NONE,false,"r","mountains","test");
 
     @Test void productionUsesFixedFieldIncludingSpawnAndRestoresWithoutTerrainSampling() {
-        var c=config();var original=new ClimatePlan(7331,c,TERRAIN);var field=new OrganicTemperatureField(7331);
+        var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var field=new OrganicTemperatureField(7331);
         var json=new Gson();String encoded=json.toJson(original.snapshot());
         var restored=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},v->{},
-                json.fromJson(encoded,ClimateState.class));
+                json.fromJson(encoded,ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         assertEquals(OrganicTemperatureField.VERSION,restored.snapshot().temperatureField());
         assertArrayEquals(new double[]{2.5,5,7.5},restored.snapshot().thresholds());
         assertTrue(restored.snapshot().corrections().isEmpty());
@@ -49,17 +51,17 @@ class OrganicTemperatureFieldTest {
         }
     }
     @Test void legacyStatesRemainLegacyAndUnknownOrModifiedNewStatesAreRejected() {
-        var c=config();var original=new ClimatePlan(7331,c,TERRAIN);var gson=new Gson();
+        var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var gson=new Gson();
         var tree=gson.toJsonTree(original.snapshot()).getAsJsonObject();
         tree.remove("temperatureField");
-        var legacy=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError();},v->{},gson.fromJson(tree,ClimateState.class));
+        var legacy=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError();},v->{},gson.fromJson(tree,ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         assertNull(legacy.snapshot().temperatureField());
-        var again=new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(gson.toJson(legacy.snapshot()),ClimateState.class));
+        var again=new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(gson.toJson(legacy.snapshot()),ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         assertEquals(legacy.valueAt(150,100,TERRAIN.sample(150,100)),again.valueAt(150,100,TERRAIN.sample(150,100)));
         tree.addProperty("temperatureField","unknown-version");
-        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class)));
+        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP)));
         tree.addProperty("temperatureField",OrganicTemperatureField.VERSION);
         tree.getAsJsonArray("thresholds").set(0,new com.google.gson.JsonPrimitive(2));
-        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class)));
+        assertThrows(IllegalArgumentException.class,()->new ClimatePlan(7331,c,TERRAIN,v->{},gson.fromJson(tree,ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP)));
     }
 }

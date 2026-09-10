@@ -20,6 +20,8 @@ import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.StableIds;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 /** Stable bounded placement of the minimum legal patch/structure solution before optional optimization. */
 public final class JointPlanner {
@@ -70,7 +72,8 @@ public final class JointPlanner {
         placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, value -> progress.accept(value * 0.2));
         checkpoint.accept("index");
         observer.stage(PlanningStage.TEMPERATURE);
-        climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null);
+        climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null,
+                new ClimateDiagnostics(config,ClimatePlan.STEP));
         rules=new BiomeEnvironmentRules(config,climate);
         checkpoint.accept("climate");
         observer.stage(PlanningStage.SEEDS);

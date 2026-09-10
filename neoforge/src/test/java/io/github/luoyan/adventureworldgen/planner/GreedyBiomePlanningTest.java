@@ -10,6 +10,9 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
 import io.github.luoyan.adventureworldgen.plan.ClimateState;
 import io.github.luoyan.adventureworldgen.plan.TemperatureType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
 
 class GreedyBiomePlanningTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");
@@ -44,7 +47,7 @@ class GreedyBiomePlanningTest {
            "required":[{"id":"test:hot","adventure_level":5,"area":{"min":4096,"max":8192}}],
            "filler":["test:spawn","test:hot"],"terrain_rules":{"test:hot":{"temperatures":{"hot":1}}}}}
           """);
-        var climate=new ClimatePlan(7331,config,FLAT);
+        var climate=new ClimatePlan(7331,config,FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(config,climate);
         var demands=new RequirementExpander().expandMinimum(config).patches();
         var result=new BiomeAllocationPlanner().allocate(7331,config,
@@ -57,20 +60,11 @@ class GreedyBiomePlanningTest {
         var s=climate.snapshot();
         var medium=new ClimatePlan(7331,config,FLAT,v->{},new ClimateState(s.extent(),s.slopeHeight(),s.regionalHeight(),
                 s.angle(),-101,101,new double[]{-100,-99,100},false,TemperatureType.MEDIUM,
-                s.ratios(),s.actual(),List.of(),s.supply(),s.humidity()));
+                s.ratios(),s.actual(),List.of(),s.supply(),s.humidity()),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var relaxed=new BiomeAllocationPlanner().allocate(7331,config,
                 new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true),demands,List.of(),new BiomeEnvironmentRules(config,medium),v->{});
         assertFalse(relaxed.patches().stream().anyMatch(p->p.biomeId().equals(hot.biomeId())),
                 "zero hot supply must relax area, never temperature admission");
-    }
-
-    @Test void quartCachePreservesNegativeCoordinatesAndComputesEachFrozenValueOnce() {
-        var field=new FrozenQuartField(512);
-        var calls=new java.util.concurrent.atomic.AtomicInteger();
-        for(int repeat=0;repeat<3;repeat++)for(int x:new int[]{-130,-2,2,130})
-            assertEquals(x,field.get(x,2,()->{calls.incrementAndGet();return x;}));
-        assertEquals(4,calls.get());
-        assertEquals(1.5,field.get(1.5,2,()->1.5));
     }
 
     @Test void placementSharesFrozenTerrainAndLevelQueriesAcrossPlanningStages() {
@@ -109,7 +103,7 @@ class GreedyBiomePlanningTest {
         };
         assertDoesNotThrow(()->new ContentPreflight().validate(config,registries,
                 AdapterRegistry.builder(new GenericBiomeAdapter()).build()));
-        var climate=new ClimatePlan(9,config,FLAT);
+        var climate=new ClimatePlan(9,config,FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(config,climate);
         assertEquals(new OrganicTemperatureField(9).temperature(2,2,80),
                 climate.valueAt(2,2,FLAT.sample(2,2)),"spawn preference must not rewrite the fixed climate");

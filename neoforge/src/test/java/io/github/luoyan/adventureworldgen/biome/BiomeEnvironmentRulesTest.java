@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.biome;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
@@ -11,6 +11,8 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 /**
  * The shared rules service is what every stage asks, so its answers must be the conjunction of its
@@ -34,7 +36,7 @@ class BiomeEnvironmentRulesTest {
     @Test
     void admissionIsExactlyTheConjunctionOfItsComponentsOnTheOwnershipGrid() {
         var config = config();
-        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT));
+        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP)));
         int admitted = 0, rejected = 0;
         for (int x = -480; x <= 480; x += 16) for (int z = -480; z <= 480; z += 16) {
             var sample = FLAT.sample(x, z);
@@ -55,7 +57,7 @@ class BiomeEnvironmentRulesTest {
     @Test
     void restrictedTemperatureBiomeIsAdmittedOnlyAtDistanceZero() {
         var config = config();
-        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT));
+        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP)));
         for (int x = -480; x <= 480; x += 32) for (int z = -480; z <= 480; z += 32) {
             var sample = FLAT.sample(x, z);
             int distance = rules.temperatureDistance(HOT_ONLY, x, z, sample);
@@ -73,7 +75,7 @@ class BiomeEnvironmentRulesTest {
                  "filler":["test:plains","test:beach"],
                  "terrain_rules":{"test:beach":{"shore_only":true}}}}
                 """);
-        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT));
+        var rules = new BiomeEnvironmentRules(config, new ClimatePlan(7331, config, FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP)));
         var beach = new ContentId("test:beach");
         for (int x = -480; x <= 480; x += 16) for (int z = -480; z <= 480; z += 16) {
             var sample = FLAT.sample(x, z);

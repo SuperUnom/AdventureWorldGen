@@ -26,17 +26,17 @@ class ClimateDiagnosticsTest {
     }
 
     /** Eight sites with exactly two in each temperature band. */
-    private static List<ClimateDiagnostics.Site> sites() {
-        List<ClimateDiagnostics.Site> sites = new ArrayList<>();
+    private static List<io.github.luoyan.adventureworldgen.climate.ClimateField.Site> sites() {
+        List<io.github.luoyan.adventureworldgen.climate.ClimateField.Site> sites = new ArrayList<>();
         int[] bands = {0, 0, 1, 1, 2, 2, 3, 3};
-        for (int i = 0; i < bands.length; i++) sites.add(new ClimateDiagnostics.Site(i * 32, 0, land()));
+        for (int i = 0; i < bands.length; i++) sites.add(new io.github.luoyan.adventureworldgen.climate.ClimateField.Site(i * 32, 0, land()));
         return sites;
     }
 
     /** Band is read from the site order; value sits inside that band. */
     private static final int[] BANDS = {0, 0, 1, 1, 2, 2, 3, 3};
     private static final double[] VALUES = {1.0, 3.5, 6.0, 8.5};
-    private static final ClimateDiagnostics.TemperatureField FIELD = new ClimateDiagnostics.TemperatureField() {
+    private static final io.github.luoyan.adventureworldgen.climate.ClimateField FIELD = new io.github.luoyan.adventureworldgen.climate.ClimateField() {
         public int band(int x, int z, MacroSample sample) { return BANDS[Math.floorDiv(x, 32)]; }
         public double value(int x, int z, MacroSample sample) { return VALUES[band(x, z, sample)]; }
     };
@@ -52,7 +52,7 @@ class ClimateDiagnosticsTest {
 
     @Test
     void actualRatiosAreTheExactBandHistogramOfTheSites() {
-        double[] actual = diagnostics().actualRatios(sites(), FIELD);
+        double[] actual = diagnostics().actualRatios(FIELD, sites());
         assertEquals(4, actual.length);
         for (int band = 0; band < 4; band++) assertEquals(0.25, actual[band], 1e-12, "band " + band);
         assertEquals(1.0, java.util.Arrays.stream(actual).sum(), 1e-12);
@@ -60,7 +60,7 @@ class ClimateDiagnosticsTest {
 
     @Test
     void targetRatiosAreNormalizedAuthorDemand() {
-        double[] target = diagnostics().targetRatios(sites(), FIELD);
+        double[] target = diagnostics().targetRatios(FIELD, sites());
         assertEquals(4, target.length);
         assertEquals(1.0, java.util.Arrays.stream(target).sum(), 1e-12, "target ratios must be normalized");
         for (double share : target) assertTrue(share >= 0, "a band share cannot be negative");
@@ -68,7 +68,7 @@ class ClimateDiagnosticsTest {
 
     @Test
     void supplyAccountsLegalAndClimateAreaPerRequiredPatch() {
-        var supply = diagnostics().supply(sites(), FIELD);
+        var supply = diagnostics().supply(FIELD, sites());
         // The explicit required biome and the implicit spawn biome each get one entry.
         assertEquals(2, supply.size());
         var entry = supply.stream().filter(s -> s.biome().equals(new ContentId("minecraft:forest").value()))

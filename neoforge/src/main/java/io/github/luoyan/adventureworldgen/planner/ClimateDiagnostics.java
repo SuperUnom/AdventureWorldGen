@@ -1,6 +1,8 @@
 package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
+import io.github.luoyan.adventureworldgen.climate.ClimateField;
+import io.github.luoyan.adventureworldgen.climate.ClimateStatistics;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.ClimateSupply;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
@@ -10,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 
 /**
  * Demand and supply statistics for the accepted temperature field.
@@ -25,19 +28,7 @@ import java.util.List;
  * casually. {@code ClimateState} deliberately keeps flat {@code ratios} / {@code actual} /
  * {@code supply} components rather than nesting this object, because that is the existing wire shape.
  */
-public final class ClimateDiagnostics {
-    /** Read-only temperature observations the statistics need from the field. */
-    public interface TemperatureField {
-        /** Band ordinal of the accepted field at a coordinate. */
-        int band(int x, int z, MacroSample sample);
-
-        /** Unthresholded temperature value used to spread demand across bands. */
-        double value(int x, int z, MacroSample sample);
-    }
-
-    /** One dry sampled site of the field: the same list the field was built from, same order. */
-    public record Site(int x, int z, MacroSample sample) {}
-
+public final class ClimateDiagnostics implements ClimateStatistics {
     private final AdventureWorldConfig config;
     private final int step;
 
@@ -47,11 +38,12 @@ public final class ClimateDiagnostics {
     }
 
     /** Author demand spread across temperature bands and normalized to sum to one. */
-    public double[] targetRatios(List<Site> sites, TemperatureField field) {
+    @Override
+    public double[] targetRatios(ClimateField field, List<ClimateField.Site> sites) {
         double[] required = new double[4], filler = new double[4];
         for (var d : new RequirementExpander().expandMinimum(config).patches()) {
             double[] weights = d.allowedBiomes().stream().mapToDouble(id -> Math.sqrt(1 + sites.stream()
-                    .filter(site -> config.biomes().allows(id, site.sample)).count())).toArray();
+                    .filter(site -> config.biomes().allows(id, site.sample())).count())).toArray();
             double total = Arrays.stream(weights).sum();
             for (int i = 0; i < weights.length; i++)
                 distribute(sites, field, d.allowedBiomes().get(i), d.area().target() * weights[i] / total, required);
@@ -68,32 +60,34 @@ public final class ClimateDiagnostics {
     }
 
     /** Share of the dry sampled sites that actually land in each band. */
-    public double[] actualRatios(List<Site> sites, TemperatureField field) {
+    @Override
+    public double[] actualRatios(ClimateField field, List<ClimateField.Site> sites) {
         double[] actual = new double[4];
-        for (var s : sites) actual[field.band(s.x, s.z, s.sample)]++;
+        for (var s : sites) actual[field.band(s.x(), s.z(), s.sample())]++;
         for (int i = 0; i < 4; i++) actual[i] /= sites.size();
         return actual;
     }
 
     /** Per-demand legal and climate area accounting. */
-    public List<ClimateSupply> supply(List<Site> sites, TemperatureField field) {
+    @Override
+    public List<ClimateSupply> supply(ClimateField field, List<ClimateField.Site> sites) {
         List<ClimateSupply> supply = new ArrayList<>();
         for (var d : new RequirementExpander().expandMinimum(config).patches()) {
             ContentId id = preferredBiome(sites, field, d);
-            long legal = sites.stream().filter(s -> config.biomes().allows(id, s.sample)).count() * step * step;
+            long legal = sites.stream().filter(s -> config.biomes().allows(id, s.sample())).count() * step * step;
             supply.add(new ClimateSupply(id.value(), d.area().target(), legal, climateArea(sites, field, id)));
         }
         return List.copyOf(supply);
     }
 
-    private void distribute(List<Site> sites, TemperatureField field, ContentId id, double amount, double[] out) {
+    private void distribute(List<ClimateField.Site> sites, ClimateField field, ContentId id, double amount, double[] out) {
         var prefs = BiomeEnvironmentRules.preferences(config, id);
         double[] shares = new double[4];
         for (var e : prefs.entrySet()) {
             double land = 1;
-            if (prefs.size() > 1) land += sites.stream().filter(s -> config.biomes().allows(id, s.sample))
+            if (prefs.size() > 1) land += sites.stream().filter(s -> config.biomes().allows(id, s.sample()))
                     .filter(s -> {
-                        double value = field.value(s.x, s.z, s.sample);
+                        double value = field.value(s.x(), s.z(), s.sample());
                         return (value < 2.5 ? TemperatureType.VERY_COLD : value < 5 ? TemperatureType.COLD : value < 7.5 ? TemperatureType.MEDIUM : TemperatureType.HOT) == e.getKey();
                     }).count();
             shares[e.getKey().ordinal()] = e.getValue() * Math.sqrt(land);
@@ -102,14 +96,14 @@ public final class ClimateDiagnostics {
         for (int i = 0; i < 4; i++) out[i] += amount * shares[i] / total;
     }
 
-    private ContentId preferredBiome(List<Site> sites, TemperatureField field, RequirementExpander.PatchDemand demand) {
+    private ContentId preferredBiome(List<ClimateField.Site> sites, ClimateField field, RequirementExpander.PatchDemand demand) {
         return demand.allowedBiomes().stream().max(Comparator.comparingLong((ContentId id) -> climateArea(sites, field, id))
                 .thenComparing(Comparator.reverseOrder())).orElseThrow();
     }
 
-    private long climateArea(List<Site> sites, TemperatureField field, ContentId id) {
+    private long climateArea(List<ClimateField.Site> sites, ClimateField field, ContentId id) {
         var prefs = BiomeEnvironmentRules.preferences(config, id);
-        return sites.stream().filter(s -> config.biomes().allows(id, s.sample)
-                && prefs.containsKey(TemperatureType.values()[field.band(s.x, s.z, s.sample)])).count() * step * step;
+        return sites.stream().filter(s -> config.biomes().allows(id, s.sample())
+                && prefs.containsKey(TemperatureType.values()[field.band(s.x(), s.z(), s.sample())])).count() * step * step;
     }
 }

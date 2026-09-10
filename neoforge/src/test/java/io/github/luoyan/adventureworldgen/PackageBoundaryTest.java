@@ -113,6 +113,16 @@ class PackageBoundaryTest {
     }
 
     @Test
+    void climateFieldsDoNotDependOnThePlanner() throws IOException {
+        // The temperature and humidity fields publish demand statistics but must not compute them:
+        // ClimateStatistics is injected, and the author preferences the field needs live on the
+        // config model. Together with the rules reading the fields from biome, that is what lets
+        // climate sit beside the planner instead of inside it.
+        assertNoImport("climate", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime");
+    }
+
+    @Test
     void terrainDoesNotDependOnTheAuthorModel() throws IOException {
         // config <-> terrain was the last package cycle: the region sampler took the whole
         // AdventureWorldConfig just to ask which recipes a filler biome admits. It now receives a

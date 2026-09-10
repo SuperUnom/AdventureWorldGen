@@ -1,4 +1,4 @@
-package io.github.luoyan.adventureworldgen.planner;
+package io.github.luoyan.adventureworldgen.climate;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
