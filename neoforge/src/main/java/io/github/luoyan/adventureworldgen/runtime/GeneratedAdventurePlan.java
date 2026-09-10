@@ -4,6 +4,7 @@ import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
+import io.github.luoyan.adventureworldgen.compat.vanilla.VanillaWaterBiomes;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
@@ -228,7 +229,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         if (sample.waterKind() == WaterKind.OCEAN) return OCEAN;
         ContentId land = mixedLandBiomeAt(blockX, blockZ, sample);
         if (sample.waterKind() == WaterKind.RIVER || sample.waterKind() == WaterKind.LAKE)
-            return inlandWaterBiome(land);
+            return VanillaWaterBiomes.inlandWaterFor(land);
         return land;
     }
 
@@ -266,16 +267,6 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         for (PlannedBiomePatch patch : biomePatches)
             if (patch.contains(blockX, blockZ)) return patch.biomeId();
         return fillerAt(blockX, blockZ, sample == null ? terrain.sample(blockX, blockZ) : sample);
-    }
-
-    public static ContentId inlandWaterBiome(ContentId land) {
-        boolean frozen = switch (land.value()) {
-            case "minecraft:snowy_plains", "minecraft:snowy_taiga", "minecraft:ice_spikes",
-                 "minecraft:grove", "minecraft:snowy_slopes", "minecraft:jagged_peaks",
-                 "minecraft:frozen_peaks", "minecraft:snowy_beach" -> true;
-            default -> false;
-        };
-        return new ContentId(frozen ? "minecraft:frozen_river" : "minecraft:river");
     }
 
     @Override public MacroSample terrainAt(double blockX, double blockZ) {

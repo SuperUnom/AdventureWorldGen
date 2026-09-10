@@ -100,6 +100,19 @@ class PackageBoundaryTest {
     }
 
     @Test
+    void vanillaCompatibilityCarriesNoCoreDependency() throws IOException {
+        // compat.vanilla holds vanilla-specific implementations and default content rules. The
+        // public registration entry consumes them, never the other way round, so this package may
+        // use the contracts and the plan vocabulary and nothing else.
+        assertNoImport("compat", "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.worldgen",
+                "io.github.luoyan.adventureworldgen.terrain",
+                "io.github.luoyan.adventureworldgen.hydrology",
+                "io.github.luoyan.adventureworldgen.config");
+    }
+
+    @Test
     void terrainDoesNotDependOnTheAuthorModel() throws IOException {
         // config <-> terrain was the last package cycle: the region sampler took the whole
         // AdventureWorldConfig just to ask which recipes a filler biome admits. It now receives a

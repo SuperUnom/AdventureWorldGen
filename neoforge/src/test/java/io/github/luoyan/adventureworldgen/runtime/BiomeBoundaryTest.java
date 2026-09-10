@@ -89,7 +89,7 @@ class BiomeBoundaryTest {
     @Test void riversAndLakesHaveWaterBiomesWithoutErasingLandOwnership() {
         for (String land : new String[]{"minecraft:plains","minecraft:snowy_plains"}) {
             var plan = plan("\""+land+"\"",true);
-            var expected = GeneratedAdventurePlan.inlandWaterBiome(new ContentId(land));
+            var expected = io.github.luoyan.adventureworldgen.compat.vanilla.VanillaWaterBiomes.inlandWaterFor(new ContentId(land));
             int rivers = 0, lakes = 0;
             for (int x = -160; x <= 160; x += 4) for (int z = -120; z <= 120; z += 4) {
                 var kind = plan.terrainAt(x+2,z+2).waterKind();
