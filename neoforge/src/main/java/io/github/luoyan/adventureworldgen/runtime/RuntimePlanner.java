@@ -9,7 +9,6 @@ import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
-import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
@@ -115,18 +114,15 @@ public final class RuntimePlanner {
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
         metrics.finish("filler_and_transition");
         progress.stage(PlanningStage.VALIDATION);
-        for(var demand:new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(loaded.config()).patches()) {
-            var patch=plan.biomePatches().stream().filter(p->p.patchId().equals(demand.patchId())).findFirst().orElse(null);
-            if(patch==null) {
-                LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",demand.patchId(),demand.area().min());
-                continue;
-            }
-            long effective=plan.effectiveArea(patch);
-            if(effective<Math.min(demand.area().min(),patch.area()))throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"effective-area",
-                    "mixing reduced the achieved dry biome quota",java.util.Map.of("patch",patch.patchId(),"effective_area",effective,"achieved_area",patch.area()));
-            if(effective<demand.area().min())LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
-                    patch.patchId(),demand.area().min(),effective);
-        }
+        // The policy compares request against achieved area; reporting and failure text stay here.
+        io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.checkAchievedAreas(loaded.config(),
+                plan.biomePatches(), plan::effectiveArea, relaxation -> {
+                    if (relaxation.noLegalArea())
+                        LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",
+                                relaxation.patchId(), relaxation.requested());
+                    else LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
+                            relaxation.patchId(), relaxation.requested(), relaxation.achieved());
+                });
         metrics.finish("validation");
         metrics.adventure(joint.patches(),costs,radius);
         progress.stage(PlanningStage.SAVE);

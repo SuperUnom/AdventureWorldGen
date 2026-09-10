@@ -329,10 +329,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         return cells*16;
     }
     private void protectMinimumAreas() {
-        // Protect the achieved quota when legal supply cannot reach the configured minimum.
-        var demands=new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(config);
-        for(var d:demands.patches())for(var p:biomePatches)if(p.patchId().equals(d.patchId())&&effectiveArea(p)<Math.min(d.area().min(),p.area()))
-            blendProtectedPatches.add(p.patchId());
+        // The decision itself lives in the planner; the measurement is this plan's own ownership.
+        blendProtectedPatches.addAll(io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy
+                .protectedPatchIds(config, biomePatches, this::effectiveArea));
     }
 
     private ContentId fillerAt(int x,int z,MacroSample sample) { return filler.biomeAt(x,z,sample); }
