@@ -60,6 +60,9 @@ public final class RegionTerrain {
         regions.remove(centralRegion);
     }
 
+    /** The region spacing of the profile this instance was built with. */
+    public int regionSpacing() { return profile.regionSpacing(); }
+
     public Sample sample(double x, double z) {
         Vec2 query = warped(x, z);
         // The blend already visits this 5x5 neighborhood. Reuse those exact distances

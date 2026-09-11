@@ -22,7 +22,6 @@ import io.github.luoyan.adventureworldgen.api.MacroTerrain;
 import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
 import io.github.luoyan.adventureworldgen.config.CanonicalConfigJson;
-import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
 import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
@@ -449,8 +448,7 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
-                    io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "crash-seed-r11");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "crash-seed-r11");
             var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
             var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
@@ -472,8 +470,7 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
-                    io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "capacity-seed-r12");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "capacity-seed-r12");
             var generated = RuntimePlanner.plan(1, loaded, java.nio.file.Path.of("capacity-seed-r12"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
             helper.assertTrue(Math.abs(java.util.Arrays.stream(generated.climate().actualRatios()).sum()-1)<1e-9, "climate land ratios do not sum to one");
@@ -493,9 +490,7 @@ public final class AdventureWorldGameTests {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             helper.assertTrue(config.world().radius() == 3000, "production radius is not 3000");
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
-                    io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(
-                            canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "production-profile-test");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "production-profile-test");
             var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
             var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
@@ -522,9 +517,7 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical,
-                    io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository.sha256(
-                            canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)), "reported-river-seed");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "reported-river-seed");
             generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"), MinecraftAdapters.builtIn(), RegisteredPieceSupport.INSTANCE);
             assertTerrainBiomes(helper, generated, config);
         } catch (java.io.IOException failure) { throw new AssertionError(failure); }
@@ -671,9 +664,7 @@ public final class AdventureWorldGameTests {
                                 "placement_mode":"scattered","entrance":[0,1,-7]}]}
                 """);
         String canonical = CanonicalConfigJson.write(config);
-        var loaded = new LoadedProfile(new ContentId(PIECE_CHECK_PROFILE), config, canonical,
-                AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-                "piece-check-r1");
+        var loaded = new LoadedProfile(new ContentId(PIECE_CHECK_PROFILE), config, canonical, "piece-check-r1");
         var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).add(POISONED_WAYSTATION).build();
         try {
             RuntimePlanner.plan(0x5EED_0001L, loaded, directory, adapters, pieceSupport);

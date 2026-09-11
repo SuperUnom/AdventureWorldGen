@@ -14,6 +14,7 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Frozen variable-spacing seeds and multi-source frontier growth over remaining land. */
 public final class FillerLayout {
@@ -37,13 +38,17 @@ public final class FillerLayout {
     private int restoredSeedCount=-1;
     public FillerState snapshot(){return new FillerState(extent,labels.clone(),seedCount());}
     private final java.util.function.DoubleConsumer progress;
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules) {
-        this(seed,config,terrain,patches,rules,null);
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules) {
+        this(profile,seed,config,terrain,patches,rules,null);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,FillerState frozen) {
-        this(seed,config,terrain,patches,rules,PlanningObserver.NONE,frozen);
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,FillerState frozen) {
+        this(profile,seed,config,terrain,patches,rules,PlanningObserver.NONE,frozen);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,
+    /**
+     * @param profile the profile whose node budget bounds the filler grid. Injected rather than
+     *                read from {@code PlannerProfile.V2} so the limit follows the active profile.
+     */
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,
                         PlanningObserver observer,FillerState frozen) {
         this.progress=observer.within(PlanningStage.FILLER);
         this.worldSeed=seed;this.config=config;this.rules=rules;pool=config.biomes().filler();
@@ -51,7 +56,8 @@ public final class FillerLayout {
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
         long size=(long)width*width;
-        if(size>PlannerProfile.V2.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,"filler","grid exceeds budget",Map.of("cells",size));
+        if(size>profile.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.FILLER,"grid exceeds budget",
+                Map.of("cells",size,"maximum_cells",(long)profile.maximumCostNodes()));
         if(frozen!=null) {
             if(frozen.extent()!=extent || frozen.labels().length!=size || frozen.seedCount()<0)
                 throw new IllegalArgumentException("invalid frozen filler dimensions");
@@ -150,7 +156,7 @@ public final class FillerLayout {
     private void flood() {
         while(!frontier.isEmpty()) {
             Edge edge=frontier.remove();int i=edge.cell;
-            if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"filler","frontier budget exhausted");
+            if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FILLER,"frontier budget exhausted");
             if(labels[i]!=-1)continue;
             Seed seed=seeds.get(edge.seed);ContentId id=pool.get(seed.biome);
             if(!allows(id,i))continue;
@@ -227,7 +233,7 @@ public final class FillerLayout {
     }
     private PlanningFailure noLegalFiller(int x,int z,MacroSample sample) {
         double qx=Math.floor(x/4.0)*4+2,qz=Math.floor(z/4.0)*4+2;
-        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"filler",
+        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.FILLER,
                 "no filler satisfies biomes.terrain_rules; add coverage for this terrain, temperature and humidity",
                 Map.of("x",x,"z",z,"terrain",sample.terrainTemplate(),"recipe",sample.recipe(),
                         "secondary",sample.secondaryRecipe(),"landform",sample.landform(),

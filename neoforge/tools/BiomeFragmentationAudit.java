@@ -11,7 +11,7 @@ import java.util.*;
 public class BiomeFragmentationAudit {
     public static void main(String[] args) throws Exception {
         var config = new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of(
-            "neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+            "src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
         System.out.println("seed\tcenter_x\tcenter_z\tcomponents\tsmall_components\tsmall_cells\tboundary_edges");
         for (long seed : new long[]{345705185492107788L, 4126649097427443736L, 1}) {
             var coast = new Coastline(List.of(new Vec2(-3000,-3000),new Vec2(3000,-3000),new Vec2(3000,3000),new Vec2(-3000,3000)));

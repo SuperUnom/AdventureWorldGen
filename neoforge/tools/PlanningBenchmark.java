@@ -17,7 +17,7 @@ public final class PlanningBenchmark {
         var config = new AdventureWorldConfigParser().parse(Files.readString(Path.of(args[0])));
         String canonical = CanonicalConfigJson.write(config);
         var loaded = new LoadedProfile(new ContentId("adventureworldgen:default"),
-                config, canonical, "benchmark", "benchmark");
+                config, canonical, "benchmark");
         long start = System.nanoTime();
         var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).add(new StructureAdapter() {
             public ContentId structureId() { return new ContentId("minecraft:desert_pyramid"); }

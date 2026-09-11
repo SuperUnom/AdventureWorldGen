@@ -37,6 +37,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver;
+import io.github.luoyan.adventureworldgen.testing.TerrainSnapshots;
 
 /**
  * P0 reproducibility baseline for the structural refactor.
@@ -90,9 +91,9 @@ class PlanningBaselineTest {
         double keep = spawnRadius + StrictMath.min(32.0, radius / 20.0);
 
         var coast = new CoastGenerator(PlannerProfile.V2).generate(SEED, radius, keep);
-        var capacities = TerrainCapacitySolver.reserve(SEED, config, coast.coastline(), coast.landBand());
-        var foundation = PlanTerrain.foundation(SEED, config, capacities, coast.coastline(), 64.0,
-                coast.landBand(), coast.seaBand(), "terrain-r22");
+        var capacities = TerrainCapacitySolver.reserve(PlannerProfile.V2, SEED, config, coast.coastline(), coast.landBand());
+        var foundation = PlanTerrain.foundation(PlannerProfile.V2, SEED, config, capacities, coast.coastline(), 64.0,
+                coast.landBand(), coast.seaBand(), TerrainSnapshots.PRODUCTION_TERRAIN);
 
         int erosionSpacing = 8;
         int erosionExtent = (int) StrictMath.ceil((radius + 256.0) / erosionSpacing) * erosionSpacing;
@@ -108,22 +109,19 @@ class PlanningBaselineTest {
 
         var jointPlanner = new JointPlanner(PlannerProfile.V2);
         var joint = jointPlanner.plan(SEED, config, erodedTerrain, recorderFreezer(),
-                new JointPlanner.LevelConstraint() {
-                    public boolean accepts(int level, int x, int z) { return true; }
-                    public double penalty(int level, int x, int z) {
-                        return io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(level,
-                                costs.normalizedPreferenceAt(x, z, radius));
-                    }
-                }, (biome, x, z) -> true, ignored -> { }, ignored -> { });
+                JointPlanner.preferenceOnly((level, x, z) ->
+                        io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(level,
+                                costs.normalizedPreferenceAt(x, z, radius))),
+                (biome, x, z) -> true, ignored -> { }, ignored -> { });
 
-        return GeneratedAdventurePlan.fromPlanning(SEED, config, coast.coastline(), rivers, 64.0,
-                coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
+        return GeneratedAdventurePlan.fromPlanning(PlannerProfile.V2, SEED, config, coast.coastline(), rivers, 64.0,
+                coast.landBand(), coast.seaBand(), TerrainSnapshots.PRODUCTION_TERRAIN, joint.spawn(),
                 joint.patches(), joint.structures(),
                 new PlanDiagnostics(coast.vertexCount(), rivers.channels().size(),
                         rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
                         (long) erosion.width() * erosion.height(), erosion.operationCount(),
-                        costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
-                        "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"),
+                        costs.nodeCount(), costs.edgeStats().computedPairs(), joint.operationCount(),
+                        TerrainSnapshots.productionDiagnostics(PlannerProfile.V2.hydrologyVersion())),
                 erosion, capacities,
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()),
                 PlanningObserver.NONE);
@@ -191,8 +189,29 @@ class PlanningBaselineTest {
     // structural change. These are evidence of preserved behaviour, not tuning targets:
     // a structural refactor must reproduce them exactly. Behaviour changes require their
     // own reviewed revision, never a quiet edit of these constants.
+    //
+    // ============================ REVISION 2 (2026-09-11) ============================
+    // EXPECTED_PLAN_SHA256 only. EXPECTED_FIELD_SHA256 and EXPECTED_SPAWN are untouched, and so are
+    // PlanningOptimizationGoldenTest, DeterminismAcceptanceTest and the plan-v2 round trip.
+    //
+    // Old: 60db9c350e163356b58be39437bddc31e1cfde5ef9322994f2763e974421ccfe
+    // New: 9c0327dea3bdc5798b6d9a21a2818417891fa7204724abb4a2593fc79f62e578
+    //
+    // Cause, and the only cause: "已知边界与不一致解决方案" item 22. ClimateDiagnostics.distribute
+    // used to rebuild each site's temperature band from the field's raw value with hardcoded
+    // 2.5/5/7.5 thresholds, while actualRatios and climateArea read ClimateField.band. The demand
+    // spread therefore disagreed with every other reader of the same field, and could not have been
+    // right for a field with a different threshold set. It now reads band() like everything else,
+    // which changes the persisted climate statistics (ClimateState ratios/actual/supply).
+    //
+    // Verified scope of the change: the field digest - terrain height, water, biome and structure
+    // observations sampled from the plan - is byte-identical to the recorded baseline, the
+    // optimization golden values are unchanged, and repeated planning plus the READY round trip
+    // still produce identical bytes. Only the diagnostic statistics moved, which is exactly what the
+    // item predicted: "该统计虽不反馈布局，却会持久化，因此统计变化需单独核对规范字节，不能称为绝对
+    // 字节不变." This revision was re-recorded deliberately; it is not a batch refresh of every hash.
     private static final String EXPECTED_PLAN_SHA256 =
-            "60db9c350e163356b58be39437bddc31e1cfde5ef9322994f2763e974421ccfe";
+            "9c0327dea3bdc5798b6d9a21a2818417891fa7204724abb4a2593fc79f62e578";
     private static final String EXPECTED_FIELD_SHA256 =
             "ce1ac745adc29f185a2867031eb7a8b29de29f895066226014e1211da0a92a0f";
     private static final String EXPECTED_SPAWN = "0.5/0.5/0.0";

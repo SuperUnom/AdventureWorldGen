@@ -1,6 +1,7 @@
 import io.github.luoyan.adventureworldgen.runtime.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import java.nio.file.*;
 import java.util.zip.GZIPInputStream;
 import com.google.gson.JsonParser;
@@ -11,11 +12,11 @@ import javax.imageio.ImageIO;
 public class EcotonePreview {
  public static void main(String[] args) throws Exception {
   Path input=Path.of(args[0]),output=Path.of(args[1]),camera=Path.of(args[2]);
-  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
   String hash=JsonParser.parseString(Files.readString(input.resolve("manifest.json"))).getAsJsonObject().get("input_sha256").getAsString();
   GeneratedAdventurePlan plan;
   try(var stream=new GZIPInputStream(Files.newInputStream(input.resolve("plan.json.gz")))) {
-   plan=new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash,config);
+   plan=GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash));
   }
   int cx=0,cz=0;
   if(Files.exists(camera)){String[] p=Files.readString(camera).trim().split(",");cx=Integer.parseInt(p[0]);cz=Integer.parseInt(p[1]);}

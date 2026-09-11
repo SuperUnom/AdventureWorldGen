@@ -1,0 +1,39 @@
+// Select exactly one GameTest group for this launch.
+//
+//   ./gradlew runGameTestServer -I tools/gametest-group.gradle -PgametestGroup=default -PterrainAuditWorld=run-full-default-01
+//
+// NeoForge enables the GameTest namespaces through a single system property, and every existing
+// per-group init script writes that same property. Stacking several -I scripts therefore cannot
+// express "all four groups": the last one wins. The full acceptance entry is
+// tools/run-full-gametest.sh, which starts this script once per group with a separate world
+// directory and aggregates the results.
+//
+//   default     16 methods  namespaces minecraft, adventureworldgen, testcompanion
+//   performance  6 methods  namespace  testcompanion_performance
+//   capacity     1 method   namespace  testcompanion_capacity
+//   planning     1 method   namespace  testcompanion_planning
+//
+// The method lists live in GameTestInventoryTest; keep the two in step.
+def groups = [
+        default    : ['minecraft', 'adventureworldgen', 'testcompanion'],
+        performance: ['testcompanion_performance'],
+        capacity   : ['testcompanion_capacity'],
+        planning   : ['testcompanion_planning'],
+]
+
+allprojects {
+    afterEvaluate {
+        def forge = extensions.findByName('neoForge')
+        if (forge != null) {
+            def groupName = providers.gradleProperty('gametestGroup').getOrElse('default')
+            def namespaces = groups[groupName]
+            if (namespaces == null) {
+                throw new GradleException("unknown -PgametestGroup=" + groupName
+                        + "; expected one of " + groups.keySet().join(', '))
+            }
+            def world = providers.gradleProperty('terrainAuditWorld').getOrElse('run-gametest-' + groupName)
+            forge.runs.gameTestServer.gameDirectory = file(world)
+            forge.runs.gameTestServer.systemProperty 'neoforge.enabledGameTestNamespaces', namespaces.join(',')
+        }
+    }
+}

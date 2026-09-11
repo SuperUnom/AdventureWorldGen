@@ -10,6 +10,7 @@ import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Adapted deterministic FTF river graph using the project's fixed coast and stable random keys. */
 public final class HydrologyGenerator {
@@ -387,7 +388,7 @@ public final class HydrologyGenerator {
         return DeterministicRandom.sample(seed, planner.algorithmVersion(), "hydrology", id, operation);
     }
     private static PlanningFailure rejected(String id, String reason) {
-        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "hydrology", reason,
+        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.HYDROLOGY, reason,
                 Map.of("river_id", id));
     }
 }

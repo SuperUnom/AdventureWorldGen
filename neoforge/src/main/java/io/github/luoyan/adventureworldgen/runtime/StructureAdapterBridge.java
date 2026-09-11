@@ -10,6 +10,7 @@ import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.planner.RequirementExpander;
 
 import java.util.Map;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /**
  * The structure side of the adapter bridge: the planner states a structure demand, the registered
@@ -39,7 +40,7 @@ final class StructureAdapterBridge implements JointPlanner.StructureFreezer {
     static double spawnReservationRadius(AdapterRegistry adapters, AdventureWorldConfig config) {
         if (!config.spawn().hasStructure()) return 0.0;
         return adapters.structure(config.spawn().structure().id()).orElseThrow(() ->
-                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "spawn-reservation",
+                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, FailureStage.SPAWN_RESERVATION,
                         "spawn structure has no adapter", Map.of("content_id",
                         config.spawn().structure().id()))).describe().maximumFootprintRadius()
                 + StrictMath.hypot(config.spawn().structure().spawnPoint().x(),
@@ -49,15 +50,14 @@ final class StructureAdapterBridge implements JointPlanner.StructureFreezer {
     @Override public AdventurePlanView.PlannedStructure freeze(RequirementExpander.StructureInstanceDemand demand,
                                                                int x, int y, int z, long structureSeed) {
         var adapter = adapters.structure(demand.structureId()).orElseThrow(() ->
-                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "structure-prepare",
+                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, FailureStage.STRUCTURE_PREPARE,
                         "no adapter for planned structure", Map.of("content_id", demand.structureId())));
         var rotations = adapter.describe().rotations();
         String rotation = rotations.get(Math.floorMod((int) structureSeed, rotations.size()));
         var prepared = adapter.prepare(new StructureAdapter.Candidate(
                 demand.instanceId(), x, y, z, rotation), structureSeed);
         var errors = adapter.validatePrepared(prepared, terrain);
-        if (!errors.isEmpty()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
-                "structure-prepare", "prepared structure failed validation",
+        if (!errors.isEmpty()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_PREPARE, "prepared structure failed validation",
                 Map.of("instance_id", demand.instanceId(), "errors", errors));
         return new AdventurePlanView.PlannedStructure(demand.instanceId(), demand.structureId(), x, y, z,
                 rotation, prepared.entranceX(), prepared.entranceY(), prepared.entranceZ(),

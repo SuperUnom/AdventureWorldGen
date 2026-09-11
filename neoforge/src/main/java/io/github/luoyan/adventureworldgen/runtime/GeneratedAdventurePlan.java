@@ -28,6 +28,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Immutable executable snapshot produced by the first end-to-end planner pipeline. */
 public final class GeneratedAdventurePlan implements AdventurePlanView {
@@ -51,6 +53,11 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final String terrainVersion;
     private final List<PlannedBiomePatch> biomePatches;
     private final List<PlannedStructure> structures;
+    /**
+     * The planning parameters this instance was built with. Every sub-stage that needs a budget or a
+     * version string reads it from here, so the plan genuinely carries the profile that produced it.
+     */
+    private final PlannerProfile profile;
     private final PlanDiagnostics diagnostics;
     private final ErosionDeltaField erosion;
     private final io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities;
@@ -63,8 +70,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion) {
-        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.empty());
+        this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+                biomePatches,structures,diagnostics,erosion,
+                io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.empty(), null, null, PlanningObserver.NONE);
     }
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
@@ -72,8 +80,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities) {
-        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,capacities,null);
+        this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+                biomePatches,structures,diagnostics,erosion,capacities,null,null,PlanningObserver.NONE);
     }
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
     /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
@@ -85,7 +93,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout) {
-        this(seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
+        this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
                 biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null,PlanningObserver.NONE);
     }
     /**
@@ -94,15 +102,16 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
      * Use {@link #restore(AdventureWorldConfig, PlanSnapshot)} to rebuild a plan from a decoded
      * payload instead; that path takes the frozen layout and rebuilds the rest.
      */
-    static GeneratedAdventurePlan fromPlanning(long seed, AdventureWorldConfig config, Coastline coastline,
+    static GeneratedAdventurePlan fromPlanning(PlannerProfile profile, long seed, AdventureWorldConfig config,
+                                              Coastline coastline,
                                               RiverNetwork riverNetwork, double seaSurface, double landBand,
                                               double seaBand, String terrainVersion, SpawnPosition spawn,
                                               List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
                                               PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                               io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                               PlanningInputs prepared, PlanningObserver observer) {
-        return new GeneratedAdventurePlan(seed, config, coastline, riverNetwork, seaSurface, landBand, seaBand,
-                terrainVersion, spawn, biomePatches, structures, diagnostics, erosion, capacities, null,
+        return new GeneratedAdventurePlan(profile, seed, config, coastline, riverNetwork, seaSurface, landBand,
+                seaBand, terrainVersion, spawn, biomePatches, structures, diagnostics, erosion, capacities, null,
                 java.util.Objects.requireNonNull(prepared, "prepared"), observer);
     }
 
@@ -112,7 +121,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
      * a plan built from explicit geometry (tests and read-only tools). Private so callers cannot mix
      * a frozen layout with first-planning objects: use {@link #fromPlanning} or {@link #restore}.
      */
-    private GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
+    private GeneratedAdventurePlan(PlannerProfile profile, long seed, AdventureWorldConfig config,
+                                  Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
@@ -120,6 +130,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout, PlanningInputs prepared, PlanningObserver observer) {
         java.util.Objects.requireNonNull(observer,"observer");
+        this.profile=java.util.Objects.requireNonNull(profile,"profile");
         this.capacities=capacities;
         this.seed = seed;
         this.blockBlend=new io.github.luoyan.adventureworldgen.biome.LocalBiomeBlend(seed,config.biomes().blendRadius());
@@ -137,8 +148,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         // Terrain assembly lives in PlanTerrain: the first planning run hands over the objects it
         // already built, a decoded plan rebuilds the same stack from frozen data.
         PlanTerrain terrainStack = prepared == null
-                ? PlanTerrain.assemble(seed, config, capacities, coastline, riverNetwork, seaSurface, landBand,
-                        seaBand, terrainVersion, erosion)
+                ? PlanTerrain.assemble(profile, seed, config, capacities, coastline, riverNetwork, seaSurface,
+                        landBand, seaBand, terrainVersion, erosion)
                 : prepared.terrain();
         this.regions = terrainStack.regions();
         this.islandTerrain = terrainStack.island();
@@ -147,8 +158,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         if(frozenLayout!=null && (frozenLayout.climate()==null||frozenLayout.filler()==null||frozenLayout.protectedPatches()==null))
             throw new IllegalArgumentException("incomplete frozen biome layout");
         // Layout assembly lives in PlanAssembly; the plan keeps the steps that need its own queries.
-        PlanAssembly.Layout layout = PlanAssembly.layout(seed, config, terrain, this.biomePatches, frozenLayout,
-                prepared == null ? null : prepared.climate(), observer);
+        PlanAssembly.Layout layout = PlanAssembly.layout(profile, seed, config, terrain, this.biomePatches,
+                frozenLayout, prepared == null ? null : prepared.climate(), observer);
         climate = layout.climate();
         environmentRules = layout.rules();
         filler = layout.filler();
@@ -175,7 +186,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private static PlanDiagnostics coastAndRiverDiagnostics(Coastline coast, RiverNetwork rivers) {
         return PlanDiagnostics.basic(coast.vertices().size(), rivers.channels().size(),
                 rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
-                "terrain-r22+" + rivers.version());
+                PlanVersions.TERRAIN + "+" + rivers.version());
     }
 
     /**
@@ -199,10 +210,15 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
      */
     public static GeneratedAdventurePlan restore(AdventureWorldConfig config, PlanSnapshot snapshot) {
         try {
-            GeneratedAdventurePlan plan = new GeneratedAdventurePlan(snapshot.seed(), config, snapshot.coastline(),
+            // A decoded payload has already been checked against the plan-v2 contract by PlanV2Codec
+            // (algorithm/format/hydrology all equal the contract values), so the restoring profile IS
+            // the contract profile: V2 is not a shortcut here, it is what the format pins.
+            GeneratedAdventurePlan plan = new GeneratedAdventurePlan(PlannerProfile.V2, snapshot.seed(), config,
+                    snapshot.coastline(),
                     snapshot.riverNetwork(), snapshot.seaSurface(), snapshot.landBand(), snapshot.seaBand(),
                     snapshot.terrainVersion(), snapshot.spawn(), snapshot.biomePatches(), snapshot.structures(),
-                    snapshot.diagnostics(), snapshot.erosion(), snapshot.capacities(), snapshot.biomeLayout());
+                    snapshot.diagnostics(), snapshot.erosion(), snapshot.capacities(), snapshot.biomeLayout(),
+                    null, PlanningObserver.NONE);
             if (!snapshot.recipeSettings().equals(config.world().terrain()))
                 throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
             // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.
@@ -212,7 +228,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         } catch (PlanningFailure failure) {
             throw failure;
         } catch (RuntimeException malformed) {
-            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "plan-load",
+            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.PLAN_LOAD,
                     "READY plan-v2 payload is invalid", java.util.Map.of("reason", String.valueOf(malformed.getMessage())));
         }
     }
@@ -306,7 +322,9 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public double seaBand() { return seaBand; }
     public io.github.luoyan.adventureworldgen.terrain.TerrainSettings terrainSettings() {return config.world().terrain();}
     public java.util.List<RegionTerrain.Region> recipeRegions() {
-        int extent=(int)Math.ceil(config.world().radius()/PlannerProfile.V2.terrain().regionSpacing())+3;
+        // The spacing comes from the RegionTerrain this plan was actually built with, not from a
+        // fixed V2 lookup: a differently spaced profile must describe its own regions.
+        int extent=(int)Math.ceil(config.world().radius()/regions.regionSpacing())+3;
         var list=new java.util.ArrayList<RegionTerrain.Region>();
         for(int x=-extent;x<=extent;x++)for(int z=-extent;z<=extent;z++)list.add(regions.region(x,z));
         return java.util.List.copyOf(list);

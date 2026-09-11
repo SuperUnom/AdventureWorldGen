@@ -7,7 +7,6 @@ import io.github.luoyan.adventureworldgen.config.ConfigErrorCode;
 import io.github.luoyan.adventureworldgen.config.ConfigException;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.config.LoadedProfile;
-import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.server.packs.resources.ResourceManager;
@@ -44,9 +43,7 @@ public final class ProfileReloadListener extends SimplePreparableReloadListener<
         try (var reader = selected.openAsReader()) {
             AdventureWorldConfig config = new AdventureWorldConfigParser().parse(reader);
             String canonical = CanonicalConfigJson.write(config);
-            return new LoadedProfile(DEFAULT_ID, config, canonical,
-                    AtomicPlanRepository.sha256(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
-                    selected.sourcePackId());
+            return new LoadedProfile(DEFAULT_ID, config, canonical, selected.sourcePackId());
         } catch (IOException failure) {
             throw new ConfigException(ConfigErrorCode.CONFIG_ERROR, "$",
                     "could not read profile from " + selected.sourcePackId() + ": " + failure.getMessage());

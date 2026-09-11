@@ -21,6 +21,7 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.testing.TerrainSnapshots;
 
 class DeterminismAcceptanceTest {
     @Test
@@ -42,10 +43,10 @@ class DeterminismAcceptanceTest {
         String expectedPlanHash = null;
         for (int run = 0; run < 10; run++) {
             var plan = new GeneratedAdventurePlan(0x5EEDL, config, coast, rivers, 64, 64, 128,
-                    "terrain-v2", null, patches, List.of(),
+                    TerrainSnapshots.SYNTHETIC_TERRAIN, null, patches, List.of(),
                     PlanDiagnostics.basic(coast.vertices().size(), rivers.channels().size(),
                             rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
-                            "terrain-r22+" + rivers.version()), null);
+                            TerrainSnapshots.productionTerrainDetail(rivers.version())), null);
             byte[] encoded = new PlanV2Codec().encode(new ContentId("adventureworldgen:default"), "same-input", plan.snapshot());
             String planHash = AtomicPlanRepository.sha256(encoded);
             if (expectedPlanHash == null) expectedPlanHash = planHash;

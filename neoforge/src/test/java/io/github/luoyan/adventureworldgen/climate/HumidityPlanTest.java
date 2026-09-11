@@ -62,7 +62,7 @@ class HumidityPlanTest {
     @Test void beachesOnlyUseOceanShoresAndRemainIntermittent() {
         var c=config();var climate=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var h=climate.humidity();
         var rules=new BiomeEnvironmentRules(c,climate);
-        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),rules);
+        var filler=new FillerLayout(PlannerProfile.V2,7331,c,TERRAIN,List.of(),rules);
         int riverBeaches=0,riverOther=0,oceanBeaches=0,oceanOther=0,snowBeaches=0;
         for(int z=-950;z<=950;z+=4) {
             for(int x:new int[]{246,638}) {
@@ -103,8 +103,8 @@ class HumidityPlanTest {
     @Test void humidityAndFillerReloadWithoutResamplingTerrain() {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var frozen=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},ignored->{},original.snapshot(),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
-        var filler=new FillerLayout(7331,c,TERRAIN,List.of(),new BiomeEnvironmentRules(c,original));
-        var restored=new FillerLayout(7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),new BiomeEnvironmentRules(c,frozen),filler.snapshot());
+        var filler=new FillerLayout(PlannerProfile.V2,7331,c,TERRAIN,List.of(),new BiomeEnvironmentRules(c,original));
+        var restored=new FillerLayout(PlannerProfile.V2,7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),new BiomeEnvironmentRules(c,frozen),filler.snapshot());
         assertArrayEquals(original.humidity().actualRatios(),frozen.humidity().actualRatios());
         for(int z=-900;z<900;z+=37)for(int x=-900;x<650;x+=37) {
             var s=TERRAIN.sample(x,z);
@@ -121,7 +121,7 @@ class HumidityPlanTest {
                 "plains","hills_2",.3,0,0,0,0);
         var climate=new ClimatePlan(9,c,composite,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(c,climate);
-        var filler=new FillerLayout(9,c,composite,List.of(),rules);
+        var filler=new FillerLayout(PlannerProfile.V2,9,c,composite,List.of(),rules);
         for(int x=-450;x<450;x+=19)for(int z=-450;z<450;z+=19) {
             var sample=composite.sample(x,z);var id=filler.biomeAt(x,z,sample);
             assertEquals(new ContentId("example:forest"),id);

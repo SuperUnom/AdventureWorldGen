@@ -15,6 +15,7 @@ import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.planner.FillerLayout;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 class StrictClimateTest {
     @Test void seed7331SnowyFillerCannotCrossTemperatureBoundaryEvenAfterQueryWarp() {
@@ -28,11 +29,11 @@ class StrictClimateTest {
                 Double.NaN,WaterKind.NONE,false,"r","mountains","test");
         var climate=new ClimatePlan(7331,config,terrain,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(config,climate);
-        var filler=new FillerLayout(7331,config,terrain,List.of(),rules);
+        var filler=new FillerLayout(PlannerProfile.V2,7331,config,terrain,List.of(),rules);
         // Also exercise query fallback when every nearby stored label is snowy.
         var state=filler.snapshot();int[] snowyLabels=state.labels().clone();
         Arrays.fill(snowyLabels,config.biomes().filler().indexOf(new ContentId("minecraft:snowy_slopes")));
-        var warped=new FillerLayout(7331,config,terrain,List.of(),rules,
+        var warped=new FillerLayout(PlannerProfile.V2,7331,config,terrain,List.of(),rules,
                 new FillerState(state.extent(),snowyLabels,1));
         Set<TemperatureType> seen=EnumSet.noneOf(TemperatureType.class);
         for(int z=-242;z<244;z+=4)for(int x=-242;x<244;x+=4) {

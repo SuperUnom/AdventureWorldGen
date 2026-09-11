@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.*;
 import io.github.luoyan.adventureworldgen.noise.GradientNoise;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** FTF UpliftContinentGenerator adaptation: warped Voronoi edge field, frozen as a contour.
  * A single connected continent is selected; the radius scales its extent, never clips it to a circle. */
@@ -16,8 +17,7 @@ public final class CoastGenerator {
     public Result generate(long seed, double radius, double keepRadius) {
         if (!(radius > 0) || !Double.isFinite(radius) || keepRadius < 0 || !Double.isFinite(keepRadius))
             throw new IllegalArgumentException("invalid continent dimensions");
-        if (keepRadius >= radius * 0.5) throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT,
-                "coast", "spawn reservation exceeds the continent interior", Map.of("keep_radius", keepRadius));
+        if (keepRadius >= radius * 0.5) throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT, FailureStage.COAST, "spawn reservation exceeds the continent interior", Map.of("keep_radius", keepRadius));
         Field field = new Field(seed);
         List<Vec2> vertices = contour(field, profile.coast().initialResolution());
         // Uniform scaling preserves bays, peninsulas and the non-circular outline.
@@ -35,8 +35,7 @@ public final class CoastGenerator {
             for (Vec2 p : refined) error = StrictMath.max(error, coarse.nearestPoint(p.x(), p.z()).distance());
             for (Vec2 p : coarse.vertices()) error = StrictMath.max(error, fine.nearestPoint(p.x(), p.z()).distance());
             if (error <= profile.coast().maximumPolylineError(radius)) { coarse = fine; break; }
-            if (resolution >= profile.coast().maximumResolution()) throw new PlanningFailure(PlanningFailure.Code.PRECISION_INSUFFICIENT,
-                    "coast", "warped continent contour failed refinement tolerance", Map.of("error", error));
+            if (resolution >= profile.coast().maximumResolution()) throw new PlanningFailure(PlanningFailure.Code.PRECISION_INSUFFICIENT, FailureStage.COAST, "warped continent contour failed refinement tolerance", Map.of("error", error));
             coarse = fine; resolution *= 2;
         }
         // Remove the small extent difference introduced by contour refinement.
@@ -45,12 +44,10 @@ public final class CoastGenerator {
                 (profile.coast().maximumPolylineError(radius) - error * finalScale) * 0.5));
         Coastline coast = new Coastline(simplify(coarse.vertices().stream()
                 .map(p -> new Vec2(p.x() * finalScale, p.z() * finalScale)).toList(), tolerance));
-        if (coast.vertices().size() > profile.coast().maximumVertices()) throw new PlanningFailure(
-                PlanningFailure.Code.RESOURCE_LIMIT, "coast", "contour exceeds vertex budget", Map.of("vertices", coast.vertices().size()));
-        if (coast.signedDistance(0, 0) < keepRadius) throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT,
-                "coast", "warped continent does not contain the spawn reservation", Map.of("keep_radius", keepRadius));
-        return new Result(coast, coast.equalArcSamples(profile.coast().targetArcSampleSpacing(), profile.coast().maximumArcSamples()),
-                new double[0], coast.vertices().size(), error * finalScale + tolerance, profile.coast().landBand(radius), profile.coast().seaBand(radius));
+        if (coast.vertices().size() > profile.coast().maximumVertices()) throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.COAST, "contour exceeds vertex budget", Map.of("vertices", coast.vertices().size()));
+        if (coast.signedDistance(0, 0) < keepRadius) throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT, FailureStage.COAST, "warped continent does not contain the spawn reservation", Map.of("keep_radius", keepRadius));
+        return new Result(coast, coast.vertices().size(), error * finalScale + tolerance,
+                profile.coast().landBand(radius), profile.coast().seaBand(radius));
     }
 
     private static List<Vec2> detailedContour(List<Vec2> source, double scale, FractalCoastWarp detail) {
@@ -175,9 +172,13 @@ public final class CoastGenerator {
         }
         if (second >= 0) { links.get(first).add(second); links.get(second).add(first); }
     }
-    public record Result(Coastline coastline, List<Vec2> equalArcSamples, double[] phases,
-                         int vertexCount, double estimatedMaximumError, double landBand, double seaBand) {
-        public Result { equalArcSamples = List.copyOf(equalArcSamples); phases = phases.clone(); }
-        @Override public double[] phases() { return phases.clone(); }
-    }
+    /**
+     * The frozen coastline and the facts a caller needs to trust it. There is deliberately no
+     * cached equal-arc sample list here: {@code CostPlanner} samples the polyline on demand with
+     * its injected profile, and a second copy computed at generation time would be a second data
+     * path between generating a coast and restoring one. {@link Coastline#equalArcSamples} stays
+     * the single implementation.
+     */
+    public record Result(Coastline coastline, int vertexCount, double estimatedMaximumError,
+                         double landBand, double seaBand) {}
 }

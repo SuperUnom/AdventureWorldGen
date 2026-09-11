@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 import java.nio.charset.StandardCharsets;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /**
  * The identity of a planning run: everything that decides whether a stored READY plan still
@@ -15,6 +16,12 @@ import java.nio.charset.StandardCharsets;
  * decision, not a scheduling one: a plan is reloaded only when this hash matches, so every input
  * that can change generation must appear here. Author configuration enters through the canonical
  * profile JSON, which is why a config edit invalidates the plan.
+ *
+ * <p>The profile is a parameter, not a fixed {@code PlannerProfile.V2} reference: the algorithm and
+ * hydrology identities recorded here must be the ones that planned the world. A profile that
+ * changes a resource budget without changing at least one of those identities would produce the
+ * same hash for different planning parameters, so an experimental budget must carry its own
+ * version marker - the two travel together by design.
  */
 public final class PlanIdentity {
     /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
@@ -28,10 +35,10 @@ public final class PlanIdentity {
      * <p>Order is fixed and each contribution is named, so a value change is visible in review.
      * Adapter versions are sorted by the registry before they are joined.
      */
-    public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters) {
-        String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
+    public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters, PlannerProfile profile) {
+        String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + profile.algorithmVersion()
                 + "\nimplementation=" + IMPLEMENTATION_REVISION
-                + "\nhydrology=" + PlannerProfile.V2.hydrologyVersion() + "\nterrain=terrain-r22\nadapters="
+                + "\nhydrology=" + profile.hydrologyVersion() + "\nterrain=" + PlanVersions.TERRAIN + "\nadapters="
                 + String.join(",", adapters.versionKeys()) + "\ncost=directed-cost-16x8-v1\nerosion=ftf-erosion-block-units-v2";
         return AtomicPlanRepository.sha256(input.getBytes(StandardCharsets.UTF_8));
     }

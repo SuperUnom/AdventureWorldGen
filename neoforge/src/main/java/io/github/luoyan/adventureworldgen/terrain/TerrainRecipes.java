@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 import java.util.*;
 import java.util.function.DoubleUnaryOperator;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /** FTF 43fd42a4 Populators/VolcanoPopulator function graphs with upstream Perlin/Ridge/Billow kernels.
  * Shapes have mathematical [0,1] bounds; block amplitude replaces upstream Levels/B/V units.
@@ -74,7 +75,7 @@ public final class TerrainRecipes {
                 yield t==TerrainTemplate.MOUNTAINS_2?h:advanced(h,map(perlin(50,1),v->v*.5),map(perlin(100,1),v->unit(v,.5,.95)),24,.2,.45,.45,.5);
             }
             case VOLCANO -> {
-                long cellSeed=DeterministicRandom.seed(seed,"terrain-r21","worley",field(),0);
+                long cellSeed=DeterministicRandom.seed(seed,PlanVersions.TERRAIN_RECIPE_DOMAIN,"worley",field(),0);
                 Noise lookup=perlin(2,1);
                 Noise limit=worleyLookup(700,cellSeed,lookup);
                 Noise cone=map(worley(700,true,cellSeed),v->unit(powCurve(1-v,11),.475,1));
@@ -114,7 +115,7 @@ public final class TerrainRecipes {
         };
     }
 
-    private int noiseSeed() { return (int)DeterministicRandom.seed(seed,"terrain-r21","ftf-noise",field(),0); }
+    private int noiseSeed() { return (int)DeterministicRandom.seed(seed,PlanVersions.TERRAIN_RECIPE_DOMAIN,"ftf-noise",field(),0); }
     private Noise ridge(double scale,int octaves,double lacunarity,double gain) {
         int salt=noiseSeed(); double detail=buildingDetailStrength;
         double[] frequencies=new double[octaves],weights=new double[octaves],amps=new double[octaves];
@@ -138,7 +139,7 @@ public final class TerrainRecipes {
 
     private Noise billow(double scale,int octaves,double lacunarity,double gain) { return map(ridge(scale,octaves,lacunarity,gain),v->1-v); }
     private Noise cubic(double scale,int octaves) {
-        long salt=DeterministicRandom.seed(seed,"terrain-r21","cubic",field(),0);
+        long salt=DeterministicRandom.seed(seed,PlanVersions.TERRAIN_RECIPE_DOMAIN,"cubic",field(),0);
         return (x,z)-> {
             double sum=0,total=0,weight=1;
             for(int o=0;o<octaves;o++) {
@@ -151,7 +152,7 @@ public final class TerrainRecipes {
         };
     }
     private Noise worley(double scale,boolean ratio) {
-        return worley(scale,ratio,DeterministicRandom.seed(seed,"terrain-r21","worley",field(),0));
+        return worley(scale,ratio,DeterministicRandom.seed(seed,PlanVersions.TERRAIN_RECIPE_DOMAIN,"worley",field(),0));
     }
     private record CellularWindow(long x,long z,double[] xs,double[] zs) {}
     private static CellularWindow cellularWindow(ThreadLocal<CellularWindow> cache,long salt,long gx,long gz) {

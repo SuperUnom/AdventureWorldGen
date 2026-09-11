@@ -29,6 +29,15 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 @GameTestHolder("testcompanion")
 @PrefixGameTestTemplate(false)
 public final class SurfaceGameTests {
+    /**
+     * Historical target of this fixture: the r21 terrain revision the native surface handover was
+     * validated against. This suite checks the surface pipeline against a hand-built plan, not
+     * against the current production terrain revision, so the string is deliberately the old one -
+     * do not "align" it with {@code PlanVersions.TERRAIN} without re-validating the fixture, which
+     * would change the frozen plan bytes it produces.
+     */
+    private static final String HISTORICAL_SURFACE_TERRAIN = "terrain-r21";
+
     @GameTest(templateNamespace = "minecraft", template = "bastion/mobs/empty", timeoutTicks = 1200)
     public static void everyTerrainRecipeReachesNativeChunkSurface(GameTestHelper helper) {
         for(var recipe:io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.values()) {
@@ -41,7 +50,7 @@ public final class SurfaceGameTests {
                     """.formatted(weights));
             var plan=new GeneratedAdventurePlan(8844,config,
                     new Coastline(List.of(new Vec2(-512,-512),new Vec2(512,-512),new Vec2(512,512),new Vec2(-512,512))),
-                    new RiverNetwork(List.of(),List.of(),"recipe-surface-test"),64,128,256,"terrain-r21",null);
+                    new RiverNetwork(List.of(),List.of(),"recipe-surface-test"),64,128,256,HISTORICAL_SURFACE_TERRAIN,null);
             var id=ResourceLocation.fromNamespaceAndPath("testcompanion","recipe_"+recipe.id());
             RuntimePlanRegistry.start(new ContentId(id.toString()),()->plan).join();
             var registries=helper.getLevel().registryAccess();

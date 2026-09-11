@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.ToLongFunction;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /**
  * Minimum-area policy: which patches must survive boundary mixing, and whether the achieved dry area
@@ -60,7 +61,7 @@ public final class MinimumAreaPolicy {
             }
             long effective = effectiveArea.applyAsLong(patch);
             if (effective < Math.min(demand.area().min(), patch.area()))
-                throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "effective-area",
+                throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.EFFECTIVE_AREA,
                         "mixing reduced the achieved dry biome quota", Map.of("patch", patch.patchId(),
                         "effective_area", effective, "achieved_area", patch.area()));
             if (effective < demand.area().min())

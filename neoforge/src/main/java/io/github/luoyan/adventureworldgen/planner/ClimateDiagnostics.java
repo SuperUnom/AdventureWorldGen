@@ -80,16 +80,26 @@ public final class ClimateDiagnostics implements ClimateStatistics {
         return List.copyOf(supply);
     }
 
+    /**
+     * Spreads one demand across the four temperature types.
+     *
+     * <p>The classification comes from {@link ClimateField#band}, exactly as {@link #actualRatios}
+     * and {@link #climateArea} read it. It used to rebuild the band from the field's raw value with
+     * hardcoded 2.5/5/7.5 thresholds, which silently assumed the field used those thresholds: a
+     * frozen field with a different threshold set would have been classified one way here and
+     * another way everywhere else. There is deliberately no raw-value accessor to fall back on.
+     */
     private void distribute(List<ClimateField.Site> sites, ClimateField field, ContentId id, double amount, double[] out) {
         var prefs = BiomeEnvironmentRules.preferences(config, id);
         double[] shares = new double[4];
         for (var e : prefs.entrySet()) {
             double land = 1;
-            if (prefs.size() > 1) land += sites.stream().filter(s -> config.biomes().allows(id, s.sample()))
-                    .filter(s -> {
-                        double value = field.value(s.x(), s.z(), s.sample());
-                        return (value < 2.5 ? TemperatureType.VERY_COLD : value < 5 ? TemperatureType.COLD : value < 7.5 ? TemperatureType.MEDIUM : TemperatureType.HOT) == e.getKey();
-                    }).count();
+            if (prefs.size() > 1) {
+                int ordinal = e.getKey().ordinal();
+                land += sites.stream().filter(s -> config.biomes().allows(id, s.sample()))
+                        .filter(s -> field.band(s.x(), s.z(), s.sample()) == ordinal)
+                        .count();
+            }
             shares[e.getKey().ordinal()] = e.getValue() * Math.sqrt(land);
         }
         double total = Arrays.stream(shares).sum();

@@ -17,6 +17,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * {@code biomes.filler} can move the environment field. It is a named strategy rather than an
  * inline tail of the field computation so the dependency is visible and replaceable by an explicit
  * decision. It never changes a biome's allowed humidity set, nor the terrain or water geometry.
+ *
+ * <p><strong>What the cached mask covers.</strong> Supply counts only filler rules that carry no
+ * height limit and are not shore-only ({@code minHeight}/{@code maxHeight} and {@code shoreOnly}
+ * rules are skipped outright). Everything else the rule asks about - terrain category
+ * ({@code allowedTerrain}), primary recipe, whether a secondary recipe actually participates, and
+ * landform - is part of the key, so one mask is valid for every position that produces that key.
+ * That makes this a <em>template/landform-level</em> supply correction: it says "some filler can
+ * use this humidity here", not "this exact position will finally admit a filler". A position can
+ * still be rejected later by the full rule set, which is why the correction only snaps humidity
+ * into the feasible band and never decides admission. {@code mask == 0} means no filler rule
+ * contributed, and the natural value is returned unchanged.
  */
 final class HumiditySupplyCorrection {
     private record SupplyKey(String category,String recipe,String secondary,String landform) {}
@@ -31,11 +42,16 @@ final class HumiditySupplyCorrection {
     double correct(double value,MacroSample s) {
         // Plan moisture inside the feasible template/landform domain before assigning biomes.
         // This never changes a biome's allowed humidity set, nor the final terrain or water geometry.
+        // The key deliberately omits height: height-limited and shore-only rules are excluded from
+        // the mask below, so no position that shares this key can reach a different rule set.
         var key=new SupplyKey(s.terrainTemplate(),s.recipe(),s.secondaryWeight()>0?s.secondaryRecipe():"",s.landform());
         int mask=moistureSupply.computeIfAbsent(key,ignored->{
             int result=0;
             for(var id:config.biomes().filler()) {
                 var rule=config.biomes().terrainRules().get(id);
+                // Height-limited and shore-only fillers are position decisions, not supply: excluding
+                // them is what keeps the key honest. Do not drop these conditions without widening
+                // the key to the height interval, and treat that as a behaviour change.
                 if(rule!=null&&(rule.shoreOnly()||rule.minHeight()!=null||rule.maxHeight()!=null||!rule.accepts(s)))continue;
                 if(rule==null||rule.humidities().isEmpty())result=7;
                 else for(var type:rule.humidities().keySet())result|=1<<type.ordinal();

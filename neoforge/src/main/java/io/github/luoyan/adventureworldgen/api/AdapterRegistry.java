@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Deterministically ordered adapter registrations, frozen before planning starts. */
 public final class AdapterRegistry {
@@ -65,7 +66,7 @@ public final class AdapterRegistry {
         public AdapterRegistry build() { return new AdapterRegistry(biomes, structures, genericBiome); }
 
         private static void duplicate(String kind, ContentId id) {
-            throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT, "adapter-registration",
+            throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT, FailureStage.ADAPTER_REGISTRATION,
                     "duplicate " + kind + " adapter", Map.of("content_id", id));
         }
     }

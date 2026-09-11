@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.planner;
 import java.util.*;
 import io.github.luoyan.adventureworldgen.spatial.CellMask;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Integral bipartite b-matching. Alternating paths repair greedy claims without dropping a quota. */
 public final class QuotaAssignment {
@@ -45,7 +46,7 @@ public final class QuotaAssignment {
             if (Arrays.stream(d.candidates).noneMatch(c -> c == d.pinnedCell))
                 throw new IllegalArgumentException("pinned cell is not a candidate");
             if (pinned.putIfAbsent(d.pinnedCell, i) != null)
-                throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "area-capacity", "conflicting pinned seeds");
+                throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.AREA_CAPACITY, "conflicting pinned seeds");
             owner.put(d.pinnedCell, i); count[i]++;
         }
         long visits = 0;
@@ -117,7 +118,7 @@ public final class QuotaAssignment {
     }
 
     private static PlanningFailure exhausted(long visits, long budget) {
-        return new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, "area-capacity",
+        return new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.AREA_CAPACITY,
                 "alternating-path operation budget exhausted", Map.of("visits", visits, "budget", budget));
     }
 

@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Adapted FTF droplet erosion, frozen during planning; ErodedTerrain applies the block filter. */
 public final class ErosionGenerator {
@@ -83,10 +84,10 @@ public final class ErosionGenerator {
             }
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
-            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "erosion",
+            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.EROSION,
                     "erosion worker interrupted", Map.of("completed_tasks", "partial"));
         } catch (java.util.concurrent.ExecutionException failed) {
-            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "erosion",
+            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.EROSION,
                     "erosion worker failed", Map.of("reason", String.valueOf(failed.getCause())));
         } finally {
             workers.shutdownNow();

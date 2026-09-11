@@ -13,6 +13,7 @@ import io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain;
 import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
 import io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan;
 import io.github.luoyan.adventureworldgen.terrain.TerrainMorphology;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /**
  * The terrain stack a plan queries, assembled in one place for both entries.
@@ -38,14 +39,16 @@ record PlanTerrain(RegionTerrain regions, MacroTerrain island, HydrologyTerrain 
     record Foundation(RegionTerrain regions, MacroTerrain island) {
         /** The surface hydrology reads: the island, wrapped in the erosion field when there is one. */
         MacroTerrain eroded(ErosionDeltaField erosion) {
-            return erosion == null ? island : new ErodedTerrain(island, erosion, "erosion-v2");
+            return erosion == null ? island : new ErodedTerrain(island, erosion, PlanVersions.EROSION);
         }
     }
 
-    static Foundation foundation(long seed, AdventureWorldConfig config, TerrainCapacityPlan capacities,
+    /** Builds the frozen region/island foundation with the profile the plan was started from. */
+    static Foundation foundation(PlannerProfile profile, long seed, AdventureWorldConfig config,
+                                 TerrainCapacityPlan capacities,
                                  Coastline coastline, double seaSurface, double landBand, double seaBand,
                                  String terrainVersion) {
-        RegionTerrain regions = new RegionTerrain(seed, PlannerProfile.V2, capacities, config.world().terrain(),
+        RegionTerrain regions = new RegionTerrain(seed, profile, capacities, config.world().terrain(),
                 config.fillerTerrainPolicy());
         MacroTerrain island = new IslandMacroTerrain(coastline, regions, seed, seaSurface, landBand, seaBand, terrainVersion);
         return new Foundation(regions, island);
@@ -57,10 +60,12 @@ record PlanTerrain(RegionTerrain regions, MacroTerrain island, HydrologyTerrain 
     }
 
     /** The whole stack from frozen data: what a READY reload assembles. */
-    static PlanTerrain assemble(long seed, AdventureWorldConfig config, TerrainCapacityPlan capacities,
+    static PlanTerrain assemble(PlannerProfile profile, long seed, AdventureWorldConfig config,
+                                TerrainCapacityPlan capacities,
                                 Coastline coastline, RiverNetwork riverNetwork, double seaSurface, double landBand,
                                 double seaBand, String terrainVersion, ErosionDeltaField erosion) {
-        Foundation foundation = foundation(seed, config, capacities, coastline, seaSurface, landBand, seaBand, terrainVersion);
+        Foundation foundation = foundation(profile, seed, config, capacities, coastline, seaSurface, landBand,
+                seaBand, terrainVersion);
         return compose(foundation, foundation.eroded(erosion), riverNetwork);
     }
 

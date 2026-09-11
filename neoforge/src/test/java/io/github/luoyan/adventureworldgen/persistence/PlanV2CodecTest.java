@@ -21,12 +21,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.testing.TerrainSnapshots;
 
 class PlanV2CodecTest {
     private static PlanDiagnostics diagnostics(Coastline coast, RiverNetwork network) {
         return PlanDiagnostics.basic(coast.vertices().size(), network.channels().size(),
                 network.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
-                "terrain-r22+" + network.version());
+                TerrainSnapshots.productionTerrainDetail(network.version()));
     }
 
     @Test
@@ -47,7 +48,7 @@ class PlanV2CodecTest {
         var capacities=new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(List.of(
                 new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.Reservation(0,0,
                         io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Template.MOUNTAINS,null,180.0,48)));
-        var original=new GeneratedAdventurePlan(42,config,coast,network,64,128,256,"terrain-v2",null,
+        var original=new GeneratedAdventurePlan(42,config,coast,network,64,128,256,TerrainSnapshots.SYNTHETIC_TERRAIN,null,
                 List.of(patch),List.of(),diagnostics(coast,network),null,capacities);
         var codec=new PlanV2Codec(); var profile=new ContentId("adventureworldgen:default");
         byte[] encoded=codec.encode(profile,"sparse-input",original.snapshot());
@@ -100,7 +101,7 @@ class PlanV2CodecTest {
                 List.of(0.0, Math.hypot(800, 100), 2 * Math.hypot(800, 100)), List.of(70.0, 67.0, 64.0),
                 new io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile.RiverShape(8, 2, 6, 20, 30, 0.75), null);
         var network = new RiverNetwork(List.of(channel), List.of(), PlannerProfile.V2.hydrologyVersion());
-        var original = new GeneratedAdventurePlan(42, config, coast, network, 64, 128, 256, "terrain-v2", null);
+        var original = new GeneratedAdventurePlan(42, config, coast, network, 64, 128, 256, TerrainSnapshots.SYNTHETIC_TERRAIN, null);
         PlanV2Codec codec = new PlanV2Codec();
         ContentId profile = new ContentId("adventureworldgen:default");
         byte[] encoded = codec.encode(profile, "input", original.snapshot());
@@ -142,7 +143,7 @@ class PlanV2CodecTest {
                 new ContentId("example:waystation"), 100, 80, 200, "west", 93, 81, 200,
                 List.of(box), List.of(protection), List.of(new AdventurePlanView.PlannedPiece(
                 "instance/example:waystation/0/piece/0", 90, 80, 190, 130, 94, 220, new byte[]{3, 1, 4})));
-        var original = new GeneratedAdventurePlan(77, config, coast, network, 64, 128, 256, "terrain-v2",
+        var original = new GeneratedAdventurePlan(77, config, coast, network, 64, 128, 256, TerrainSnapshots.SYNTHETIC_TERRAIN,
                 null, List.of(), List.of(structure), diagnostics(coast, network), null);
         var codec = new PlanV2Codec();
         var profile = new ContentId("adventureworldgen:default");

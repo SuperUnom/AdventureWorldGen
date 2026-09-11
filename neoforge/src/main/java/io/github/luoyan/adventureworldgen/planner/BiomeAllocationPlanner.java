@@ -17,11 +17,19 @@ import io.github.luoyan.adventureworldgen.plan.StableIds;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.biome.OrganicGrowth;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {
     private static final int[][] DIR={{4,0},{-4,0},{0,4},{0,-4}};
-    private static final long BUDGET=12_000_000;
+    private final PlannerProfile profile;
+
+    /**
+     * @param profile supplies both the algorithm-version salt of the deterministic biome seeds and
+     *                the competitive-growth operation budget. Neither is read from a fixed V2
+     *                reference any more, so an injected profile really governs this stage.
+     */
+    public BiomeAllocationPlanner(PlannerProfile profile) { this.profile = profile; }
     private static final int MAX_REGION_SEEDS=64;
     private record Ranked(PlacementIndex.Point point,ContentId biome,int band,double score) {}
     private static final Comparator<Ranked> SEED_ORDER=Comparator.comparingInt(Ranked::band)
@@ -144,7 +152,7 @@ public final class BiomeAllocationPlanner {
         if(spawn&&config.spawn().hasBiome()) {
             var p=new PlacementIndex.Point(0,0);
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
-            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core",
+            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.SPAWN_CORE,
                     "spawn cell violates configured terrain/climate or land constraints",
                     Map.of("biome",r.biome,"temperature",rules.temperature().typeAt(2,2,index.sample(0,0)),
                             "allowed_temperatures",BiomeEnvironmentRules.preferences(config,r.biome).keySet(),
@@ -153,7 +161,7 @@ public final class BiomeAllocationPlanner {
         boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
                 StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
         double scale=Math.sqrt(r.demand.area().target()/Math.PI);
-        long salt=DeterministicRandom.seed(seed,PlannerProfile.V2.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
+        long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
         // Ownership does not change during selection. Reuse exhausted components across
         // candidates, capacity probe refinement and grid refinement, then discard the snapshot.
         Map<ContentId,ConnectedCapacityProbe> capacityProbes=new HashMap<>();
@@ -207,7 +215,7 @@ public final class BiomeAllocationPlanner {
         // A missing ordinary biome is reported as zero supply. Spawn and required structures
         // still need a real legal anchor / usable footprint to construct a valid world.
         if(!central&&carrierCoreSide(r)==0)return null;
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"biome-seed","no sufficiently connected legal seed with required carrier clearance",
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no sufficiently connected legal seed with required carrier clearance",
                 Map.of("biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));
     }
     private PlacementIndex.Point nextSupplement(Region r) {
@@ -384,8 +392,10 @@ public final class BiomeAllocationPlanner {
         var cache=environments.computeIfAbsent(r.biome,ignored->new it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap());
         long cell=CellMask.key(x,z);byte allowed=cache.get(cell);
         if(allowed!=0)return allowed==1;
-        if(++operations>BUDGET)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"competitive-growth",
-                "unique biome/cell eligibility budget exhausted",Map.of("biome",r.biome,"operations",operations,"budget",BUDGET));
+        long budget=profile.search().competitiveGrowthOperations();
+        if(++operations>budget)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.COMPETITIVE_GROWTH,
+                "unique biome/cell eligibility budget exhausted",
+                Map.of("biome",r.biome,"operations",operations,"budget",budget));
         boolean valid=Math.hypot(x,z)<=config.world().radius();
         if(valid)for(var p:reservations)if(p.contains(x,z)){valid=false;break;}
         if(valid)valid=index.allows(r.biome,x,z)

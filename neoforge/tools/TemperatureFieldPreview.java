@@ -1,6 +1,7 @@
 import io.github.luoyan.adventureworldgen.config.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
 import com.google.gson.JsonParser;
 import java.awt.*;
@@ -60,12 +61,12 @@ public class TemperatureFieldPreview {
             throw new IllegalArgumentException("finite parameters, positive spacing, nonnegative lapse, mountain height >= 76 and mountain lapse >= lapse required");
         double angle=Math.toRadians(degrees),transition=spacing*.55;
         var config=new AdventureWorldConfigParser().parse(Files.readString(Path.of(
-                "neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+                "src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
         String hash=JsonParser.parseString(Files.readString(source.resolve("manifest.json")))
                 .getAsJsonObject().get("input_sha256").getAsString();
         io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan plan;
         try(var stream=new GZIPInputStream(Files.newInputStream(source.resolve("plan.json.gz")))) {
-            plan=new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash,config);
+            plan=io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash));
         }
         System.out.println("Loaded frozen terrain, seed "+plan.seed());
         double extent=config.world().radius()+200,step=extent*2/SIDE;

@@ -1,18 +1,34 @@
 import io.github.luoyan.adventureworldgen.api.*;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.hydrology.*;
 import io.github.luoyan.adventureworldgen.planner.*;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.*;
-import io.github.luoyan.adventureworldgen.worldgen.VanillaRiverBiomeAdapter;
 import java.awt.*;
 import java.awt.geom.*;
 import java.awt.image.BufferedImage;
 import java.nio.file.*;
 import javax.imageio.ImageIO;
 
-/** Deterministic geometry overview and block-scale bed preview, not an in-game screenshot. */
+/**
+ * Deterministic geometry overview and block-scale water preview, not an in-game screenshot.
+ *
+ * <p>Args: {@code <seed> <output.png> [before]}. {@code before} draws the nominal channel width
+ * instead of the morphology-adjusted one, which is what the pre-r19 comparison looked like.
+ *
+ * <p>The block-scale panel used to compare river-bed <em>materials</em> through
+ * {@code BiomeAdapter.surface}. That API was removed on purpose (P5.2): surface and river-bed
+ * materials now come from the vanilla surface pipeline, which needs the game's registries and block
+ * states and cannot be evaluated by a standalone preview program. The panel shades water by depth
+ * instead - re-inventing a material source here would quietly become a second, divergent rule.
+ */
 public class RiverPreview {
+    /** java.awt.Color rejects anything outside 0..255, so clamp instead of throwing mid-render. */
+    private static int channel(double value) {
+        return (int)StrictMath.max(0, StrictMath.min(255, value));
+    }
+
     public static void main(String[] args) throws Exception {
         long seed = Long.parseLong(args[0]);
         boolean before = args.length > 2 && args[2].equals("before");
@@ -23,7 +39,6 @@ public class RiverPreview {
                 .generate(seed, 3000, 64, coast.coastline(), island);
         var terrain = new HydrologyTerrain(island, network);
         var morphology = new RiverMorphology(network);
-        var sediment = new VanillaRiverBiomeAdapter(new ContentId("minecraft:river"));
         var image = new BufferedImage(1440, 820, BufferedImage.TYPE_INT_RGB);
         var g = image.createGraphics();
         g.setColor(new Color(239, 243, 240)); g.fillRect(0, 0, 1440, 820);
@@ -60,15 +75,11 @@ public class RiverPreview {
             Color color;
             if (sample.waterKind() == WaterKind.OCEAN) color = new Color(146, 197, 215);
             else if (sample.wet()) {
-                String top = before ? "minecraft:gravel" : sediment.surface(sample, seed, x, z).top().value();
-                Color bed = switch (top) {
-                    case "minecraft:sand" -> new Color(224, 204, 140);
-                    case "minecraft:dirt" -> new Color(133, 106, 74);
-                    case "minecraft:clay" -> new Color(167, 180, 199);
-                    case "minecraft:stone" -> new Color(102, 110, 107);
-                    default -> new Color(150, 146, 136);
-                };
-                color = new Color((int)(bed.getRed() * 0.65 + 20), (int)(bed.getGreen() * 0.65 + 57), (int)(bed.getBlue() * 0.65 + 73));
+                // Depth-shaded water column: deeper water is darker. The bed material itself is not
+                // available here - see the class comment.
+                double depth = StrictMath.max(0, sample.waterSurface() - sample.groundSurface());
+                double shade = 1.35 - StrictMath.min(1, depth / 6.0) * 0.55;
+                color = new Color(channel(92 * shade), channel(150 * shade), channel(196 * shade));
             } else {
                 double shade = Math.max(0.75, Math.min(1.12, 1 + (sample.groundSurface() - 100) / 180));
                 color = new Color((int)(181 * shade), (int)(196 * shade), (int)(150 * shade));
@@ -76,8 +87,8 @@ public class RiverPreview {
             image.setRGB(820 + px, 100 + pz, color.getRGB());
         }
         g.setColor(new Color(28, 49, 53)); g.setFont(new Font("SansSerif", Font.PLAIN, 17));
-        g.drawString("600 x 660 blocks | water and bed materials", 820, 78);
-        g.drawString("Geometry preview; no erosion, vegetation or structures", 820, 790);
+        g.drawString("600 x 660 blocks | depth-shaded water", 820, 78);
+        g.drawString("Geometry preview; bed materials come from the vanilla surface pipeline", 820, 790);
         g.dispose();
         Path output = Path.of(args[1]); Files.createDirectories(output.toAbsolutePath().getParent());
         ImageIO.write(image, "png", output.toFile());

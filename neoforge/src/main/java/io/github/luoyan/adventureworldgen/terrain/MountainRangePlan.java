@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.terrain;
 import java.util.*;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /** Frozen meandering range corridors planned before terrain, erosion, rivers and biome ownership. */
 public record MountainRangePlan(List<Range> ranges) {
@@ -47,5 +48,5 @@ public record MountainRangePlan(List<Range> ranges) {
         }
         return result;
     }
-    private static double sample(long seed,String id,int i) {return DeterministicRandom.sample(seed,"terrain-r21","mountain-range",id,i);}
+    private static double sample(long seed,String id,int i) {return DeterministicRandom.sample(seed,PlanVersions.TERRAIN_RECIPE_DOMAIN,"mountain-range",id,i);}
 }

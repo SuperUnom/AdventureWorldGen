@@ -22,6 +22,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.plan.StableIds;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Stable bounded placement of the minimum legal patch/structure solution before optional optimization. */
 public final class JointPlanner {
@@ -66,10 +67,10 @@ public final class JointPlanner {
         var demands = new RequirementExpander().expandMinimum(config);
         List<PlannedBiomePatch> patches = new ArrayList<>();
         List<AdventurePlanView.PlannedStructure> structures = new ArrayList<>();
-        Set<String> occupied = new HashSet<>();
         long operations = 0;
         long indexStart = System.nanoTime();
-        placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, value -> progress.accept(value * 0.2));
+        placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, profile,
+                value -> progress.accept(value * 0.2));
         checkpoint.accept("index");
         observer.stage(PlanningStage.TEMPERATURE);
         climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null,
@@ -83,7 +84,7 @@ public final class JointPlanner {
 
         progress.accept(0.4);
         long assignmentStart = System.nanoTime();
-        var assigned = new BiomeAllocationPlanner().allocate(seed,config,placementIndex,demands.patches(),List.of(),rules,observer,value -> {
+        var assigned = new BiomeAllocationPlanner(profile).allocate(seed,config,placementIndex,demands.patches(),List.of(),rules,observer,value -> {
             var stage=value<.18?PlanningStage.SEEDS:PlanningStage.GROWTH;
             observer.within(stage).accept(value<.18?value/.18:(value-.18)/.82);
         });
@@ -121,7 +122,7 @@ public final class JointPlanner {
                         StableIds.structureInstance(settings.id(), sequence), settings.id(), Math.toIntExact(sequence),
                         settings.adventureLevel(), settings.allowedBiomes().ids(), settings.allowedBiomes().area(),
                         settings.entrance(), false, false);
-                if (!placeStructure(seed, config, terrain, freezer, levelConstraint, biomeConstraint, patches, structures, occupied,
+                if (!placeStructure(seed, config, terrain, freezer, levelConstraint, biomeConstraint, patches, structures,
                         demand, 100_000 + Math.toIntExact(sequence), false)) break;
                 operations++;
             }
@@ -180,7 +181,7 @@ public final class JointPlanner {
             }
             if(prepared>budget)break;
         }
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"structure-in-biome",
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
                 "no legal complete structure footprint in its planned required biome",
                 Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"prepared",prepared,"budget",budget));
     }
@@ -189,7 +190,7 @@ public final class JointPlanner {
                                    StructureFreezer freezer, LevelConstraint levels,
                                    BiomeConstraint biomes,
                                    List<PlannedBiomePatch> patches,
-                                   List<AdventurePlanView.PlannedStructure> structures, Set<String> occupied,
+                                   List<AdventurePlanView.PlannedStructure> structures,
                                    RequirementExpander.StructureInstanceDemand demand, int proposalSequence,
                                    boolean required) {
         AdventureWorldConfig.StructureSettings settings = config.structures().stream()
@@ -201,8 +202,8 @@ public final class JointPlanner {
             try {
                 center = demand.spawnInstance()
                         ? findSpawnStructureCenter(seed, config.world().radius(), proposalSequence, fallback, terrain, levels)
-                        : findCenter(seed, config.world().radius(), demand.adventureLevel(),
-                        proposalSequence + fallback * 1_000_000, terrain, Set.of(), levels, (x, z) -> {
+                        : findCenter(seed, demand.adventureLevel(),
+                        proposalSequence + fallback * 1_000_000, terrain, levels, (x, z) -> {
                             if (!biomes.accepts(biome, x, z)) return false;
                             var possible = rectangle(StableIds.carrierPatch(demand.instanceId()), biome,
                                     demand.adventureLevel(), new Center(x, z), demand.carrierArea());
@@ -233,13 +234,13 @@ public final class JointPlanner {
                         || patches.stream().anyMatch(existing -> overlaps(existing, carrier)
                         && !existing.biomeId().equals(carrier.biomeId()))
                         || structures.stream().anyMatch(existing -> reservationsConflict(existing, frozen))) continue;
-                patches.add(carrier); structures.add(frozen); occupied.add(center.key());
+                patches.add(carrier); structures.add(frozen);
                 return true;
             } catch (PlanningFailure | IllegalArgumentException rejected) {
                 // No state was mutated: retry position/rotation/carrier relation from the last legal snapshot.
             }
         }
-        if (required) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "joint-placement",
+        if (required) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.JOINT_PLACEMENT,
                 "required structure exhausted bounded spatial fallbacks: " + demand.instanceId(), Map.of("instance_id", demand.instanceId()));
         return false;
     }
@@ -269,22 +270,10 @@ public final class JointPlanner {
         }
     }
 
-    private Center findCenter(long seed, double radius, int level, int sequence, MacroTerrain terrain,
-                              Set<String> occupied, LevelConstraint levelConstraint) {
-        return findCenter(seed, radius, level, sequence, terrain, occupied, levelConstraint, (x, z) -> true, true);
-    }
-
-    private Center findCenter(long seed, double radius, int level, int sequence, MacroTerrain terrain,
-                              Set<String> occupied, LevelConstraint levelConstraint,
-                              java.util.function.BiPredicate<Integer, Integer> compatible) {
-        return findCenter(seed, radius, level, sequence, terrain, occupied, levelConstraint, compatible, false);
-    }
-
-    private Center findCenter(long seed, double radius, int level, int sequence, MacroTerrain terrain,
-                              Set<String> occupied, LevelConstraint levelConstraint,
+    private Center findCenter(long seed, int level, int sequence, MacroTerrain terrain,
+                              LevelConstraint levelConstraint,
                               java.util.function.BiPredicate<Integer, Integer> compatible, boolean requireFlat) {
         long salt = DeterministicRandom.seed(seed,profile.algorithmVersion(),"indexed-structure","sequence/"+sequence,level);
-        int separation = requireFlat ? (int) StrictMath.max(64.0,StrictMath.min(512.0,radius/8.0)) : 64;
         long visited=0;
         for(int step:new int[]{16,8,4}) {
             var candidates = new ArrayList<>(placementIndex.candidates(level,step));
@@ -292,16 +281,14 @@ public final class JointPlanner {
                     4 * levelConstraint.penalty(level,p.x(),p.z())
                             + (DeterministicRandom.mix(p.cell() ^ salt) >>> 11) * 0x1.0p-53));
             for (var point : candidates) {
-                if(++visited>profile.search().requiredCandidatePreparations())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,
-                        "structure-candidates","indexed structure candidate budget exhausted",Map.of("visits",visited,"spacing",step));
+                if(++visited>profile.search().requiredCandidatePreparations())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.STRUCTURE_CANDIDATES,"indexed structure candidate budget exhausted",Map.of("visits",visited,"spacing",step));
                 Center candidate = new Center(point.x(),point.z());
-                if (occupied.stream().anyMatch(key -> near(key,candidate,separation))) continue;
                 if (!levelConstraint.accepts(level,point.x(),point.z())) continue;
                 if (requireFlat && !sufficientlyFlat(terrain,point.x(),point.z())) continue;
                 if (compatible.test(point.x(),point.z())) return candidate;
             }
         }
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"joint-placement",
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.JOINT_PLACEMENT,
                 "no compatible structure center in indexed domain",Map.of("level",level,"sequence",sequence,"candidates",visited));
     }
 
@@ -317,25 +304,24 @@ public final class JointPlanner {
         var sample = terrain.sample(x + 0.5, z + 0.5);
         if (sample.waterKind() == WaterKind.NONE && !sample.hazardous() && sufficientlyFlat(terrain, x, z)
                 && levels.accepts(0, x, z)) return new Center(x, z);
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "spawn-candidate",
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.SPAWN_CANDIDATE,
                 "spawn structure candidate is not safe at this bounded attempt", Map.of("attempt", attempt));
     }
 
-    private static PlannedBiomePatch rectangle(String id, ContentId biome, int level,
+    private PlannedBiomePatch rectangle(String id, ContentId biome, int level,
                                                                         Center center, AdventureWorldConfig.AreaRange area) {
         long minimumCells = area.inCells(4).min();
         int width = StrictMath.max(1, (int) StrictMath.floor(StrictMath.sqrt(minimumCells * 1.8)));
-        for (; (long) width * width <= PlannerProfile.V2.maximumAreaCells(); width++) {
+        for (; (long) width * width <= profile.maximumAreaCells(); width++) {
             int minX = align4(center.x - width * 2), minZ = align4(center.z - width * 2);
             var patch = new PlannedBiomePatch(id, biome, level, minX, minZ,
                     minX + width * 4, minZ + width * 4);
             long actualArea = patch.area();
             if (actualArea < area.min()) continue;
-            if (actualArea > area.max()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
-                    "area-assignment", "irregular 4-block mask exceeds maximum area", Map.of("patch_id", id, "area", actualArea));
+            if (actualArea > area.max()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.AREA_ASSIGNMENT, "irregular 4-block mask exceeds maximum area", Map.of("patch_id", id, "area", actualArea));
             return patch;
         }
-        throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, "area-assignment",
+        throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.AREA_ASSIGNMENT,
                 "irregular patch exceeds cell budget", Map.of("patch_id", id));
     }
 
@@ -441,13 +427,12 @@ public final class JointPlanner {
             var spawnTerrain = terrain.sample(spawn.x(), spawn.z());
             if (spawnTerrain.wet() || spawnTerrain.hazardous()) fail("spawn is not safe dry terrain", "spawn");
         }
-        if (visits > profile.search().finalValidationVisits()) throw new PlanningFailure(
-                PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, "final-validation", "independent validation budget exhausted",
+        if (visits > profile.search().finalValidationVisits()) throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FINAL_VALIDATION, "independent validation budget exhausted",
                 Map.of("visits", visits, "budget", profile.search().finalValidationVisits()));
     }
 
     private static void fail(String message, String id) {
-        throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "final-validation", message, Map.of("id", id));
+        throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.FINAL_VALIDATION, message, Map.of("id", id));
     }
 
     private static AdventurePlanView.SpawnPosition resolveSpawn(AdventureWorldConfig config, MacroTerrain terrain,
@@ -458,7 +443,7 @@ public final class JointPlanner {
         }
         String instanceId = StableIds.structureInstance(config.spawn().structure().id(), 0);
         var structure = structures.stream().filter(item -> item.instanceId().equals(instanceId)).findFirst()
-                .orElseThrow(() -> new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "spawn-resolution",
+                .orElseThrow(() -> new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.SPAWN_RESOLUTION,
                         "spawn structure instance is absent", Map.of("instance_id", instanceId)));
         var relative = config.spawn().structure().spawnPoint();
         double rx, rz;
@@ -468,7 +453,7 @@ public final class JointPlanner {
             case "east" -> { rx = -relative.z(); rz = relative.x(); yaw = 90; }
             case "south" -> { rx = -relative.x(); rz = -relative.z(); yaw = 180; }
             case "west" -> { rx = relative.z(); rz = -relative.x(); yaw = 270; }
-            default -> throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "spawn-resolution",
+            default -> throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.SPAWN_RESOLUTION,
                     "adapter returned unsupported spawn rotation", Map.of("rotation", structure.rotation()));
         }
         return new AdventurePlanView.SpawnPosition(structure.originX() + rx,
@@ -518,22 +503,49 @@ public final class JointPlanner {
         }
         return maximum - minimum <= 8.0;
     }
-    private static boolean near(String key, Center candidate, int distance) {
-        int split = key.indexOf('/');
-        int x = Integer.parseInt(key.substring(0, split)), z = Integer.parseInt(key.substring(split + 1));
-        return (long) (x - candidate.x) * (x - candidate.x) + (long) (z - candidate.z) * (z - candidate.z) < (long) distance * distance;
-    }
 
     public interface StructureFreezer {
         AdventurePlanView.PlannedStructure freeze(RequirementExpander.StructureInstanceDemand demand,
                                                    int x, int y, int z, long structureSeed);
     }
+    /**
+     * How the adventure level reaches placement. Level is a <em>soft preference</em> in this product
+     * (see {@code docs/设计原则.md}): the author model uses it to order candidates, not to admit or
+     * reject a position. The interface keeps a boolean because the candidate catalog and the anchor
+     * checks still ask the question, but {@link #accepts} is the compatibility no-filter answer here
+     * - production supplies {@link #preferenceOnly}, which accepts everywhere and ranks through
+     * {@link #penalty}.
+     */
     @FunctionalInterface public interface LevelConstraint {
+        /**
+         * Whether this level admits the position at all. Production answers {@code true} for every
+         * level and position: the coast-cost interval in {@code AdventureLevels.contains} describes
+         * what a level means, it is not an admission gate, and re-enabling it as one would reject
+         * positions that are legal under every other hard constraint. Use {@link #preferenceOnly}
+         * instead of writing {@code return true} inline, so the intent stays visible.
+         */
         boolean accepts(int level, int x, int z);
+        /** Ranking signal: larger means a worse fit for this level. Zero disables level ordering. */
         default double penalty(int level,int x,int z) { return 0; }
         /** A broad catalog filter; the exact predicate remains authoritative at selected anchors. */
         default boolean mightAccept(int level, int x, int z) { return true; }
     }
+
+    /** The ranking signal of {@link LevelConstraint}, without the boolean admission question. */
+    @FunctionalInterface public interface LevelPenalty { double penalty(int level, int x, int z); }
+
+    /**
+     * The production level policy: rank by {@code penalty}, never reject. Named here so the
+     * "level cannot reject a legal position" decision is one reviewable place instead of an inline
+     * anonymous {@code return true} at the assembly site.
+     */
+    public static LevelConstraint preferenceOnly(LevelPenalty penalty) {
+        return new LevelConstraint() {
+            @Override public boolean accepts(int level, int x, int z) { return true; }
+            @Override public double penalty(int level, int x, int z) { return penalty.penalty(level, x, z); }
+        };
+    }
+
     @FunctionalInterface public interface BiomeConstraint { boolean accepts(ContentId biome, int x, int z); }
     public record Result(List<PlannedBiomePatch> patches,
                          List<AdventurePlanView.PlannedStructure> structures,

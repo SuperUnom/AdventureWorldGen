@@ -11,6 +11,7 @@ import io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan;
 import io.github.luoyan.adventureworldgen.terrain.TerrainTemplate;
 
 import java.util.*;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /**
  * Demand-driven capacity reservation: turns author biome and height demands into terrain capacity
@@ -35,10 +36,11 @@ public final class TerrainCapacitySolver {
         Bin(RegionTerrain.GridKey key) { this.key=key; }
     }
     
-    public static TerrainCapacityPlan reserve(long seed,AdventureWorldConfig config,Coastline coast,double landBand) {
+    public static TerrainCapacityPlan reserve(PlannerProfile profile, long seed,AdventureWorldConfig config,
+                                              Coastline coast,double landBand) {
         var settings=config.world().terrain();
         var ranges=MountainRangePlan.create(seed,config.world().radius(),settings);
-        var geometry=new RegionTerrain(seed,PlannerProfile.V2,new TerrainCapacityPlan(List.of(),ranges),settings,config.fillerTerrainPolicy());
+        var geometry=new RegionTerrain(seed,profile,new TerrainCapacityPlan(List.of(),ranges),settings,config.fillerTerrainPolicy());
         Map<RegionTerrain.GridKey,Bin> bins=new HashMap<>();
         int extent=(int)StrictMath.ceil(config.world().radius()/32)*32;
         for(int z=-extent;z<extent;z+=32)for(int x=-extent;x<extent;x+=32) {
@@ -125,7 +127,7 @@ public final class TerrainCapacitySolver {
                 allocated.merge(request.id,amount,Long::sum);
                 if(remaining==0)break;
             }
-            if(round==0&&remaining>0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"terrain-capacity",
+            if(round==0&&remaining>0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.TERRAIN_CAPACITY,
                     "no allowed biome has sufficient template, height envelope and interior capacity",
                     Map.of("request",request.id,"biomes",request.biomes,"missing_area",remaining,
                             "interior_regions",bins.size(),"seed",seed));

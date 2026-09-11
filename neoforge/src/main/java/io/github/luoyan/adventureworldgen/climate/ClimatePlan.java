@@ -15,11 +15,17 @@ import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Frozen terrain climate. New plans use the accepted organic field; legacy states retain their formula. */
 public final class ClimatePlan implements ClimateField {
     public static final int STEP=32;
     private final AdventureWorldConfig config;
+    /**
+     * The terrain this field was built from. The frozen quart memo re-derives a cell's sample from
+     * it, so a cached value never depends on the sample a caller happened to pass first.
+     */
+    private final MacroTerrain terrain;
     private final String temperatureField;
     private final OrganicTemperatureField organic;
     private HumidityPlan humidity;
@@ -57,6 +63,7 @@ public final class ClimatePlan implements ClimateField {
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,java.util.function.DoubleConsumer progress,
                        PlanningObserver observer,ClimateState frozen,ClimateStatistics statistics) {
         this.config=config;
+        this.terrain=terrain;
         this.demandStatistics=Objects.requireNonNull(statistics,"statistics");
         temperatureField=frozen==null?OrganicTemperatureField.VERSION:frozen.temperatureField();
         if(temperatureField!=null&&!OrganicTemperatureField.VERSION.equals(temperatureField))
@@ -71,7 +78,7 @@ public final class ClimatePlan implements ClimateField {
         foothills=new ValueNoise(seed,"climate/foothills",Math.max(96,radius*.055));
         int extent=(int)Math.ceil(radius/STEP);
         if((2L*extent+1)*(2L*extent+1)>PlannerProfile.V2.maximumCostNodes())
-            throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,"climate","environment grid exceeds budget");
+            throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.CLIMATE,"environment grid exceeds budget");
         heightExtent=extent;heightWidth=extent*2+1;
         if(frozen!=null) {
             if(frozen.extent()!=extent || frozen.slopeHeight().length!=heightWidth*heightWidth
@@ -109,7 +116,7 @@ public final class ClimatePlan implements ClimateField {
             progress.accept(.2*(z+extent+1)/(2*extent+1));
         }
         slopeHeight=blur(heights,heightWidth,3);regionalHeight=blur(heights,heightWidth,8);
-        if(sites.isEmpty())throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"climate","no allocatable dry land");
+        if(sites.isEmpty())throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.CLIMATE,"no allocatable dry land");
         ContentId spawn=config.spawn().biome();
         if(spawn==null&&config.spawn().hasStructure())spawn=config.structures().stream()
                 .filter(s->s.id().equals(config.spawn().structure().id())).flatMap(s->s.allowedBiomes().ids().stream()).findFirst().orElse(config.biomes().filler().getFirst());
@@ -130,8 +137,12 @@ public final class ClimatePlan implements ClimateField {
         progress.accept(1);
         humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
     }
+    /**
+     * The authoritative classification: the temperature type of the accepted field, under this
+     * field's own {@code thresholds}. Everything that needs a band reads this, and nothing
+     * reconstructs a band from a raw value.
+     */
     @Override public int band(int x,int z,MacroSample sample){ return typeAt(x,z,sample).ordinal(); }
-    @Override public double value(int x,int z,MacroSample sample){ return base(x,z,sample); }
 
     private static double[] blur(double[] source,int width,int radius) {
         double[] horizontal=new double[source.length],result=new double[source.length];
@@ -172,6 +183,19 @@ public final class ClimatePlan implements ClimateField {
                 +.42*regional.sample(wx,wz)+.14*detail.sample(wx,wz)
                 +(.035+.055*relief)*foothills.sample(x,z)-elevationCooling(x,z,s);
     }
+    /**
+     * The accepted raw field value.
+     *
+     * <p>A frozen field memoises one value per quart cell, so the value must be a function of the
+     * coordinate and the frozen state - never of the caller's sample. At a cacheable quart center
+     * the sample is therefore re-derived from this field's own frozen terrain before it is stored;
+     * an off-grid or out-of-extent coordinate is computed exactly from the sample it was given and
+     * is not stored at all.
+     *
+     * <p>The public queries ({@link #typeAt}, {@link #valueAt}, {@link #band}) accept a sample
+     * because callers already hold one, but at a quart center that argument cannot change the
+     * result: passing the sample of a different position used to seed the whole cell.
+     */
     private double raw(double x,double z,MacroSample s) {
         return frozen?frozenValues.get(x,z,()->computeRaw(x,z,s)):computeRaw(x,z,s);
     }

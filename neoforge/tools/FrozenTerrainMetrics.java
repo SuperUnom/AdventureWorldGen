@@ -1,4 +1,6 @@
 import io.github.luoyan.adventureworldgen.config.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.terrain.TerrainTemplate;
 import java.nio.file.*;
@@ -13,12 +15,12 @@ public class FrozenTerrainMetrics {
     public static void main(String[] args)throws Exception {
         Path directory=Path.of(args[0]);
         var config=new AdventureWorldConfigParser().parse(Files.readString(Path.of(
-                "neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+                "src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
         var report=new StringBuilder("seed\ttemplate\tsamples\tlocal_relief_64_p50\tlocal_relief_64_p95\tslope_p50\tslope_p95\tflat_fraction\tcomposite\tfoothill\tslope_landform\tpeak\n");
         for(int a=1;a<args.length;a++) {
             long seed=Long.parseLong(args[a]);
-            var plan=new PlanV2Codec().decode(Files.readAllBytes(directory.resolve(seed+"-plan.json")),
-                    new ContentId("adventureworldgen:default"),"audit",config);
+            var plan=GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(Files.readAllBytes(directory.resolve(seed+"-plan.json")),
+                    new ContentId("adventureworldgen:default"),"audit"));
             var metrics=new TreeMap<String,Metrics>();
             for(int z=-3000;z<=3000;z+=32)for(int x=-3000;x<=3000;x+=32) {
                 var s=plan.terrainAt(x,z);if(s.wet())continue;

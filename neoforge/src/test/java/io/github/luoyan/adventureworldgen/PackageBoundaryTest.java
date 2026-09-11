@@ -1,5 +1,6 @@
 package io.github.luoyan.adventureworldgen;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -11,17 +12,78 @@ import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Locks in the layering that the P1 refactor established, so a later change cannot quietly
  * reintroduce the dependencies it removed. These are source-level checks: they are about which
  * package may reference which, not about behaviour.
+ *
+ * <p>The source tree is located through the {@value #SOURCE_ROOT_PROPERTY} system property, which
+ * {@code build.gradle} sets to an absolute path derived from the project directory. Reading an
+ * absolute path is what makes these rules independent of the directory Gradle was started from
+ * ({@code .}, the repository root with {@code -p neoforge}, or an absolute {@code -p}); a missing
+ * or unreadable tree fails the test instead of silently passing it. Set
+ * {@code -PawgSourceRoot=<path>} to point the rules at another tree, which is how the negative
+ * check in the acceptance notes is reproduced.
  */
 class PackageBoundaryTest {
-    private static final Path SOURCE_ROOT = Path.of("src", "main", "java", "io", "github", "luoyan",
-            "adventureworldgen");
+    static final String SOURCE_ROOT_PROPERTY = "adventureworldgen.sourceRoot";
+
+    /**
+     * Packages the rules below are written against. Each one must exist and hold at least one
+     * source file: a renamed or deleted package has to break the guard rather than shrink it.
+     */
+    private static final List<String> REQUIRED_PACKAGES = List.of(
+            "api", "biome", "client", "climate", "compat", "config", "cost", "erosion",
+            "hydrology", "mixin", "noise", "persistence", "plan", "planner", "runtime",
+            "spatial", "terrain", "worldgen");
+
+    /**
+     * Responsibilities that are declared in the target layout but have no implementation yet, so
+     * an absent directory is the expected state. Their rules activate as soon as the package
+     * appears, without ever turning into a skipped test. {@code surface} is the only entry today:
+     * surface and river-bed materials are executed by the vanilla surface pipeline
+     * ({@code AdventureChunkGenerator.buildPlannedSurface}), so no package owns them yet.
+     */
+    private static final List<String> RESERVED_PACKAGES = List.of("surface");
+
+    private Path sourceRoot;
+
+    @BeforeEach
+    void locateSourceTree() {
+        String configured = System.getProperty(SOURCE_ROOT_PROPERTY);
+        assertNotNull(configured, () -> "missing system property " + SOURCE_ROOT_PROPERTY
+                + "; the layering rules need an absolute source root, which the test task sets");
+        assertFalse(configured.isBlank(), () -> "blank system property " + SOURCE_ROOT_PROPERTY);
+        Path root = Path.of(configured).toAbsolutePath().normalize();
+        assertTrue(Files.isDirectory(root), () -> SOURCE_ROOT_PROPERTY + " does not point at a directory: " + root
+                + "; pass an existing tree, or omit the override to use the project default");
+        sourceRoot = root;
+    }
+
+    @Test
+    void everyPackageTheLayeringRulesNameExists() throws IOException {
+        // Replaces the old per-rule assumption: a package that the rules depend on must be present
+        // and non-empty, otherwise the guard would still be "green" on a tree it never inspected.
+        List<String> problems = new ArrayList<>();
+        List<String> declared = new ArrayList<>(REQUIRED_PACKAGES);
+        declared.addAll(RESERVED_PACKAGES);
+        for (String pkg : declared) {
+            Path directory = sourceRoot.resolve(pkg);
+            if (!Files.isDirectory(directory)) {
+                if (RESERVED_PACKAGES.contains(pkg)) continue;
+                problems.add(pkg + ": directory is missing");
+                continue;
+            }
+            if (countJavaFiles(directory) == 0 && !RESERVED_PACKAGES.contains(pkg)) {
+                problems.add(pkg + ": directory holds no source file");
+            }
+        }
+        assertTrue(problems.isEmpty(), () -> "the layering rules name packages that are not there:\n  "
+                + String.join("\n  ", problems));
+    }
 
     @Test
     void configLayerHasNoMinecraftOrNeoForgeDependency() throws IOException {
@@ -61,7 +123,8 @@ class PackageBoundaryTest {
     @Test
     void adapterAndConfigLayersDoNotDependOnPlanning() throws IOException {
         // api is the third-party contract surface: it must not contain or reach built-in
-        // implementations, so a mod author's contract never pulls in our domain code.
+        // implementations, so a mod author's contract never pulls in our domain code. The reserved
+        // surface package is listed so the rule already holds on the day it is created.
         assertNoImport("api", "io.github.luoyan.adventureworldgen.planner",
                 "io.github.luoyan.adventureworldgen.runtime",
                 "io.github.luoyan.adventureworldgen.hydrology",
@@ -74,9 +137,26 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void surfaceMaterialsDoNotDependOnHydrologyOrExecution() throws IOException {
-        // Surface and river-bed material choice is separate from water geometry and from the
-        // Minecraft execution layer, so a material change never requires touching hydrology.
+    void waterGeometryAndErosionChooseNoBlocksOrBiomes() throws IOException {
+        // The author model keeps water geometry and the erosion field outside the material
+        // pipeline: neither package may reach into Minecraft or into biome selection, so swapping
+        // river-bed materials never reopens hydrology. Material strategy itself belongs to the
+        // reserved surface responsibility and stays in the execution layer until it exists.
+        assertNoImport("hydrology", "net.minecraft", "net.neoforged",
+                "io.github.luoyan.adventureworldgen.biome");
+        assertNoImport("erosion", "net.minecraft", "net.neoforged",
+                "io.github.luoyan.adventureworldgen.biome");
+    }
+
+    @Test
+    void reservedSurfacePackageKeepsItsBoundaryOnceItExists() throws IOException {
+        // surface has no implementation yet, so there is nothing to guard and nothing to skip: the
+        // check simply passes while the directory is absent. It becomes a real rule the moment the
+        // package is created, because material choice must not reach water geometry or execution.
+        if (!Files.isDirectory(sourceRoot.resolve("surface"))) {
+            assertTrue(RESERVED_PACKAGES.contains("surface"));
+            return;
+        }
         assertNoImport("surface", "io.github.luoyan.adventureworldgen.hydrology",
                 "io.github.luoyan.adventureworldgen.planner",
                 "io.github.luoyan.adventureworldgen.runtime",
@@ -152,10 +232,12 @@ class PackageBoundaryTest {
         // P4: support for a structure is a registration, not a branch. The generator may resolve
         // frozen pieces through the piece registry, but naming a concrete piece class or a single
         // structure's piece type constant would mean every new structure edits the generator.
-        Path generator = SOURCE_ROOT.resolve("worldgen").resolve("AdventureChunkGenerator.java");
-        Path restore = SOURCE_ROOT.resolve("worldgen").resolve("FrozenPieceRestore.java");
-        assumeTrue(Files.isRegularFile(generator) && Files.isRegularFile(restore),
-                "source tree not found at " + generator.toAbsolutePath());
+        Path generator = sourceRoot.resolve("worldgen").resolve("AdventureChunkGenerator.java");
+        Path restore = sourceRoot.resolve("worldgen").resolve("FrozenPieceRestore.java");
+        // Both files are part of the P4 contract: a missing one is a broken guard, not a reason to
+        // stop checking, so the assertions below are hard failures.
+        assertTrue(Files.isRegularFile(generator), () -> "missing " + generator);
+        assertTrue(Files.isRegularFile(restore), () -> "missing " + restore);
         String generatorCode = stripComments(Files.readString(generator, StandardCharsets.UTF_8));
         assertFalse(generatorCode.contains("structure.structures."),
                 "the shared chunk generator must not reference a concrete structure piece class");
@@ -174,9 +256,15 @@ class PackageBoundaryTest {
         }
     }
 
-    private static void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
-        Path directory = SOURCE_ROOT.resolve(pkg);
-        assumeTrue(Files.isDirectory(directory), "source tree not found at " + directory.toAbsolutePath());
+    private static long countJavaFiles(Path directory) throws IOException {
+        try (Stream<Path> files = Files.walk(directory)) {
+            return files.filter(path -> path.toString().endsWith(".java")).count();
+        }
+    }
+
+    private void assertNoImport(String pkg, String... forbiddenPrefixes) throws IOException {
+        Path directory = sourceRoot.resolve(pkg);
+        assertTrue(Files.isDirectory(directory), () -> "no such package to check: " + directory);
         List<String> violations = new ArrayList<>();
         try (Stream<Path> files = Files.walk(directory)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {

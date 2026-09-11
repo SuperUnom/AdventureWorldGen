@@ -44,7 +44,7 @@ class CostDistanceMapTest {
         var reverse = graph.edge(new Node(1, 0), new Node(0, 0));
         assertTrue(forward.passable());
         assertTrue(reverse.passable());
-        assertEquals(1, graph.stats().computations());
+        assertEquals(1, graph.stats().computedPairs());
         assertEquals(1, graph.stats().hits());
         assertTrue(forward.micros() > reverse.micros());
     }

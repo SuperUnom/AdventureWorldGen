@@ -10,6 +10,7 @@ import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.HumidityState;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Continuous moisture over frozen terrain; water proximity is prepared before any biome grows. */
 public final class HumidityPlan {
@@ -39,8 +40,7 @@ public final class HumidityPlan {
         // Include water beyond the playable circle, so the outer coast receives the same moisture.
         extent=(int)Math.ceil(radius/STEP)+2;width=extent*2+1;
         long size=(long)width*width;
-        if(size>PlannerProfile.V2.maximumCostNodes())throw new PlanningFailure(
-                PlanningFailure.Code.RESOURCE_LIMIT,"humidity","environment grid exceeds budget");
+        if(size>PlannerProfile.V2.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.HUMIDITY,"environment grid exceeds budget");
         if(frozen!=null) {
             if(frozen.extent()!=extent)throw new IllegalArgumentException("invalid frozen humidity extent");
             if(!Double.isFinite(frozen.weatherOffset())||Math.abs(frozen.weatherOffset())>.49)
@@ -82,7 +82,7 @@ public final class HumidityPlan {
             if(s.wet()||s.hazardous())continue;
             actual[typeAt(x,z,s).ordinal()]++;count++;
         }
-        if(count==0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"humidity","no dry land");
+        if(count==0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.HUMIDITY,"no dry land");
         for(int i=0;i<actual.length;i++)actual[i]/=count;
         progress.accept(1);
     }

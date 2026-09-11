@@ -4,7 +4,6 @@ import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -44,9 +43,13 @@ class CoastGeneratorTest {
     void isDeterministicBoundedAndContainsReservation() {
         var first = generator.generate(8844, 6000, 300);
         var second = generator.generate(8844, 6000, 300);
+        // The coastline is the whole frozen result, so the same seed must reproduce it vertex by
+        // vertex - this replaced the old array comparison against the always-empty `phases`.
         assertEquals(first.coastline().vertices(), second.coastline().vertices());
-        assertArrayEquals(first.phases(), second.phases());
         assertEquals(first.vertexCount(), second.vertexCount());
+        assertEquals(first.estimatedMaximumError(), second.estimatedMaximumError());
+        assertEquals(first.landBand(), second.landBand());
+        assertEquals(first.seaBand(), second.seaBand());
         assertTrue(first.estimatedMaximumError() <= 2.0);
         for (var vertex : first.coastline().vertices()) {
             double radius = StrictMath.hypot(vertex.x(), vertex.z());
@@ -66,9 +69,15 @@ class CoastGeneratorTest {
         assertEquals(0.0, coast.signedDistance(vertex.x(), vertex.z()), 1e-8);
         assertTrue(coast.signedDistance(0, 0) > 100);
         assertTrue(coast.signedDistance(2000, 0) < 0);
-        assertTrue(result.equalArcSamples().size() >= 3);
-        assertNotEquals(result.equalArcSamples().getFirst(), result.equalArcSamples().getLast());
-        for (var sample : result.equalArcSamples()) {
+        // The generator no longer caches a sample list; sampling is a pure function of the frozen
+        // polyline and the caller's spacing, so it is exercised directly and must be reproducible.
+        var samples = coast.equalArcSamples(PlannerProfile.V2.coast().targetArcSampleSpacing(),
+                PlannerProfile.V2.coast().maximumArcSamples());
+        assertEquals(samples, coast.equalArcSamples(PlannerProfile.V2.coast().targetArcSampleSpacing(),
+                PlannerProfile.V2.coast().maximumArcSamples()));
+        assertTrue(samples.size() >= 3);
+        assertNotEquals(samples.getFirst(), samples.getLast());
+        for (var sample : samples) {
             assertEquals(0.0, coast.signedDistance(sample.x(), sample.z()), 1e-7);
         }
     }

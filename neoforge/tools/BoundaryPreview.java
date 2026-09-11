@@ -1,6 +1,7 @@
 import io.github.luoyan.adventureworldgen.runtime.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import java.nio.file.*;
 import java.io.*;
 import java.util.zip.GZIPInputStream;
@@ -10,10 +11,10 @@ public class BoundaryPreview {
  public static void main(String[] args) throws Exception {
   Path input=Path.of(args[0]), output=Path.of(args[1]); Files.createDirectories(output);
   String hash=JsonParser.parseString(Files.readString(input.resolve("manifest.json"))).getAsJsonObject().get("input_sha256").getAsString();
-  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
   GeneratedAdventurePlan plan;
   try(var stream=new GZIPInputStream(Files.newInputStream(input.resolve("plan.json.gz")))) {
-   plan=new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash,config);
+   plan=GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(stream.readAllBytes(),new ContentId("adventureworldgen:default"),hash));
   }
   var carrier=plan.biomePatches().stream().filter(p->p.biomeId().value().equals("minecraft:desert")).findFirst().orElseThrow();
   int cx=(carrier.minX()+carrier.maxXExclusive())/2,cz=(carrier.minZ()+carrier.maxZExclusive())/2;

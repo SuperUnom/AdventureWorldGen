@@ -62,7 +62,7 @@ class PlanTerrainTest {
     void theFrozenEntryAndTheStagedCompositionBuildTheSameStack() {
         var foundation = foundation();
         var staged = PlanTerrain.compose(foundation, foundation.eroded(null), NO_RIVERS);
-        var frozen = PlanTerrain.assemble(SEED, config(), TerrainCapacityPlan.empty(), COAST, NO_RIVERS,
+        var frozen = PlanTerrain.assemble(PlannerProfile.V2, SEED, config(), TerrainCapacityPlan.empty(), COAST, NO_RIVERS,
                 64.0, 32.0, 64.0, "terrain-test", null);
 
         assertSame(foundation.regions().getClass(), frozen.regions().getClass());
@@ -78,7 +78,7 @@ class PlanTerrainTest {
     }
 
     private static PlanTerrain.Foundation foundation() {
-        return PlanTerrain.foundation(SEED, config(), TerrainCapacityPlan.empty(), COAST, 64.0, 32.0, 64.0,
+        return PlanTerrain.foundation(PlannerProfile.V2, SEED, config(), TerrainCapacityPlan.empty(), COAST, 64.0, 32.0, 64.0,
                 "terrain-test");
     }
 

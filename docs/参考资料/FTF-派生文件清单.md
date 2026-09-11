@@ -4,7 +4,8 @@
 上游仓库：<https://github.com/ETcodehome/FreeTerraForged>  
 上游许可：MIT；完整文本随 JAR 放在 `META-INF/NOTICE`。
 
-本项目采用适配式移植，版本名为 `ftf-hydrology-adapted-v1`。不会声称输出与上游逐点一致。
+上游移植基线（本文的参照对象）：`ftf-hydrology-adapted-v1`，即最初整批派生文件完成时的水文版本。
+本项目当前适配版本：`ftf-hydrology-adapted-v2`（唯一权威来源是 `plan/PlanVersions.HYDROLOGY`，它参与计划身份和 READY 门禁）。两者都是适配式移植，不会声称输出与上游逐点一致；表中"状态与适配边界"一列记录的是各文件相对上游的边界，r 编号是当时的地形修订，不代表当前水文版本。
 
 | 本项目文件 | 上游参考文件 | 状态与适配边界 |
 |---|---|---|

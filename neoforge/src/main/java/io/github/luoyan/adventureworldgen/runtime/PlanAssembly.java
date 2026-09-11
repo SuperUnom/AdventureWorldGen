@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
@@ -36,7 +37,7 @@ final class PlanAssembly {
      * @param reuseClimate the climate field joint placement already built, or null when it must be
      *                     built here (a READY reload rebuilds it from {@code frozenLayout})
      */
-    static Layout layout(long seed, AdventureWorldConfig config, MacroTerrain terrain,
+    static Layout layout(PlannerProfile profile, long seed, AdventureWorldConfig config, MacroTerrain terrain,
                          List<PlannedBiomePatch> patches, BiomeLayout frozenLayout, ClimatePlan reuseClimate,
                          PlanningObserver observer) {
         ClimatePlan climate = reuseClimate != null ? reuseClimate
@@ -45,7 +46,7 @@ final class PlanAssembly {
                         new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config, ClimatePlan.STEP));
         if (frozenLayout == null) observer.stage(PlanningStage.FILLER);
         BiomeEnvironmentRules rules = new BiomeEnvironmentRules(config, climate);
-        FillerLayout filler = new FillerLayout(seed, config, terrain, patches, rules, observer,
+        FillerLayout filler = new FillerLayout(profile, seed, config, terrain, patches, rules, observer,
                 frozenLayout == null ? null : frozenLayout.filler());
         if (frozenLayout == null) observer.stage(PlanningStage.TRANSITION);
         return new Layout(climate, rules, filler);

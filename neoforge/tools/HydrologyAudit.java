@@ -1,4 +1,5 @@
 import io.github.luoyan.adventureworldgen.terrain.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.hydrology.*;
 import io.github.luoyan.adventureworldgen.erosion.*;
 import io.github.luoyan.adventureworldgen.planner.*;

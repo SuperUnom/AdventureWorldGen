@@ -13,6 +13,7 @@ import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 
 class GreedyBiomePlanningTest {
     private static final MacroTerrain FLAT=(x,z)->new MacroSample(80,Double.NaN,WaterKind.NONE,false,"r","plains","test");
@@ -30,9 +31,9 @@ class GreedyBiomePlanningTest {
           """);
         MacroTerrain terrain=(x,z)->x>160&&x<320?new MacroSample(80,Double.NaN,WaterKind.NONE,false,
                 "rare","plateau","test","badlands","",0,0,0,0,0):FLAT.sample(x,z);
-        var index=new PlacementIndex(config,terrain,(level,x,z)->true,(id,x,z)->true);
+        var index=new PlacementIndex(config,terrain,(level,x,z)->true,(id,x,z)->true,PlannerProfile.V2);
         var demands=new RequirementExpander().expandMinimum(config).patches();
-        var result=new BiomeAllocationPlanner().allocate(9,config,index,demands,List.of());
+        var result=new BiomeAllocationPlanner(PlannerProfile.V2).allocate(9,config,index,demands,List.of());
         var ids=result.patches().stream().map(p->p.biomeId().value()).toList();
         assertEquals("test:spawn",ids.getFirst());
         assertTrue(ids.indexOf("test:rare")<ids.indexOf("test:common"));
@@ -50,8 +51,8 @@ class GreedyBiomePlanningTest {
         var climate=new ClimatePlan(7331,config,FLAT,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(config,climate);
         var demands=new RequirementExpander().expandMinimum(config).patches();
-        var result=new BiomeAllocationPlanner().allocate(7331,config,
-                new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true),demands,List.of(),rules,v->{});
+        var result=new BiomeAllocationPlanner(PlannerProfile.V2).allocate(7331,config,
+                new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true,PlannerProfile.V2),demands,List.of(),rules,v->{});
         var hot=result.patches().stream().filter(p->p.biomeId().value().equals("test:hot")).findFirst().orElseThrow();
         assertTrue(rules.prefersType(hot.biomeId(),hot.anchorX()+2,hot.anchorZ()+2,FLAT.sample(0,0)));
         long preferred=Arrays.stream(hot.mask().cells()).filter(c->rules.prefersType(hot.biomeId(),
@@ -61,8 +62,8 @@ class GreedyBiomePlanningTest {
         var medium=new ClimatePlan(7331,config,FLAT,v->{},new ClimateState(s.extent(),s.slopeHeight(),s.regionalHeight(),
                 s.angle(),-101,101,new double[]{-100,-99,100},false,TemperatureType.MEDIUM,
                 s.ratios(),s.actual(),List.of(),s.supply(),s.humidity()),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
-        var relaxed=new BiomeAllocationPlanner().allocate(7331,config,
-                new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true),demands,List.of(),new BiomeEnvironmentRules(config,medium),v->{});
+        var relaxed=new BiomeAllocationPlanner(PlannerProfile.V2).allocate(7331,config,
+                new PlacementIndex(config,FLAT,(l,x,z)->true,(id,x,z)->true,PlannerProfile.V2),demands,List.of(),new BiomeEnvironmentRules(config,medium),v->{});
         assertFalse(relaxed.patches().stream().anyMatch(p->p.biomeId().equals(hot.biomeId())),
                 "zero hot supply must relax area, never temperature admission");
     }
@@ -78,7 +79,7 @@ class GreedyBiomePlanningTest {
                 new JointPlanner.LevelConstraint() {
                     public boolean accepts(int level,int x,int z){accepts.incrementAndGet();return true;}
                     public double penalty(int level,int x,int z){penalties.incrementAndGet();return 2.5;}
-                },(id,x,z)->true);
+                },(id,x,z)->true,PlannerProfile.V2);
         int initial=samples.get();
         var point=new PlacementIndex.Point(4,4);
         for(int repeat=0;repeat<3;repeat++) {

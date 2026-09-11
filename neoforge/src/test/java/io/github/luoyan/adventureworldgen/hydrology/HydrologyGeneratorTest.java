@@ -19,7 +19,7 @@ class HydrologyGeneratorTest {
         }
         for (long seed : new long[]{72362148366599L, 1, 7331}) {
             var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, 1536, 185.6);
-            var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(seed, config, coast.coastline(), coast.landBand());
+            var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(PlannerProfile.V2, seed, config, coast.coastline(), coast.landBand());
             var island = new io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain(coast.coastline(),
                     new io.github.luoyan.adventureworldgen.terrain.RegionTerrain(seed, PlannerProfile.V2, capacities),
                     seed, 64, coast.landBand(), coast.seaBand(), "test");
@@ -41,10 +41,15 @@ class HydrologyGeneratorTest {
         assertEquals(3, value.maximumForkDepth());
         assertEquals(new HydrologyProfile.RiverShape(5, 2, 6, 20, 8, 0.75), value.main());
         assertEquals(new HydrologyProfile.RiverShape(4, 1, 4, 14, 5, 0.975), value.branch());
-        assertEquals(new HydrologyProfile.Lake(0.3, 0.0, 0.03, 10, 75, 150, 2, 10), value.lake());
+        assertEquals(new HydrologyProfile.Lake(0.3, 10, 75, 150), value.lake());
         assertEquals(new HydrologyProfile.Wetland(0.6, 175, 225), value.wetland());
         assertEquals(new HydrologyProfile.Erosion(135, 12, 0.7, 0.7, 0.5, 0.5), value.erosion());
-        assertEquals(new HydrologyProfile.Smoothing(1, 1.8, 0.9), value.smoothing());
+        assertEquals(HydrologyProfile.Smoothing.SUPPORTED, value.smoothing());
+        // The four upstream lake reference values survived the split into a reference record.
+        assertEquals(new HydrologyProfile.LakeReference(0.0, 0.03, 2, 10),
+                HydrologyProfile.FTF_ADAPTED_V1_LAKE_REFERENCE);
+        assertEquals(new HydrologyProfile.LakeReference(0.0, 0.03, 2, 6),
+                HydrologyProfile.FINITE_CONTINENT_LAKE_REFERENCE);
     }
 
     @Test

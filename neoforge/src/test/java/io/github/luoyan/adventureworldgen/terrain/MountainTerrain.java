@@ -2,8 +2,19 @@ package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.noise.GradientNoise;
 
-/** Adapted FTF Populators.makeMountains / PerlinRidge, fixed upstream 43fd42a4.
- * Uses project seed/hash semantics; not an upstream bit-for-bit port. See META-INF/NOTICE. */
+/**
+ * Historical reference implementation: the pre-r21 mountain field, adapted from FTF
+ * {@code Populators.makeMountains} / {@code PerlinRidge} at the fixed upstream commit
+ * {@code 43fd42a4d31da5ba36f5ab4d8e4d76d69688e86a}. Project seed and hash semantics, not an
+ * upstream bit-for-bit port; see {@code META-INF/NOTICE}.
+ *
+ * <p><strong>Reference only, and the test source set is its only home.</strong> Production mountain
+ * height comes from {@link TerrainRecipes}' {@code MOUNTAINS_*}/{@code VOLCANO} recipes, the
+ * {@link MountainRangePlan} envelope and the region composition in {@link RegionTerrain}. Nothing
+ * in production ever read this class, so instead of leaving a dead class in the main source set it
+ * moved here as a named historical comparison - the coverage that matters for production was
+ * migrated to {@link TerrainRecipesTest} and does not read this class.
+ */
 public final class MountainTerrain {
     private final GradientNoise[] ridge = new GradientNoise[4];
     private final GradientNoise warpX, warpZ, detail, envelope;

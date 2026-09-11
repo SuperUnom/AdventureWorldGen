@@ -22,6 +22,14 @@ public record PlannerProfile(
         Coast coast,
         Search search
 ) {
+    /**
+     * Default budget of the competitive-growth stage, counted in biome/cell eligibility operations
+     * - not in cells, candidates or wall-clock time. It used to be a bare
+     * {@code BUDGET = 12_000_000} inside {@code BiomeAllocationPlanner}, where a reader could not
+     * tell what was being counted; the value is unchanged.
+     */
+    public static final long COMPETITIVE_GROWTH_OPERATIONS = 12_000_000L;
+
     public static final PlannerProfile V2 = new PlannerProfile(
             "planner-v2",
             "plan-v2",
@@ -41,7 +49,8 @@ public record PlannerProfile(
                     128, 2_000, 10_000, 40_000, 200_000,
                     200_000, 20_000, 100_000,
                     100_000_000, 100_000_000, 100_000_000,
-                    4, 8, 16));
+                    4, 8, 16,
+                    COMPETITIVE_GROWTH_OPERATIONS));
 
     public PlannerProfile {
         areaCellSides = List.copyOf(areaCellSides);
@@ -58,6 +67,37 @@ public record PlannerProfile(
 
     public long maximumWorkingMemoryBytes() {
         return search.maximumWorkingMemoryBytes();
+    }
+
+    /**
+     * The same algorithm and version identities with different resource budgets. Used to inject a
+     * profile whose budget is small enough to observe, without inventing a second algorithm: only
+     * the two budget fields change, and they are already part of the algorithm's declared inputs.
+     */
+    public PlannerProfile withBudgets(int maximumCostNodes, long maximumWorkingMemoryBytes) {
+        return withSearch(search.withBudgets(maximumCostNodes, maximumWorkingMemoryBytes));
+    }
+
+    /** The same parameters with a different competitive-growth operation budget. */
+    public PlannerProfile withCompetitiveGrowthOperations(long operations) {
+        return withSearch(search.withCompetitiveGrowthOperations(operations));
+    }
+
+    /** The same parameters with a different algorithm identity marker. */
+    public PlannerProfile withAlgorithmVersion(String algorithmVersion) {
+        return new PlannerProfile(algorithmVersion, planFormatVersion, hydrologyVersion, finalAreaCellSide,
+                areaCellSides, costGridSpacings, costEdgeSampleSpacing, levelTolerance, terrain, coast, search);
+    }
+
+    /** The same parameters with a different terrain tuning record. */
+    public PlannerProfile withTerrain(Terrain terrain) {
+        return new PlannerProfile(algorithmVersion, planFormatVersion, hydrologyVersion, finalAreaCellSide,
+                areaCellSides, costGridSpacings, costEdgeSampleSpacing, levelTolerance, terrain, coast, search);
+    }
+
+    private PlannerProfile withSearch(Search search) {
+        return new PlannerProfile(algorithmVersion, planFormatVersion, hydrologyVersion, finalAreaCellSide,
+                areaCellSides, costGridSpacings, costEdgeSampleSpacing, levelTolerance, terrain, coast, search);
     }
 
     public record Terrain(int regionSpacing, double maximumRegionJitterFraction,
@@ -93,9 +133,31 @@ public record PlannerProfile(
                          long optionalJointStatesTotal, long optionalAreaStatesTotal,
                          long extraAreaAttempts, long scatterAttempts, long boundaryAttempts,
                          long requiredFloodVisits, long optionalFloodVisits, long finalValidationVisits,
-                         int maximumTerrainRepairVersions, int maximumSupportDelta, int supportFadeDistance) {
+                         int maximumTerrainRepairVersions, int maximumSupportDelta, int supportFadeDistance,
+                         long competitiveGrowthOperations) {
         public Search {
             retainedCandidates = List.copyOf(retainedCandidates);
+        }
+
+        /** The same search parameters with a different competitive-growth operation budget. */
+        public Search withCompetitiveGrowthOperations(long operations) {
+            return new Search(maximumCostNodes, maximumAreaCells, maximumWorkingMemoryBytes, retainedCandidates,
+                    requiredCandidatePreparations, optionalCandidatePreparations, spawnCandidateAttempts,
+                    requiredJointStates, requiredAreaStates, optionalAdditionAttempts, optionalJointStatesPerAttempt,
+                    optionalAreaStatesPerAttempt, optionalJointStatesTotal, optionalAreaStatesTotal, extraAreaAttempts,
+                    scatterAttempts, boundaryAttempts, requiredFloodVisits, optionalFloodVisits, finalValidationVisits,
+                    maximumTerrainRepairVersions, maximumSupportDelta, supportFadeDistance, operations);
+        }
+
+        /** The same search parameters with different resource budgets. */
+        public Search withBudgets(int maximumCostNodes, long maximumWorkingMemoryBytes) {
+            return new Search(maximumCostNodes, maximumAreaCells, maximumWorkingMemoryBytes, retainedCandidates,
+                    requiredCandidatePreparations, optionalCandidatePreparations, spawnCandidateAttempts,
+                    requiredJointStates, requiredAreaStates, optionalAdditionAttempts, optionalJointStatesPerAttempt,
+                    optionalAreaStatesPerAttempt, optionalJointStatesTotal, optionalAreaStatesTotal, extraAreaAttempts,
+                    scatterAttempts, boundaryAttempts, requiredFloodVisits, optionalFloodVisits, finalValidationVisits,
+                    maximumTerrainRepairVersions, maximumSupportDelta, supportFadeDistance,
+                    competitiveGrowthOperations);
         }
     }
 }
