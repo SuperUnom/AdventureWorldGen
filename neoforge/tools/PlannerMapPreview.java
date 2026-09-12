@@ -1,6 +1,7 @@
 import io.github.luoyan.adventureworldgen.runtime.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import java.nio.file.*;
 import java.util.zip.GZIPInputStream;
 import com.google.gson.JsonParser;
@@ -13,11 +14,11 @@ public class PlannerMapPreview {
     public static void main(String[] args) throws Exception {
         Path directory=Path.of(args[0]), output=Path.of(args[1]);
         var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of(
-                "neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+                "src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
         String hash=JsonParser.parseString(Files.readString(directory.resolve("manifest.json"))).getAsJsonObject().get("input_sha256").getAsString();
         GeneratedAdventurePlan plan;
         try(var input=new GZIPInputStream(Files.newInputStream(directory.resolve("plan.json.gz")))) {
-            plan=new PlanV2Codec().decode(input.readAllBytes(),new ContentId("adventureworldgen:default"),hash,config);
+            plan=GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(input.readAllBytes(),new ContentId("adventureworldgen:default"),hash));
         }
         int side=600,margin=20,top=96,width=side*2+margin*3,height=side+top+54;
         var image=new BufferedImage(width,height,BufferedImage.TYPE_INT_RGB);

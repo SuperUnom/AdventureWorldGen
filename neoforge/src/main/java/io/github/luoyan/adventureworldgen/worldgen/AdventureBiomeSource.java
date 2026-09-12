@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.worldgen;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
 import net.minecraft.core.Holder;
 import net.minecraft.core.HolderLookup;
@@ -35,7 +35,7 @@ public final class AdventureBiomeSource extends BiomeSource {
     @Override protected Stream<Holder<Biome>> collectPossibleBiomes() { return biomes.listElements().map(holder -> holder); }
 
     @Override public Holder<Biome> getNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler) {
-        ContentId id = RuntimePlanRegistry.await(profile).biomeAt(QuartPos.toBlock(quartX), QuartPos.toBlock(quartY), QuartPos.toBlock(quartZ));
+        ContentId id = RuntimePlanRegistry.await(new ContentId(profile.toString())).biomeAt(QuartPos.toBlock(quartX), QuartPos.toBlock(quartY), QuartPos.toBlock(quartZ));
         ResourceLocation location = ResourceLocation.parse(id.value());
         return biomes.getOrThrow(ResourceKey.create(Registries.BIOME, location));
     }

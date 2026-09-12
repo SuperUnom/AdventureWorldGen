@@ -2,9 +2,19 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan.PlannedBiomePatch;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.FillerState;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Frozen variable-spacing seeds and multi-source frontier growth over remaining land. */
 public final class FillerLayout {
@@ -13,9 +23,9 @@ public final class FillerLayout {
     private final int[] labels;
     private final MacroSample[] environment;
     private final AdventureWorldConfig config;
-    private final ClimatePlan climate;
+    private final BiomeEnvironmentRules rules;
     private final ValueNoise shape;
-    private final io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp boundaryWarp;
+    private final io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp boundaryWarp;
     private final List<ContentId> pool;
     private final List<Seed> seeds=new ArrayList<>();
     private final PriorityQueue<Edge> frontier=new PriorityQueue<>(Comparator.comparingInt(Edge::band).thenComparingDouble(Edge::cost)
@@ -26,19 +36,28 @@ public final class FillerLayout {
     private final double[] levels;
     private int visited,assigned,total;
     private int restoredSeedCount=-1;
-    public record State(int extent,int[] labels,int seedCount) {}
-    public State snapshot(){return new State(extent,labels.clone(),seedCount());}
-    private final java.util.function.DoubleConsumer progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.withinCurrent(io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Stage.FILLER);
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate) {
-        this(seed,config,terrain,patches,climate,null);
+    public FillerState snapshot(){return new FillerState(extent,labels.clone(),seedCount());}
+    private final java.util.function.DoubleConsumer progress;
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules) {
+        this(profile,seed,config,terrain,patches,rules,null);
     }
-    public FillerLayout(long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,ClimatePlan climate,State frozen) {
-        this.worldSeed=seed;this.config=config;this.climate=climate;pool=config.biomes().filler();
-        boundaryWarp=new io.github.luoyan.adventureworldgen.terrain.ContinuousDomainWarp(seed,"filler/boundary",1);
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,FillerState frozen) {
+        this(profile,seed,config,terrain,patches,rules,PlanningObserver.NONE,frozen);
+    }
+    /**
+     * @param profile the profile whose node budget bounds the filler grid. Injected rather than
+     *                read from {@code PlannerProfile.V2} so the limit follows the active profile.
+     */
+    public FillerLayout(PlannerProfile profile,long seed,AdventureWorldConfig config,MacroTerrain terrain,List<PlannedBiomePatch> patches,BiomeEnvironmentRules rules,
+                        PlanningObserver observer,FillerState frozen) {
+        this.progress=observer.within(PlanningStage.FILLER);
+        this.worldSeed=seed;this.config=config;this.rules=rules;pool=config.biomes().filler();
+        boundaryWarp=new io.github.luoyan.adventureworldgen.noise.ContinuousDomainWarp(seed,"filler/boundary",1);
         shape=new ValueNoise(seed,"filler/frontier",128);
         extent=(int)Math.ceil(config.world().radius()/STEP)+1;width=extent*2+1;
         long size=(long)width*width;
-        if(size>PlannerProfile.V2.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,"filler","grid exceeds budget",Map.of("cells",size));
+        if(size>profile.maximumCostNodes())throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.FILLER,"grid exceeds budget",
+                Map.of("cells",size,"maximum_cells",(long)profile.maximumCostNodes()));
         if(frozen!=null) {
             if(frozen.extent()!=extent || frozen.labels().length!=size || frozen.seedCount()<0)
                 throw new IllegalArgumentException("invalid frozen filler dimensions");
@@ -82,7 +101,7 @@ public final class FillerLayout {
         List<Integer> candidates=new ArrayList<>();
         for(int i=0;i<labels.length;i++)if(environment[i]!=null&&labels[i]==-1)candidates.add(i);
         total=candidates.size();
-        candidates.sort(Comparator.comparingLong(i->PlacementIndex.mix(seed^i)));
+        candidates.sort(Comparator.comparingLong(i->DeterministicRandom.mix(seed^i)));
         Map<Long,List<Integer>> buckets=new HashMap<>();
         for(int i:candidates) {
             int bx=Math.floorDiv(x(i),768),bz=Math.floorDiv(z(i),768);
@@ -109,19 +128,19 @@ public final class FillerLayout {
         return allows(id,x(cell),z(cell),environment[cell]);
     }
     private boolean allows(ContentId id,int x,int z,MacroSample sample) {
-        return config.biomes().allows(id,sample)&&climate.allowsEnvironment(id,x,z,sample);
+        return config.biomes().allows(id,sample)&&rules.allows(id,x,z,sample);
     }
     private int choose(int cell) {
         int best=-1,bestBand=4;double score=Double.POSITIVE_INFINITY;
         for(int b=0;b<pool.size();b++) {
             ContentId id=pool.get(b);if(!allows(id,cell))continue;
-            int band=climate.temperatureDistance(id,x(cell)+2,z(cell)+2,environment[cell]);
+            int band=rules.temperatureDistance(id,x(cell)+2,z(cell)+2,environment[cell]);
             if(band>bestBand)continue;
             double density=0;
             for(var s:seeds)if(s.biome==b)density+=Math.exp(-Math.pow(Math.hypot(x(cell)-x(s.cell),z(cell)-z(s.cell))/384,2));
-            double u=Math.max(1e-12,(PlacementIndex.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
-            double value=climate.cost(id,x(cell)+2,z(cell)+2,environment[cell])*7+density*.12
-                    +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,id));
+            double u=Math.max(1e-12,(DeterministicRandom.mix(worldSeed^((long)cell<<16)^b)>>>11)*0x1.0p-53);
+            double value=rules.cost(id,x(cell)+2,z(cell)+2,environment[cell])*7+density*.12
+                    +adventure(b,cell)+Math.log(-Math.log(u))-Math.log(BiomeEnvironmentRules.weight(config,id));
             if(band<bestBand||value<score){score=value;best=b;bestBand=band;}
         }
         if(best<0)throw noLegalFiller(x(cell),z(cell),environment[cell]);
@@ -131,13 +150,13 @@ public final class FillerLayout {
         return Double.isFinite(levels[biome])?Math.pow((levels[biome]-10*Math.hypot(x(cell),z(cell))/config.world().radius())/4,2):0;
     }
     private void enqueue(int cell,int seed,double cost) {
-        int band=climate.temperatureDistance(pool.get(seeds.get(seed).biome),x(cell)+2,z(cell)+2,environment[cell]);
+        int band=rules.temperatureDistance(pool.get(seeds.get(seed).biome),x(cell)+2,z(cell)+2,environment[cell]);
         frontier.add(new Edge(cell,seed,band,cost));
     }
     private void flood() {
         while(!frontier.isEmpty()) {
             Edge edge=frontier.remove();int i=edge.cell;
-            if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"filler","frontier budget exhausted");
+            if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FILLER,"frontier budget exhausted");
             if(labels[i]!=-1)continue;
             Seed seed=seeds.get(edge.seed);ContentId id=pool.get(seed.biome);
             if(!allows(id,i))continue;
@@ -145,8 +164,8 @@ public final class FillerLayout {
             if((assigned&511)==0)progress.accept(.4+.55*assigned/Math.max(1.0,total));
             for(int n:neighbors(i))if(n>=0&&environment[n]!=null&&labels[n]==-1&&allows(id,n)) {
                 double distance=stepDistance(i,n);
-                double step=distance*(1+climate.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
-                        +STEP*climate.temperatureDistance(id,x(n)+2,z(n)+2,environment[n])*8
+                double step=distance*(1+rules.cost(id,x(n)+2,z(n)+2,environment[n])*.3+adventure(seed.biome,n)*.02)
+                        +STEP*rules.temperatureDistance(id,x(n)+2,z(n)+2,environment[n])*8
                         +4*(1+shape.sample(x(n),z(n)));
                 enqueue(n,edge.seed,edge.cost+step);
             }
@@ -170,8 +189,8 @@ public final class FillerLayout {
                 for(int n:neighbors(i))if(n>=0&&labels[n]>=0){support.merge(labels[n],1,Integer::sum);if(labels[n]==labels[i])own++;}
                 if(own>3)continue;
                 for(var e:support.entrySet())if(e.getValue()>=5&&allows(pool.get(e.getKey()),i)
-                        &&climate.temperatureDistance(pool.get(e.getKey()),x(i)+2,z(i)+2,environment[i])
-                        <=climate.temperatureDistance(pool.get(labels[i]),x(i)+2,z(i)+2,environment[i])){next[i]=e.getKey();break;}
+                        &&rules.temperatureDistance(pool.get(e.getKey()),x(i)+2,z(i)+2,environment[i])
+                        <=rules.temperatureDistance(pool.get(labels[i]),x(i)+2,z(i)+2,environment[i])){next[i]=e.getKey();break;}
             }
             System.arraycopy(next,0,labels,0,labels.length);
         }
@@ -192,16 +211,16 @@ public final class FillerLayout {
         int best=-1,bestBand=4;double score=-1;
         for(int b=0;b<pool.size();b++) {
             if(support[b]<=0||!allows(pool.get(b),x,z,sample))continue;
-            int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
+            int band=rules.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
             if(band<bestBand||(band==bestBand&&support[b]>score)){score=support[b];best=b;bestBand=band;}
         }
         if(bestBand>0) {
             double fallbackScore=Double.POSITIVE_INFINITY;
             int localBand=bestBand;
             for(int b=0;b<pool.size();b++)if(allows(pool.get(b),x,z,sample)) {
-                int band=climate.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
+                int band=rules.temperatureDistance(pool.get(b),Math.floor(x/4.0)*4+2,Math.floor(z/4.0)*4+2,sample);
                 if(band>bestBand||(best>=0&&band>=localBand))continue;
-                double cost=climate.cost(pool.get(b),x,z,sample)-Math.log(ClimatePlan.weight(config,pool.get(b)))*.1;
+                double cost=rules.cost(pool.get(b),x,z,sample)-Math.log(BiomeEnvironmentRules.weight(config,pool.get(b)))*.1;
                 if(band<bestBand||cost<fallbackScore){fallbackScore=cost;best=b;bestBand=band;}
             }
         }
@@ -214,11 +233,11 @@ public final class FillerLayout {
     }
     private PlanningFailure noLegalFiller(int x,int z,MacroSample sample) {
         double qx=Math.floor(x/4.0)*4+2,qz=Math.floor(z/4.0)*4+2;
-        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"filler",
+        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.FILLER,
                 "no filler satisfies biomes.terrain_rules; add coverage for this terrain, temperature and humidity",
                 Map.of("x",x,"z",z,"terrain",sample.terrainTemplate(),"recipe",sample.recipe(),
                         "secondary",sample.secondaryRecipe(),"landform",sample.landform(),
-                        "humidity",climate.humidity().typeAt(qx,qz,sample),"temperature",climate.typeAt(qx,qz,sample)));
+                        "humidity",rules.humidity().typeAt(qx,qz,sample),"temperature",rules.temperature().typeAt(qx,qz,sample)));
     }
     public int seedCount(){return restoredSeedCount>=0?restoredSeedCount:seeds.size();}
     private int x(int i){return (i%width-extent)*STEP;}

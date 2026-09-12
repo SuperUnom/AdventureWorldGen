@@ -1,13 +1,23 @@
 package io.github.luoyan.adventureworldgen.cost;
 
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
-/** Coast-median normalization shared by biome seeds and structure entrances. */
+/**
+ * Coast-median normalization shared by biome seeds and structure entrances.
+ *
+ * <p>{@link #interval} and {@link #contains} define what a level <em>means</em> in cost terms, and
+ * the test suite pins that contract. They are not a production admission gate: the author model
+ * makes level a soft preference, so planning ranks candidates with
+ * {@code CostPlanner.Result.normalizedPreferenceAt} (coarse-grid node cost) and never rejects a
+ * position for falling outside a level interval. Re-enabling the interval as a hard filter would be
+ * a behaviour change, not a cleanup.
+ */
 public final class AdventureLevels {
     private final double coastReference;
     private final double tolerance;
@@ -43,7 +53,7 @@ public final class AdventureLevels {
     public double coastReference() { return coastReference; }
 
     private static PlanningFailure invalidReference(String reason, int reachable) {
-        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, "adventure-levels", reason,
+        return new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.ADVENTURE_LEVELS, reason,
                 Map.of("reachable_coast_samples", reachable));
     }
 

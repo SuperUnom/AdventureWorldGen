@@ -6,13 +6,15 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.stream.JsonWriter;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
-import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
+import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 
@@ -25,16 +27,49 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Base64;
 import java.nio.ByteBuffer;
-import io.github.luoyan.adventureworldgen.erosion.ErosionDeltaField;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
-/** Canonical, explicit plan-v2 payload. No runtime random draw is needed to restore coast or water geometry. */
+/**
+ * Canonical, explicit plan-v2 payload.
+ *
+ * <p>The codec reads and writes {@link PlanSnapshot}: frozen data only. It never receives the
+ * executable plan object, so the storage layer cannot start depending on runtime query state, and
+ * a READY reload cannot re-run layout solving by accident. No runtime random draw is needed to
+ * restore coast or water geometry.
+ */
 public final class PlanV2Codec {
     private static final Set<String> ROOT_KEYS = Set.of("algorithm", "format", "hydrology", "input_sha256",
             "operation_counts", "profile", "random_keys", "seed", "spawn", "terrain", "structures", "biome_layout");
 
     private static final com.google.gson.Gson LAYOUT_JSON=new com.google.gson.Gson();
 
-    public byte[] encode(ContentId profileId, String inputHash, GeneratedAdventurePlan plan) {
+    /**
+     * Frozen plan-v2 metadata: the random-key names a plan was published with.
+     *
+     * <p><strong>Historical descriptive metadata, nothing more.</strong> It is written for wire
+     * compatibility and is deliberately not read back: {@code decode} ignores the array entirely,
+     * and nothing in the planner consults it, so it neither participates in a READY restore nor
+     * proves that the random calls a plan made are complete or unchanged. Treating it as an
+     * integrity check would be wrong twice over - the names are not the stages the code actually
+     * draws from, and no code validates them against a draw.
+     *
+     * <p>The corresponding inventory of the domains that <em>are</em> used lives in
+     * {@link io.github.luoyan.adventureworldgen.plan.RandomDomains}, which is maintained against
+     * the call sites by a source-level test. It is a description of today's code, not a substitute
+     * for this array: making the two agree is a versioned protocol change with its own
+     * old-payload and round-trip checks, not a tidy-up.
+     */
+    private static void writeHistoricalRandomKeys(JsonWriter json) throws IOException {
+        json.name("random_keys").beginArray();
+        // Order and values are part of the frozen plan-v2 layout. Do not sort, rename or extend
+        // this list without a reviewed format decision: it would move every plan's bytes.
+        json.value("coast-phase"); json.value("erosion"); json.value("filler-biome");
+        json.value("hydrology"); json.value("joint-candidate"); json.value("region-center");
+        json.value("recipe"); json.value("composite"); json.value("mountain-range"); json.value("structure"); json.value("terrain-noise");
+        json.endArray();
+    }
+
+    public byte[] encode(ContentId profileId, String inputHash, PlanSnapshot plan) {
         StringWriter output = new StringWriter();
         try (JsonWriter json = new JsonWriter(output)) {
             json.beginObject();
@@ -55,15 +90,11 @@ public final class PlanV2Codec {
             json.name("terrain_version").value(plan.diagnostics().terrainVersion());
             json.endObject();
             json.name("profile").value(profileId.value());
-            json.name("random_keys").beginArray();
-            json.value("coast-phase"); json.value("erosion"); json.value("filler-biome");
-            json.value("hydrology"); json.value("joint-candidate"); json.value("region-center");
-            json.value("recipe"); json.value("composite"); json.value("mountain-range"); json.value("structure"); json.value("terrain-noise");
-            json.endArray();
+            writeHistoricalRandomKeys(json);
             json.name("seed").value(plan.seed());
             json.name("biome_layout");
-            LAYOUT_JSON.toJson(plan.biomeLayout(),GeneratedAdventurePlan.BiomeLayout.class,json);
-            writeSpawn(json, plan.spawnPosition());
+            LAYOUT_JSON.toJson(plan.biomeLayout(),BiomeLayout.class,json);
+            writeSpawn(json, plan.spawn());
             writeTerrain(json, plan);
             writeStructures(json, plan.structures());
             json.endObject();
@@ -73,8 +104,7 @@ public final class PlanV2Codec {
         return output.toString().getBytes(StandardCharsets.UTF_8);
     }
 
-    public GeneratedAdventurePlan decode(byte[] bytes, ContentId expectedProfile, String expectedInputHash,
-                                         AdventureWorldConfig config) {
+    public PlanSnapshot decode(byte[] bytes, ContentId expectedProfile, String expectedInputHash) {
         try {
             JsonElement rootElement = JsonParser.parseString(new String(bytes, StandardCharsets.UTF_8));
             JsonObject root = object(rootElement, "$", ROOT_KEYS);
@@ -87,7 +117,7 @@ public final class PlanV2Codec {
             JsonObject operations = object(root.get("operation_counts"), "$.operation_counts", Set.of("coast_vertices",
                     "cost_edges", "cost_nodes", "erosion_operations", "erosion_samples", "joint_operations",
                     "river_channels", "river_points", "structures", "terrain_version"));
-            var diagnostics = new GeneratedAdventurePlan.PlanDiagnostics(integer(operations, "coast_vertices"),
+            var diagnostics = new PlanDiagnostics(integer(operations, "coast_vertices"),
                     integer(operations, "river_channels"), integer(operations, "river_points"),
                     integer(operations, "erosion_samples"), integer(operations, "erosion_operations"),
                     integer(operations, "cost_nodes"), integer(operations, "cost_edges"),
@@ -102,23 +132,18 @@ public final class PlanV2Codec {
             Coastline coast = new Coastline(readPoints(array(terrain, "coast"), "$.terrain.coast"));
             RiverNetwork network = readNetwork(object(terrain.get("river_network"), "$.terrain.river_network",
                     Set.of("channels", "version", "wetlands")));
-            List<GeneratedAdventurePlan.PlannedBiomePatch> patches = readPatches(array(terrain, "biome_patches"));
+            List<PlannedBiomePatch> patches = readPatches(array(terrain, "biome_patches"));
             ErosionDeltaField erosion = terrain.has("erosion") ? readErosion(object(terrain.get("erosion"), "$.terrain.erosion",
                     Set.of("deltas_base64", "height", "operation_count", "origin_x", "origin_z", "spacing", "width"))) : null;
             List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
-            var restored = new GeneratedAdventurePlan(seed, config, coast, network, seaSurface, landBand, seaBand,
-                    terrainVersion, spawn, patches, structures, diagnostics, erosion, readCapacities(terrain),
-                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),GeneratedAdventurePlan.BiomeLayout.class),"missing frozen biome layout"));
-            if(!settingsJson(config.world().terrain()).equals(terrain.get("recipe_settings")))
-                throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
-            // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.
-            if(!LAYOUT_JSON.toJsonTree(restored.recipeRegions()).equals(terrain.get("recipe_regions")))
-                throw new IllegalArgumentException("recipe region manifest does not match frozen terrain inputs");
-            return restored;
+            return new PlanSnapshot(seed, diagnostics, spawn, coast, network, seaSurface, landBand, seaBand,
+                    terrainVersion, readSettings(terrain), readRecipeRegions(terrain), patches, structures, erosion,
+                    readCapacities(terrain),
+                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),BiomeLayout.class),"missing frozen biome layout"));
         } catch (PlanningFailure failure) {
             throw failure;
         } catch (RuntimeException malformed) {
-            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, "plan-load",
+            throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.PLAN_LOAD,
                     "READY plan-v2 payload is invalid", Map.of("reason", String.valueOf(malformed.getMessage())));
         }
     }
@@ -130,7 +155,7 @@ public final class PlanV2Codec {
         json.endObject();
     }
 
-    private static void writeTerrain(JsonWriter json, GeneratedAdventurePlan plan) throws IOException {
+    private static void writeTerrain(JsonWriter json, PlanSnapshot plan) throws IOException {
         json.name("terrain").beginObject();
         json.name("biome_patches").beginArray();
         for (var patch : plan.biomePatches()) {
@@ -151,7 +176,7 @@ public final class PlanV2Codec {
         json.name("coast").beginArray();
         for (Vec2 point : plan.coastline().vertices()) writePoint(json, point);
         json.endArray();
-        json.name("recipe_settings"); LAYOUT_JSON.toJson(settingsJson(plan.terrainSettings()),json);
+        json.name("recipe_settings"); LAYOUT_JSON.toJson(settingsJson(plan.recipeSettings()),json);
         json.name("recipe_regions"); LAYOUT_JSON.toJson(plan.recipeRegions(),new com.google.gson.reflect.TypeToken<List<io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Region>>(){}.getType(),json);
         json.name("mountain_ranges").beginArray();
         for(var range:plan.capacities().ranges().ranges()) {
@@ -228,6 +253,35 @@ public final class PlanV2Codec {
         return new io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan(result,new io.github.luoyan.adventureworldgen.terrain.MountainRangePlan(ranges));
     }
 
+    private static io.github.luoyan.adventureworldgen.terrain.TerrainSettings readSettings(JsonObject terrain) {
+        JsonObject settings = object(terrain.get("recipe_settings"), "$.terrain.recipe_settings",
+                Set.of("composite", "mountain_ranges", "templates"));
+        JsonObject templates = object(settings.get("templates"), "$.terrain.recipe_settings.templates",
+                io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.ids());
+        var values = new java.util.EnumMap<io.github.luoyan.adventureworldgen.terrain.TerrainTemplate,
+                io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.Settings>(
+                io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.class);
+        for (var template : io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.values()) {
+            JsonObject value = object(templates.get(template.id()),
+                    "$.terrain.recipe_settings.templates." + template.id(),
+                    Set.of("detail_strength", "horizontal_scale", "vertical_amplitude", "weight"));
+            values.put(template, new io.github.luoyan.adventureworldgen.terrain.TerrainTemplate.Settings(
+                    finite(value, "weight"), finite(value, "horizontal_scale"),
+                    finite(value, "vertical_amplitude"), finite(value, "detail_strength")));
+        }
+        return new io.github.luoyan.adventureworldgen.terrain.TerrainSettings(values,
+                bool(settings, "composite"), bool(settings, "mountain_ranges"));
+    }
+
+    private static List<io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Region> readRecipeRegions(JsonObject terrain) {
+        JsonElement encoded = terrain.get("recipe_regions");
+        if (encoded == null || !encoded.isJsonArray()) throw new IllegalArgumentException("recipe_regions must be an array");
+        List<io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Region> regions = LAYOUT_JSON.fromJson(encoded,
+                new com.google.gson.reflect.TypeToken<List<io.github.luoyan.adventureworldgen.terrain.RegionTerrain.Region>>(){}.getType());
+        if (regions == null) throw new IllegalArgumentException("recipe_regions must be an array");
+        return List.copyOf(regions);
+    }
+
     private static JsonObject settingsJson(io.github.luoyan.adventureworldgen.terrain.TerrainSettings settings) {
         var result=new JsonObject();result.addProperty("composite",settings.composite());result.addProperty("mountain_ranges",settings.mountainRanges());
         var templates=new JsonObject();
@@ -293,15 +347,15 @@ public final class PlanV2Codec {
         json.endArray();
     }
 
-    private static List<GeneratedAdventurePlan.PlannedBiomePatch> readPatches(JsonArray encoded) {
-        List<GeneratedAdventurePlan.PlannedBiomePatch> result = new ArrayList<>();
+    private static List<PlannedBiomePatch> readPatches(JsonArray encoded) {
+        List<PlannedBiomePatch> result = new ArrayList<>();
         for (JsonElement element : encoded) {
             JsonObject item = object(element, "biome_patch", Set.of("adventure_level", "biome", "max_x_exclusive",
                     "max_z_exclusive", "min_x", "min_z", "patch_id", "cells_base64", "anchor_x", "anchor_z"));
-            result.add(new GeneratedAdventurePlan.PlannedBiomePatch(string(item, "patch_id"),
+            result.add(new PlannedBiomePatch(string(item, "patch_id"),
                     new ContentId(string(item, "biome")), exactInt(item, "adventure_level"), exactInt(item, "min_x"),
                     exactInt(item, "min_z"), exactInt(item, "max_x_exclusive"), exactInt(item, "max_z_exclusive"),
-                    item.has("cells_base64") ? io.github.luoyan.adventureworldgen.planner.CellMask.decode(string(item, "cells_base64")) : null,
+                    item.has("cells_base64") ? io.github.luoyan.adventureworldgen.spatial.CellMask.decode(string(item, "cells_base64")) : null,
                     item.has("cells_base64") ? exactInt(item, "anchor_x") : (exactInt(item,"min_x") + exactInt(item,"max_x_exclusive"))/2,
                     item.has("cells_base64") ? exactInt(item, "anchor_z") : (exactInt(item,"min_z") + exactInt(item,"max_z_exclusive"))/2));
         }
@@ -455,6 +509,11 @@ public final class PlanV2Codec {
         long value = root.get(key).getAsLong();
         if (root.get(key).getAsDouble() != value) throw new IllegalArgumentException(key + " must be an integer");
         return value;
+    }
+    private static boolean bool(JsonObject root, String key) {
+        if (!root.has(key) || !root.get(key).isJsonPrimitive() || !root.getAsJsonPrimitive(key).isBoolean())
+            throw new IllegalArgumentException(key + " must be a boolean");
+        return root.get(key).getAsBoolean();
     }
     private static double finite(JsonObject root, String key) {
         if (!root.has(key) || !root.get(key).isJsonPrimitive() || !root.getAsJsonPrimitive(key).isNumber())

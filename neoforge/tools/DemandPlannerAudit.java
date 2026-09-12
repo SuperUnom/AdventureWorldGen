@@ -1,6 +1,14 @@
 import io.github.luoyan.adventureworldgen.runtime.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.planner.*;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.terrain.*;
 import io.github.luoyan.adventureworldgen.erosion.*;
 import io.github.luoyan.adventureworldgen.hydrology.*;
@@ -14,25 +22,25 @@ import javax.imageio.ImageIO;
 /** Full frozen environment and biome pipeline; structures use a bounded test footprint, not Minecraft NBT. */
 public class DemandPlannerAudit {
  public static void main(String[] args)throws Exception {
-  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
+  var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
   Path out=Path.of(args[0]);Files.createDirectories(out);
   if(args.length>1&&(args[1].equals("--preview")||args[1].equals("--render"))) {
    long seed=Long.parseLong(args[2]);
-   var plan=new io.github.luoyan.adventureworldgen.persistence.PlanV2Codec().decode(Files.readAllBytes(out.resolve(seed+"-plan.json")),new ContentId("adventureworldgen:default"),"audit",config);
+   var plan=GeneratedAdventurePlan.restore(config,new io.github.luoyan.adventureworldgen.persistence.PlanV2Codec().decode(Files.readAllBytes(out.resolve(seed+"-plan.json")),new ContentId("adventureworldgen:default"),"audit"));
    renderEnvironment(out,seed,config,plan::terrainAt,plan.climate());if(args[1].equals("--render")){validateAndReport(out,seed,config,plan);renderBiomes(out,seed,config,plan);}return;
   }
   for(int a=1;a<args.length;a++) {
    long seed=Long.parseLong(args[a]);long start=System.nanoTime();System.out.println("SEED "+seed+" environment");
    var profile=PlannerProfile.V2;double radius=config.world().radius();
    var coast=new CoastGenerator(profile).generate(seed,radius,Math.min(256,radius/10)+32);
-   var capacity=TerrainCapacityPlan.reserve(seed,config,coast.coastline(),coast.landBand());
-   var island=new IslandMacroTerrain(coast.coastline(),new RegionTerrain(seed,profile,capacity,config.world().terrain(),config),seed,64,coast.landBand(),coast.seaBand(),"terrain-r21");
+   var capacity=TerrainCapacitySolver.reserve(profile,seed,config,coast.coastline(),coast.landBand());
+   var island=new IslandMacroTerrain(coast.coastline(),new RegionTerrain(seed,profile,capacity,config.world().terrain(),config.fillerTerrainPolicy()),seed,64,coast.landBand(),coast.seaBand(),"terrain-r21");
    int extent=(int)Math.ceil((radius+256)/8)*8,size=extent*2/8+1;
    var erosion=new ErosionGenerator(profile,HydrologyProfile.FINITE_CONTINENT).generate(seed,island,-extent,-extent,8,size,size);
    var eroded=new ErodedTerrain(island,erosion,"erosion-v1");
    var rivers=new HydrologyGenerator(profile,HydrologyProfile.FINITE_CONTINENT).generate(seed,radius,64,coast.coastline(),eroded);
    var terrain=new TerrainMorphology(new HydrologyTerrain(eroded,rivers));
-   var climate=new ClimatePlan(seed,config,terrain);
+   var climate=new ClimatePlan(seed,config,terrain,new ClimateDiagnostics(config,ClimatePlan.STEP));
    renderEnvironment(out,seed,config,terrain,climate);
    System.out.println("MAPS "+out.resolve(seed+"-temperature.png")+" "+out.resolve(seed+"-terrain.png"));
    var levels=new JointPlanner.LevelConstraint(){public boolean accepts(int l,int x,int z){return true;}
@@ -41,17 +49,17 @@ public class DemandPlannerAudit {
     java.util.List.of(new AdventurePlanView.PlannedPiece(d.instanceId()+"/0",x-10,y,z-10,x+10,y+14,z+10,new byte[]{1}))),levels);
    System.out.println("SEED "+seed+" filler and validation");
    var plan=new GeneratedAdventurePlan(seed,config,coast.coastline(),rivers,64,coast.landBand(),coast.seaBand(),"terrain-r21",joint.spawn(),joint.patches(),joint.structures(),
-    GeneratedAdventurePlan.PlanDiagnostics.basic(coast.coastline(),rivers),erosion,capacity);
+    PlanDiagnostics.basic(coast.coastline().vertices().size(),rivers.channels().size(),rivers.channels().stream().mapToLong(channel->channel.points().size()).sum(),"terrain-r21"),erosion,capacity);
    validateAndReport(out,seed,config,plan);
    renderBiomes(out,seed,config,plan);
    Files.writeString(out.resolve(seed+"-summary.txt"),"seed="+seed+"\ntarget_ratios="+Arrays.toString(plan.climate().targetRatios())+"\nactual_ratios="+Arrays.toString(plan.climate().actualRatios())+"\nfiller_seeds="+plan.fillerSeedCount()+"\noperations="+joint.operationCount()+"\nseconds="+(System.nanoTime()-start)/1e9+"\nsupply="+plan.climate().supply()+"\n");
    // Exercise the production codec, without publishing an artificial test footprint to a game world.
    var codec=new io.github.luoyan.adventureworldgen.persistence.PlanV2Codec();
-   byte[] encoded=codec.encode(new ContentId("adventureworldgen:default"),"audit",plan);
+   byte[] encoded=codec.encode(new ContentId("adventureworldgen:default"),"audit",plan.snapshot());
    Files.write(out.resolve(seed+"-plan.json"),encoded);
    var loadProgress=PlanningProgress.begin("audit-reload");long loadStart=System.nanoTime();
-   var replay=codec.decode(encoded,new ContentId("adventureworldgen:default"),"audit",config);
-   if(loadProgress.snapshot().stage()!=PlanningProgress.Stage.CACHE)throw new AssertionError("reload replanned "+loadProgress.snapshot().stage());
+   var replay=GeneratedAdventurePlan.restore(config,codec.decode(encoded,new ContentId("adventureworldgen:default"),"audit"));
+   if(loadProgress.snapshot().stage()!=PlanningStage.CACHE)throw new AssertionError("reload replanned "+loadProgress.snapshot().stage());
    System.out.println("RELOAD seed="+seed+" milliseconds="+(System.nanoTime()-loadStart)/1e6+" stage="+loadProgress.snapshot().stage());PlanningProgress.clear();
    for(int z=-3000;z<=3000;z+=71)for(int x=-3000;x<=3000;x+=71)
     if(!plan.biomeAt(x,64,z).equals(replay.biomeAt(x,64,z)))throw new AssertionError("replay mismatch");
@@ -73,7 +81,7 @@ public class DemandPlannerAudit {
    }
    Files.writeString(out.resolve(seed+"-areas.tsv"),report);
  }
- static int components(GeneratedAdventurePlan.PlannedBiomePatch p) {
+ static int components(PlannedBiomePatch p) {
   Set<Long> remaining=new HashSet<>();for(long c:p.mask().cells())remaining.add(c);int n=0;
   while(!remaining.isEmpty()) {n++;var q=new ArrayDeque<Long>();long first=remaining.iterator().next();remaining.remove(first);q.add(first);
    while(!q.isEmpty()){long c=q.remove();int x=CellMask.x(c),z=CellMask.z(c);for(int[] d:new int[][]{{4,0},{-4,0},{0,4},{0,-4}}){long next=CellMask.key(x+d[0],z+d[1]);if(remaining.remove(next))q.add(next);}}
@@ -135,7 +143,7 @@ public class DemandPlannerAudit {
    case "frozen_peaks"->0xE5F1F4;case "stony_peaks"->0xA28D88;case "windswept_forest"->0x748664;
    case "windswept_hills"->0x979266;case "windswept_gravelly_hills"->0x929CA0;case "desert"->0xE1C183;
    case "savanna"->0xB0AA50;case "savanna_plateau"->0xB9995F;case "windswept_savanna"->0xC2AD79;
-   default->Color.HSBtoRGB((float)((PlacementIndex.mix(n.hashCode())>>>11)*0x1.0p-53),.43f,.88f)&0xffffff;
+   default->Color.HSBtoRGB((float)((DeterministicRandom.mix(n.hashCode())>>>11)*0x1.0p-53),.43f,.88f)&0xffffff;
   };
  }
  static int heatColor(double value) {

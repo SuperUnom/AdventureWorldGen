@@ -1,11 +1,12 @@
 package io.github.luoyan.adventureworldgen.runtime;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,8 @@ import java.util.List;
 import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.testing.TerrainSnapshots;
 
 class DeterminismAcceptanceTest {
     @Test
@@ -33,16 +36,18 @@ class DeterminismAcceptanceTest {
                 new Vec2(512, 512), new Vec2(-512, 512));
         var coast = new Coastline(vertices);
         var rivers = new RiverNetwork(List.of(), List.of(), PlannerProfile.V2.hydrologyVersion());
-        var patches = List.of(new GeneratedAdventurePlan.PlannedBiomePatch(
+        var patches = List.of(new PlannedBiomePatch(
                 "patch/required/0", new ContentId("minecraft:forest"), 3, 96, -32, 160, 32),
-                new GeneratedAdventurePlan.PlannedBiomePatch(
+                new PlannedBiomePatch(
                         "patch/spawn", new ContentId("minecraft:plains"), 0, -128, -128, 128, 128));
         String expectedPlanHash = null;
         for (int run = 0; run < 10; run++) {
             var plan = new GeneratedAdventurePlan(0x5EEDL, config, coast, rivers, 64, 64, 128,
-                    "terrain-v2", null, patches, List.of(),
-                    GeneratedAdventurePlan.PlanDiagnostics.basic(coast, rivers), null);
-            byte[] encoded = new PlanV2Codec().encode(new ContentId("adventureworldgen:default"), "same-input", plan);
+                    TerrainSnapshots.SYNTHETIC_TERRAIN, null, patches, List.of(),
+                    PlanDiagnostics.basic(coast.vertices().size(), rivers.channels().size(),
+                            rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
+                            TerrainSnapshots.productionTerrainDetail(rivers.version())), null);
+            byte[] encoded = new PlanV2Codec().encode(new ContentId("adventureworldgen:default"), "same-input", plan.snapshot());
             String planHash = AtomicPlanRepository.sha256(encoded);
             if (expectedPlanHash == null) expectedPlanHash = planHash;
             assertEquals(expectedPlanHash, planHash);

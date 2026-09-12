@@ -1,5 +1,9 @@
 /* Diagnostic preview of continuous terrain before erosion; not a Minecraft screenshot. */
 import io.github.luoyan.adventureworldgen.terrain.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.hydrology.*;
 import io.github.luoyan.adventureworldgen.runtime.*;
 import io.github.luoyan.adventureworldgen.planner.*;
@@ -16,7 +20,7 @@ public class TerrainPreview {
   var island=new IslandMacroTerrain(c.coastline(),new RegionTerrain(seed,PlannerProfile.V2),seed,64,c.landBand(),c.seaBand(),"r5");
   var rivers=new HydrologyGenerator(PlannerProfile.V2,HydrologyProfile.FTF_ADAPTED_V1).generate(seed,3000,64,c.coastline(),island);
   var plan=new GeneratedAdventurePlan(seed,config,c.coastline(),rivers,64,c.landBand(),c.seaBand(),"r5",null,
-   List.of(new GeneratedAdventurePlan.PlannedBiomePatch("spawn",new ContentId("minecraft:plains"),0,-184,-184,184,184)),List.of(),GeneratedAdventurePlan.PlanDiagnostics.basic(c.coastline(),rivers),null);
+   List.of(new PlannedBiomePatch("spawn",new ContentId("minecraft:plains"),0,-184,-184,184,184)),List.of(),PlanDiagnostics.basic(c.coastline().vertices().size(),rivers.channels().size(),rivers.channels().stream().mapToLong(channel->channel.points().size()).sum(),"r5"),null);
   Path dir=Path.of("build/reports/terrain-r6"); Files.createDirectories(dir);
   try(var out=new DataOutputStream(new BufferedOutputStream(Files.newOutputStream(dir.resolve("map.bin"))))) {
    for(int z=-3200;z<3200;z+=8) for(int x=-3200;x<3200;x+=8) {

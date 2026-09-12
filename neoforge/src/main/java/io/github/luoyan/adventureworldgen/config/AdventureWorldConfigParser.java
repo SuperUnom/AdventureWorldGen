@@ -20,6 +20,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.SpawnStruc
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.StructureSettings;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Vec3d;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.WorldSettings;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 import java.io.IOException;
 import java.io.Reader;
@@ -33,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Strict parser for the first author configuration contract. */
 public final class AdventureWorldConfigParser {
@@ -217,18 +219,18 @@ public final class AdventureWorldConfigParser {
                 if (min != null && max != null && min > max) throw conflict(rulePath, "min_height exceeds max_height");
                 long temperature = rule.has("temperature_level") ? integer(rule.get("temperature_level"), rulePath + ".temperature_level") : 5;
                 if (temperature < 0 || temperature > 10) throw error(rulePath + ".temperature_level", "must be in [0,10]");
-                Map<AdventureWorldConfig.TemperatureType,Double> types = new java.util.EnumMap<>(AdventureWorldConfig.TemperatureType.class);
+                Map<TemperatureType,Double> types = new java.util.EnumMap<>(TemperatureType.class);
                 if(rule.has("temperatures")) {
                     var ts=object(rule.get("temperatures"),rulePath+".temperatures",Set.of("very_cold","cold","medium","hot"));
                     for(var e:ts.entrySet()) {
                         double weight=finiteNumber(e.getValue(),rulePath+".temperatures."+e.getKey());
                         if(weight<=0)throw error(rulePath+".temperatures", "preferences must be positive");
-                        types.put(AdventureWorldConfig.TemperatureType.valueOf(e.getKey().toUpperCase(java.util.Locale.ROOT)),weight);
+                        types.put(TemperatureType.valueOf(e.getKey().toUpperCase(java.util.Locale.ROOT)),weight);
                     }
                     if(types.isEmpty())throw error(rulePath+".temperatures","must not be empty");
                 } else if(rule.has("temperature_level")) {
-                    types.put(AdventureWorldConfig.TemperatureType.fromLevel((int)temperature),1.0);
-                } else types.putAll(AdventureWorldConfig.TemperatureType.unrestricted());
+                    types.put(TemperatureType.fromLevel((int)temperature),1.0);
+                } else types.putAll(TemperatureType.unrestricted());
                 Map<AdventureWorldConfig.HumidityType,Double> humidities = new java.util.EnumMap<>(AdventureWorldConfig.HumidityType.class);
                 if(rule.has("humidities")) {
                     var hs=object(rule.get("humidities"),rulePath+".humidities",Set.of("dry","medium","wet"));

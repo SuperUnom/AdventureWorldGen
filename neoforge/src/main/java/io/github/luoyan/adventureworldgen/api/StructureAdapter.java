@@ -1,20 +1,24 @@
 package io.github.luoyan.adventureworldgen.api;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.util.List;
 
-/** Structure implementations must freeze all random choices before plan publication. */
+/**
+ * Structure implementations must freeze all random choices before plan publication.
+ *
+ * <p>There is exactly one execution path for a planned structure, and this interface covers its
+ * first half: an adapter turns a demand into frozen pieces ({@link Prepared#pieces()}), the plan
+ * stores their canonical NBT, and the Minecraft side rebuilds them through the registered piece
+ * types before injecting a vanilla {@code StructureStart}. Placement is then Minecraft's own chunk
+ * pipeline, so an adapter neither places blocks nor keeps per-chunk commit state.
+ */
 public interface StructureAdapter {
     ContentId structureId();
     String adapterVersion();
     Descriptor describe();
     Prepared prepare(Candidate candidate, long structureSeed);
     List<String> validatePrepared(Prepared structure, MacroTerrain terrain);
-    byte[] serializePieces(Prepared structure);
-
-    /** Must be idempotent for the same (instance,piece,chunk) key. */
-    void placeChunk(Prepared structure, int chunkX, int chunkZ, PlacementTarget target);
 
     record Descriptor(List<String> rotations, double maximumFootprintRadius,
                       boolean canFreezeAllPieces, boolean requiresSupportPatch) {
@@ -32,9 +36,4 @@ public interface StructureAdapter {
         }
     }
     record HorizontalBox(int minX, int minZ, int maxX, int maxZ) {}
-
-    interface PlacementTarget {
-        boolean beginOnce(String instanceId, String pieceId, int chunkX, int chunkZ);
-        void placeCanonicalPiece(AdventurePlanView.PlannedPiece piece);
-    }
 }

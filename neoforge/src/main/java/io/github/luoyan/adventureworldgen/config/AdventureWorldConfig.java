@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.Set;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import java.util.Objects;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 /** Immutable, normalized author configuration for planner-v2. */
 public record AdventureWorldConfig(
@@ -42,6 +44,39 @@ public record AdventureWorldConfig(
         }
     }
 
+    /**
+     * Temperature preference weights for one biome. These are author semantics, so they live on the
+     * author model: the climate field reads them to pick the spawn band, and the biome rules read
+     * them for admission and scoring, without either layer depending on the other.
+     */
+    public java.util.Map<io.github.luoyan.adventureworldgen.plan.TemperatureType, Double> temperaturePreferences(
+            io.github.luoyan.adventureworldgen.plan.ContentId id) {
+        var rule = biomes().terrainRules().get(id);
+        return rule == null ? io.github.luoyan.adventureworldgen.plan.TemperatureType.unrestricted()
+                : rule.temperatures();
+    }
+
+    /** Filler weight used to rank and seed filler candidates. */
+    public double fillerWeight(io.github.luoyan.adventureworldgen.plan.ContentId id) {
+        var rule = biomes().terrainRules().get(id);
+        return rule == null ? 1 : rule.fillerWeight();
+    }
+
+    /**
+     * The author's filler rules, reduced to the single question the terrain sampler asks: may these
+     * two recipes meet inside one filler biome? Kept on the author model so terrain only ever sees
+     * the answer, never the config type.
+     */
+    public io.github.luoyan.adventureworldgen.terrain.FillerTerrainPolicy fillerTerrainPolicy() {
+        return (first, second) -> biomes().filler().stream().anyMatch(id -> {
+            var rule = biomes().terrainRules().get(id);
+            return rule == null || (!rule.shoreOnly() && rule.landforms().isEmpty()
+                    && rule.minHeight() == null && rule.maxHeight() == null
+                    && rule.effectiveTemplates().contains(first.id())
+                    && rule.effectiveTemplates().contains(second.id()));
+        });
+    }
+
     public record BiomeSettings(List<RequiredBiome> required, List<ContentId> filler,
                                 Map<ContentId, TerrainRule> terrainRules, int blendRadius) {
         public BiomeSettings(List<RequiredBiome> required, List<ContentId> filler, Map<ContentId, TerrainRule> rules) {
@@ -65,13 +100,7 @@ public record AdventureWorldConfig(
         }
     }
 
-    public enum TemperatureType {
-        VERY_COLD, COLD, MEDIUM, HOT;
-        public static TemperatureType fromLevel(int level) { return level <= 1 ? VERY_COLD : level <= 3 ? COLD : level >= 7 ? HOT : MEDIUM; }
-        public static Map<TemperatureType, Double> unrestricted() {
-            return Map.of(VERY_COLD,1.0,COLD,1.0,MEDIUM,1.0,HOT,1.0);
-        }
-    }
+    // The temperature classification is shared with the frozen climate state and lives in plan.
 
     public enum HumidityType { DRY, MEDIUM, WET }
 

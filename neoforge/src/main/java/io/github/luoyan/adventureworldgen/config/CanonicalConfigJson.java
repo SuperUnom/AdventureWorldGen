@@ -8,6 +8,8 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Vec3d;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
 /** Writes normalized author configuration with fixed key order and no insignificant whitespace. */
 public final class CanonicalConfigJson {
@@ -52,7 +54,7 @@ public final class CanonicalConfigJson {
                         json.endArray();
                     }
                     json.name("temperatures").beginObject();
-                    for(var type:AdventureWorldConfig.TemperatureType.values())if(rule.temperatures().containsKey(type))
+                    for(var type:TemperatureType.values())if(rule.temperatures().containsKey(type))
                         json.name(type.name().toLowerCase(java.util.Locale.ROOT)).value(rule.temperatures().get(type));
                     json.endObject();
                     if(!rule.humidities().isEmpty()) {

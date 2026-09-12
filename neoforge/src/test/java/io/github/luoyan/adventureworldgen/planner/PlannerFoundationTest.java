@@ -1,13 +1,15 @@
 package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.AreaRange;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.spatial.AreaGrid;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.StableIds;
 
 class PlannerFoundationTest {
     @Test

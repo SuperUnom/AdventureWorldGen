@@ -5,6 +5,7 @@ import io.github.luoyan.adventureworldgen.config.*;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class TemperatureLayoutTest {
     @Test void temperatureIsMetadataAndLegacyDefaultIsFive() {

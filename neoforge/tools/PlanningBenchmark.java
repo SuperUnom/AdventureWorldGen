@@ -1,5 +1,7 @@
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanner;
+import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.*;
 import java.util.List;
 import java.nio.file.*;
@@ -14,8 +16,8 @@ public final class PlanningBenchmark {
         if (Files.exists(world)) throw new IllegalArgumentException("output directory must be new: " + world);
         var config = new AdventureWorldConfigParser().parse(Files.readString(Path.of(args[0])));
         String canonical = CanonicalConfigJson.write(config);
-        var loaded = new ProfileManager.LoadedProfile(new ContentId("adventureworldgen:default"),
-                config, canonical, "benchmark", "benchmark");
+        var loaded = new LoadedProfile(new ContentId("adventureworldgen:default"),
+                config, canonical, "benchmark");
         long start = System.nanoTime();
         var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).add(new StructureAdapter() {
             public ContentId structureId() { return new ContentId("minecraft:desert_pyramid"); }
@@ -28,10 +30,12 @@ public final class PlanningBenchmark {
                 return new Prepared(c, List.of(piece), List.of(box), List.of(box), c.originX(), c.originY(), c.originZ());
             }
             public List<String> validatePrepared(Prepared p, MacroTerrain t) { return List.of(); }
-            public byte[] serializePieces(Prepared p) { return new byte[]{1}; }
-            public void placeChunk(Prepared p, int x, int z, PlacementTarget t) { throw new UnsupportedOperationException(); }
         }).build();
-        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters);
+        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters,
+                // The benchmark freezes a placeholder piece it never restores, and it must not boot
+                // the game registries to answer a piece-type question. Production planning passes
+                // RegisteredPieceSupport, which is the same lookup the restore path uses.
+                structure -> java.util.Optional.empty());
         System.out.printf("PLANNING seconds=%.3f patches=%d structures=%d%n",
                 (System.nanoTime() - start) / 1e9, plan.biomePatches().size(), plan.structures().size());
     }

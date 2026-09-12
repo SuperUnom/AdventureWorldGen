@@ -1,5 +1,6 @@
 import io.github.luoyan.adventureworldgen.terrain.*;
 import io.github.luoyan.adventureworldgen.planner.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import java.util.*;
 /** Compare old clipping to fitted envelopes using the same reserved planning category and seeds. */
 public class HeightReservationAudit {

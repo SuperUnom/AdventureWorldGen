@@ -1,41 +1,42 @@
 package io.github.luoyan.adventureworldgen.runtime;
 
-import io.github.luoyan.adventureworldgen.config.ProfileManager;
+import io.github.luoyan.adventureworldgen.config.LoadedProfile;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyGenerator;
 import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
-import io.github.luoyan.adventureworldgen.hydrology.HydrologyTerrain;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
-import io.github.luoyan.adventureworldgen.terrain.IslandMacroTerrain;
-import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
+import io.github.luoyan.adventureworldgen.api.FrozenPieceSupport;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningStage;
+import io.github.luoyan.adventureworldgen.cost.AdventurePreference;
 import io.github.luoyan.adventureworldgen.cost.CostPlanner;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.erosion.ErosionGenerator;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Deterministic stage orchestration; wall-clock time is logging only and never a termination input. */
 public final class RuntimePlanner {
     private static final Logger LOGGER = LoggerFactory.getLogger(RuntimePlanner.class);
-    /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-shelves-diverse-defaults-r33";
     private RuntimePlanner() {}
 
-    public static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,
-                                              AdapterRegistry adapters) {
+    public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
+                                              AdapterRegistry adapters, FrozenPieceSupport pieceSupport) {
         var progress = PlanningProgress.begin(loaded.id().toString());
         try {
-            var result = plan(seed, loaded, worldDirectory, adapters, progress);
+            var result = plan(seed, loaded, worldDirectory, adapters, pieceSupport, progress);
             progress.complete();
             return result;
         } catch (RuntimeException | Error failure) {
@@ -44,16 +45,25 @@ public final class RuntimePlanner {
         }
     }
 
-    private static GeneratedAdventurePlan plan(long seed, ProfileManager.LoadedProfile loaded, Path worldDirectory,
-                                               AdapterRegistry adapters, PlanningProgress.Run progress) {
-        String inputHash = inputHash(seed, loaded, adapters);
+    private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
+                                               AdapterRegistry adapters, FrozenPieceSupport pieceSupport,
+                                               PlanningProgress.Run progress) {
+        // The one place the production profile is chosen. Everything below receives it instead of
+        // reaching for PlannerProfile.V2 on its own, so a re-versioned or re-budgeted profile
+        // reaches every sub-stage and the recorded identity describes the run that actually ran.
+        var profile = PlannerProfile.V2;
+        String inputHash = PlanIdentity.hash(seed, loaded, adapters, profile);
         AtomicPlanRepository repository = new AtomicPlanRepository();
         PlanV2Codec codec = new PlanV2Codec();
         try {
             var existing = repository.loadReady(worldDirectory, loaded.id(), inputHash);
             if (existing.isPresent()) {
-                LOGGER.info("AdventureWorldGen loading READY {} for {}", PlannerProfile.V2.planFormatVersion(), loaded.id());
-                return codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash, loaded.config());
+                LOGGER.info("AdventureWorldGen loading READY {} for {}", profile.planFormatVersion(), loaded.id());
+                var restored = GeneratedAdventurePlan.restore(loaded.config(),
+                        codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash));
+                // A READY plan is handed back only if this environment can rebuild every piece in it.
+                checkFrozenPieces(restored.structures(), pieceSupport);
+                return restored;
             }
         } catch (IOException failure) {
             throw new IllegalStateException("could not load AdventureWorldGen plan", failure);
@@ -62,117 +72,109 @@ public final class RuntimePlanner {
         var metrics=new PlanningMetrics();
         double radius = loaded.config().world().radius();
         double spawnRadius = StrictMath.min(256.0, radius / 10.0);
-        double spawnFootprint = loaded.config().spawn().hasStructure()
-                ? adapters.structure(loaded.config().spawn().structure().id()).orElseThrow(() ->
-                new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "spawn-reservation",
-                        "spawn structure has no adapter", java.util.Map.of("content_id",
-                        loaded.config().spawn().structure().id()))).describe().maximumFootprintRadius()
-                + StrictMath.hypot(loaded.config().spawn().structure().spawnPoint().x(),
-                loaded.config().spawn().structure().spawnPoint().z()) : 0.0;
+        double spawnFootprint = StructureAdapterBridge.spawnReservationRadius(adapters, loaded.config());
         double keep = spawnRadius + spawnFootprint + StrictMath.min(32.0, radius / 20.0);
         LOGGER.info("AdventureWorldGen planning coast for {} with seed {}", loaded.id(), seed);
-        progress.stage(PlanningProgress.Stage.COAST);
-        var coast = new CoastGenerator(PlannerProfile.V2).generate(seed, radius, keep);
-        metrics.finish("coast");
+        progress.stage(PlanningStage.COAST);
+        var coast = new CoastGenerator(profile).generate(seed, radius, keep);
+        metrics.finish(PlanningMetrics.Stage.COAST);
         LOGGER.info("AdventureWorldGen planning continuous regions for {}", loaded.id());
-        var capacities = io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.reserve(seed,loaded.config(),coast.coastline(),coast.landBand());
-        metrics.finish("capacity_reservation");
-        var regions = new RegionTerrain(seed, PlannerProfile.V2,capacities,loaded.config().world().terrain(),loaded.config());
-        var island = new IslandMacroTerrain(coast.coastline(), regions, seed, 64.0,
-                coast.landBand(), coast.seaBand(), "terrain-r22");
+        var capacities = io.github.luoyan.adventureworldgen.planner.TerrainCapacitySolver.reserve(profile, seed,loaded.config(),coast.coastline(),coast.landBand());
+        metrics.finish(PlanningMetrics.Stage.CAPACITY_RESERVATION);
+        var terrainFoundation = PlanTerrain.foundation(profile, seed, loaded.config(), capacities, coast.coastline(),
+                64.0, coast.landBand(), coast.seaBand(), PlanVersions.TERRAIN);
         LOGGER.info("AdventureWorldGen simulating and freezing erosion delta field for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.EROSION);
+        progress.stage(PlanningStage.EROSION);
         int erosionSpacing = 8;
         int erosionExtent = (int) StrictMath.ceil((radius + 256.0) / erosionSpacing) * erosionSpacing;
         int erosionSize = erosionExtent * 2 / erosionSpacing + 1;
-        var erosion = new ErosionGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
-                .generate(seed, island, -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningProgress.Stage.EROSION));
-        metrics.finish("erosion");
-        var erodedIsland = new io.github.luoyan.adventureworldgen.erosion.ErodedTerrain(island, erosion, "erosion-v2");
-        LOGGER.info("AdventureWorldGen planning {} hydrology for {}", PlannerProfile.V2.hydrologyVersion(), loaded.id());
-        progress.stage(PlanningProgress.Stage.RIVERS);
-        var rivers = new HydrologyGenerator(PlannerProfile.V2, HydrologyProfile.FINITE_CONTINENT)
+        var erosion = new ErosionGenerator(profile, HydrologyProfile.FINITE_CONTINENT)
+                .generate(seed, terrainFoundation.island(), -erosionExtent, -erosionExtent, erosionSpacing, erosionSize, erosionSize, progress.within(PlanningStage.EROSION));
+        metrics.finish(PlanningMetrics.Stage.EROSION);
+        var erodedIsland = terrainFoundation.eroded(erosion);
+        LOGGER.info("AdventureWorldGen planning {} hydrology for {}", profile.hydrologyVersion(), loaded.id());
+        progress.stage(PlanningStage.RIVERS);
+        var rivers = new HydrologyGenerator(profile, HydrologyProfile.FINITE_CONTINENT)
                 .generate(seed, radius, 64.0, coast.coastline(), erodedIsland);
-        metrics.finish("rivers");
-        var waterTerrain = new HydrologyTerrain(erodedIsland, rivers);
-        var erodedTerrain = new io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain(
-                new io.github.luoyan.adventureworldgen.terrain.TerrainMorphology(waterTerrain),262144);
+        metrics.finish(PlanningMetrics.Stage.RIVERS);
+        // Planning queries keep the memoizing wrapper warm and the same stack is handed to the
+        // plan; a READY reload composes this stack without the wrapper (accepted optimization).
+        var planningTerrain = PlanTerrain.compose(terrainFoundation, erodedIsland, rivers).withMemoizedQueries();
+        var erodedTerrain = planningTerrain.terrain();
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.COSTS);
-        var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningProgress.Stage.COSTS));
-        metrics.finish("cost_graph");
-        LOGGER.info("AdventureWorldGen cost graph has {} nodes and {} canonical edges for {}",
-                costs.nodeCount(), costs.edgeStats().computations(), loaded.id());
+        progress.stage(PlanningStage.COSTS);
+        var costs = new CostPlanner(profile).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
+        metrics.finish(PlanningMetrics.Stage.COST_GRAPH);
+        // Names matter here: computedPairs counts canonical undirected pairs actually evaluated
+        // (blocked ones included), while allocatedSlots is the reserved nodeCount*4 capacity. The
+        // old "canonical edges" label read as the graph's edge count, which it never was.
+        LOGGER.info("AdventureWorldGen cost graph has {} nodes, {} allocated slots and {} computed adjacent pairs for {}",
+                costs.nodeCount(), costs.edgeStats().allocatedSlots(), costs.edgeStats().computedPairs(),
+                loaded.id());
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
-        progress.stage(PlanningProgress.Stage.PLACEMENT);
-        var jointPlanner = new JointPlanner(PlannerProfile.V2);
+        progress.stage(PlanningStage.PLACEMENT);
+        var jointPlanner = new JointPlanner(profile);
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
-                (demand, x, y, z, structureSeed) -> {
-                    var adapter = adapters.structure(demand.structureId()).orElseThrow(() ->
-                            new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, "structure-prepare",
-                                    "no adapter for planned structure", java.util.Map.of("content_id", demand.structureId())));
-                    var rotations = adapter.describe().rotations();
-                    String rotation = rotations.get(Math.floorMod((int) structureSeed, rotations.size()));
-                    var prepared = adapter.prepare(new io.github.luoyan.adventureworldgen.api.StructureAdapter.Candidate(
-                            demand.instanceId(), x, y, z, rotation), structureSeed);
-                    var errors = adapter.validatePrepared(prepared, erodedTerrain);
-                    if (!errors.isEmpty()) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
-                            "structure-prepare", "prepared structure failed validation",
-                            java.util.Map.of("instance_id", demand.instanceId(), "errors", errors));
-                    return new AdventurePlanView.PlannedStructure(demand.instanceId(), demand.structureId(), x, y, z,
-                            rotation, prepared.entranceX(), prepared.entranceY(), prepared.entranceZ(),
-                            prepared.footprint(), prepared.biomeProtection(), prepared.pieces());
-                }, new JointPlanner.LevelConstraint() {
-                    public boolean accepts(int level,int x,int z) { return true; }
-                    public double penalty(int level,int x,int z) {
-                        return io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(level,
-                                costs.normalizedPreferenceAt(x,z,loaded.config().world().radius()));
-                    }
-                }, (biome, x, z) -> adapters.biome(biome)
-                        .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress.within(PlanningProgress.Stage.PLACEMENT), metrics::finish);
-        GeneratedAdventurePlan plan = new GeneratedAdventurePlan(seed, loaded.config(), coast.coastline(), rivers,
-                64.0, coast.landBand(), coast.seaBand(), "terrain-r22", joint.spawn(),
-                joint.patches(), joint.structures(), new GeneratedAdventurePlan.PlanDiagnostics(
+                new StructureAdapterBridge(adapters, erodedTerrain),
+                // Adventure level is a soft preference: it ranks candidates by the coarse-grid cost
+                // signal and never rejects a position (see JointPlanner.preferenceOnly).
+                JointPlanner.preferenceOnly((level, x, z) -> AdventurePreference.penalty(level,
+                        costs.normalizedPreferenceAt(x, z, loaded.config().world().radius()))),
+                (biome, x, z) -> adapters.biome(biome)
+                        .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress, progress.within(PlanningStage.PLACEMENT), metrics::finish);
+        GeneratedAdventurePlan plan = GeneratedAdventurePlan.fromPlanning(profile, seed, loaded.config(), coast.coastline(), rivers,
+                64.0, coast.landBand(), coast.seaBand(), PlanVersions.TERRAIN, joint.spawn(),
+                joint.patches(), joint.structures(), new io.github.luoyan.adventureworldgen.plan.PlanDiagnostics(
                 coast.vertexCount(), rivers.channels().size(),
                 rivers.channels().stream().mapToLong(channel -> channel.points().size()).sum(),
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
-                costs.nodeCount(), costs.edgeStats().computations(), joint.operationCount(),
-                "terrain-r22+" + PlannerProfile.V2.hydrologyVersion() + "+erosion-v2"), erosion,capacities,null,
-                new GeneratedAdventurePlan.PlanningInputs(regions,island,waterTerrain,erodedTerrain,jointPlanner.climate()));
-        metrics.finish("filler_and_transition");
-        progress.stage(PlanningProgress.Stage.VALIDATION);
-        for(var demand:new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(loaded.config()).patches()) {
-            var patch=plan.biomePatches().stream().filter(p->p.patchId().equals(demand.patchId())).findFirst().orElse(null);
-            if(patch==null) {
-                LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",demand.patchId(),demand.area().min());
-                continue;
-            }
-            long effective=plan.effectiveArea(patch);
-            if(effective<Math.min(demand.area().min(),patch.area()))throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"effective-area",
-                    "mixing reduced the achieved dry biome quota",java.util.Map.of("patch",patch.patchId(),"effective_area",effective,"achieved_area",patch.area()));
-            if(effective<demand.area().min())LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
-                    patch.patchId(),demand.area().min(),effective);
-        }
-        metrics.finish("validation");
+                costs.nodeCount(), costs.edgeStats().computedPairs(), joint.operationCount(),
+                PlanVersions.TERRAIN + "+" + profile.hydrologyVersion() + "+" + PlanVersions.EROSION), erosion,capacities,
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
+        metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
+        progress.stage(PlanningStage.VALIDATION);
+        // The policy compares request against achieved area; reporting and failure text stay here.
+        io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.checkAchievedAreas(loaded.config(),
+                plan.biomePatches(), plan::effectiveArea, relaxation -> {
+                    if (relaxation.noLegalArea())
+                        LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",
+                                relaxation.patchId(), relaxation.requested());
+                    else LOGGER.warn("Biome minimum relaxed: {} requested={}, effective={}",
+                            relaxation.patchId(), relaxation.requested(), relaxation.achieved());
+                });
+        metrics.finish(PlanningMetrics.Stage.VALIDATION);
         metrics.adventure(joint.patches(),costs,radius);
-        progress.stage(PlanningProgress.Stage.SAVE);
+        // Nothing is published unless every frozen piece can be rebuilt in this environment.
+        checkFrozenPieces(plan.structures(), pieceSupport);
+        progress.stage(PlanningStage.SAVE);
         try {
-            repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan), inputHash);
+            repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan.snapshot()), inputHash);
         } catch (IOException failure) {
             throw new IllegalStateException("could not atomically publish AdventureWorldGen plan", failure);
         }
         LOGGER.info("AdventureWorldGen plan READY for {} in {} ms", loaded.id(), (System.nanoTime() - started) / 1_000_000);
-        metrics.finish("save");
+        metrics.finish(PlanningMetrics.Stage.SAVE);
         try { metrics.write(worldDirectory,seed,plan); }
         catch(IOException unavailable) { LOGGER.warn("Could not write planning timing diagnostics",unavailable); }
         return plan;
     }
 
-    public static String inputHash(long seed, ProfileManager.LoadedProfile loaded, AdapterRegistry adapters) {
-        String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
-                + "\nimplementation=" + IMPLEMENTATION_REVISION
-                + "\nhydrology=" + PlannerProfile.V2.hydrologyVersion() + "\nterrain=terrain-r22\nadapters="
-                + String.join(",", adapters.versionKeys()) + "\ncost=directed-cost-16x8-v1\nerosion=ftf-erosion-block-units-v2";
-        return AtomicPlanRepository.sha256(input.getBytes(StandardCharsets.UTF_8));
+    /**
+     * Every frozen piece must have a registered piece type before a plan is published or restored.
+     * The environment answers this; the frozen NBT, not a descriptor or a plan field, names the
+     * type, so a companion mod is covered by registering its piece type.
+     */
+    private static void checkFrozenPieces(List<AdventurePlanView.PlannedStructure> structures,
+                                          FrozenPieceSupport pieceSupport) {
+        for (var structure : structures) {
+            var unsupported = pieceSupport.firstUnsupported(structure);
+            if (unsupported.isEmpty()) continue;
+            throw new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, FailureStage.STRUCTURE_PIECE_RESTORE,
+                    "frozen structure piece has no registered piece type",
+                    Map.of("structure_id", structure.structureId().value(),
+                            "instance_id", structure.instanceId(),
+                            "piece_id", unsupported.get().pieceId(),
+                            "piece_type", unsupported.get().pieceType()));
+        }
     }
 }

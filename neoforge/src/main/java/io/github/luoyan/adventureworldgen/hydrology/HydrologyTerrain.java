@@ -13,7 +13,7 @@ import java.util.Map;
 /** Four-zone river/lake/wetland carving over the immutable base terrain. */
 public final class HydrologyTerrain implements MacroTerrain {
     private final MacroTerrain base;
-    private final io.github.luoyan.adventureworldgen.terrain.GradientNoise lakeWarpX, lakeWarpZ, lakeFineX, lakeFineZ, wetlandMounds, wetlandWarp;
+    private final io.github.luoyan.adventureworldgen.noise.GradientNoise lakeWarpX, lakeWarpZ, lakeFineX, lakeFineZ, wetlandMounds, wetlandWarp;
     private final RiverNetwork network;
     private final RiverMorphology morphology;
     private final Map<Long, List<ChannelSegments>> segmentBuckets;
@@ -25,12 +25,12 @@ public final class HydrologyTerrain implements MacroTerrain {
         this.base = base; this.network = network;
         long seed = network.hashCode();
         morphology = new RiverMorphology(network);
-        lakeWarpX = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/x", 200);
-        lakeWarpZ = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/z", 200);
-        lakeFineX = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/fine-x", 50);
-        lakeFineZ = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/lake/fine-z", 50);
-        wetlandMounds = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/wetland/mounds", 10);
-        wetlandWarp = new io.github.luoyan.adventureworldgen.terrain.GradientNoise(seed, "ftf/wetland/warp", 25);
+        lakeWarpX = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/lake/x", 200);
+        lakeWarpZ = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/lake/z", 200);
+        lakeFineX = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/lake/fine-x", 50);
+        lakeFineZ = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/lake/fine-z", 50);
+        wetlandMounds = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/wetland/mounds", 10);
+        wetlandWarp = new io.github.luoyan.adventureworldgen.noise.GradientNoise(seed, "ftf/wetland/warp", 25);
         this.segmentBuckets = indexSegments(network);
         this.wetlandBuckets = indexWetlands(network);
         this.lakeBuckets = indexLakes(network, base);

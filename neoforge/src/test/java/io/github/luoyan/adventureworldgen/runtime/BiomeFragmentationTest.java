@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.*;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class BiomeFragmentationTest {
     @Test void defaultTerrainAndFillerKeepLargeInteriorsAcrossRegressionSeeds() throws Exception {

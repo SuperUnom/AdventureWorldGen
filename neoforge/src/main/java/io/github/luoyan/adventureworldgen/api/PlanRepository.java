@@ -1,6 +1,6 @@
 package io.github.luoyan.adventureworldgen.api;
 
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.io.IOException;
 import java.nio.file.Path;

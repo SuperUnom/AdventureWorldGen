@@ -1,6 +1,7 @@
 package io.github.luoyan.adventureworldgen.terrain;
 
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 
 /** Rotated shear composition gives bays within bays without folding the coast over itself.
  * Each shear preserves its transverse coordinate, so its inverse is the opposite displacement.

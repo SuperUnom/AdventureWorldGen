@@ -1,5 +1,6 @@
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import java.nio.file.*;
 import java.util.zip.GZIPInputStream;
@@ -15,7 +16,8 @@ public class ChunkQueryBenchmark {
   var config=new AdventureWorldConfigParser().parse(Files.readString(Path.of(args[1])));
   var hash=JsonParser.parseString(Files.readString(dir.resolve("manifest.json"))).getAsJsonObject().get("input_sha256").getAsString();
   byte[] bytes;try(var in=new GZIPInputStream(Files.newInputStream(dir.resolve("plan.json.gz")))){bytes=in.readAllBytes();}
-  var plan=new PlanV2Codec().decode(bytes,new ContentId("adventureworldgen:default"),hash,config);
+  var plan=GeneratedAdventurePlan.restore(config,
+    new PlanV2Codec().decode(bytes,new ContentId("adventureworldgen:default"),hash));
   for(int run=0;run<4;run++) {
    long start=System.nanoTime(),sum=0;
    for(int chunk=0;chunk<64;chunk++) {

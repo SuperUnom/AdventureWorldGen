@@ -7,6 +7,8 @@ import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 class TerrainRecipesTest {
     @Test void strongPlateauDetailIsIncludedInCapacityAndWorldHeightEnvelopes() {
@@ -21,7 +23,7 @@ class TerrainRecipesTest {
         assertEquals(1.1,settings.maximumShape(TerrainTemplate.HILLS_1,TerrainTemplate.PLATEAU));
         assertEquals(1.05,TerrainSettings.defaults().maximumShape(TerrainTemplate.PLATEAU,null));
         var coast=new Coastline(List.of(new Vec2(-1000,-1000),new Vec2(1000,-1000),new Vec2(1000,1000),new Vec2(-1000,1000)));
-        var capacity=TerrainCapacityPlan.reserve(7331,config,coast,64);
+        var capacity=TerrainCapacitySolver.reserve(PlannerProfile.V2, 7331,config,coast,64);
         assertFalse(capacity.reservations().isEmpty());
         for(var r:capacity.reservations()) {
             double high=64+r.baseElevation()+1.1*r.amplitude();
@@ -30,7 +32,7 @@ class TerrainRecipesTest {
         }
         var templates=new EnumMap<TerrainTemplate,TerrainTemplate.Settings>(TerrainTemplate.class);
         for(var t:TerrainTemplate.values())templates.put(t,new TerrainTemplate.Settings(t==TerrainTemplate.PLATEAU?1:0,1,220,2));
-        var terrain=new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),new TerrainSettings(templates,false,false),null);
+        var terrain=new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),new TerrainSettings(templates,false,false),FillerTerrainPolicy.CATEGORY_ONLY);
         var r=terrain.region(2,2);
         assertTrue(64+r.baseElevation()+1.1*r.amplitude()<=310+1e-9);
     }
@@ -129,6 +131,52 @@ class TerrainRecipesTest {
         for(var r:ranges.ranges())for(int i=1;i<r.spine().size();i++) {
             var a=r.spine().get(i-1);var b=r.spine().get(i);
             for(int j=0;j<=100;j++)assertEquals(1,ranges.influence(a.x()+(b.x()-a.x())*j/100,a.z()+(b.z()-a.z())*j/100),1e-9);
+        }
+    }
+
+    /**
+     * The relief, spike and reproducibility assertions that used to be made against the retired
+     * pre-r21 {@code MountainTerrain}, now made against the production assembly: mountains-only
+     * template weights through {@link RegionTerrain} with the real {@link TerrainRecipes} mountain
+     * recipes. This is what keeps deleting the dead class from also deleting mountain validation.
+     *
+     * <p>{@code VOLCANO} keeps weight 0 in the surface sweep on purpose. A volcanic cone and its rim
+     * are deliberately steep - a 25-block step is a designed feature there, not a spike - so
+     * including it would silently change what "no block-scale spikes" means. It stays in the recipe
+     * sweep below, where boundedness and continuity are the properties under test.
+     */
+    @Test void productionMountainSurfacesHaveReliefWithoutBlockScaleSpikes() {
+        var templates=new EnumMap<TerrainTemplate,TerrainTemplate.Settings>(TerrainTemplate.class);
+        for(var t:TerrainTemplate.values())
+            templates.put(t,new TerrainTemplate.Settings(
+                    t.mountain()&&t!=TerrainTemplate.VOLCANO?1:0,1,t.defaults().verticalAmplitude(),1));
+        var settings=new TerrainSettings(templates,false,true);
+        var terrain=new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),settings,FillerTerrainPolicy.CATEGORY_ONLY);
+        double min=1e9,max=-1e9,slope=0;
+        for(int x=-1200;x<1200;x+=2)for(int z=-1200;z<1200;z+=2) {
+            double h=terrain.sample(x,z).relativeHeight();
+            min=Math.min(min,h);max=Math.max(max,h);
+            slope=Math.max(slope,Math.abs(h-terrain.sample(x+1,z).relativeHeight()));
+        }
+        assertTrue(max-min>60,"production mountains lost their relief: "+(max-min));
+        assertTrue(slope<5,"production mountain has abrupt block-scale spikes: "+slope);
+        assertEquals(RegionTerrain.Template.MOUNTAINS,terrain.sample(53.2,-934.8).template());
+        assertEquals(terrain.sample(53.2,-934.8),
+                new RegionTerrain(7331,PlannerProfile.V2,TerrainCapacityPlan.empty(),settings,FillerTerrainPolicy.CATEGORY_ONLY)
+                        .sample(53.2,-934.8));
+        // The recipes themselves must stay the bounded, continuous functions the regression pinned.
+        var recipes=new TerrainRecipes(7331);
+        for(var t:new TerrainTemplate[]{TerrainTemplate.MOUNTAINS_1,TerrainTemplate.MOUNTAINS_2,
+                TerrainTemplate.MOUNTAINS_3,TerrainTemplate.VOLCANO}) {
+            double low=10,high=-10,step=0;
+            for(int x=-900;x<=900;x+=29)for(int z=-900;z<=900;z+=31) {
+                double h=recipes.shape(t,x,z,1);
+                low=Math.min(low,h);high=Math.max(high,h);
+                step=Math.max(step,Math.abs(h-recipes.shape(t,x+.001,z,1)));
+            }
+            assertTrue(low>=-1e-9&&high<=1.00000001,t+" unbounded "+high);
+            assertTrue(high-low>.05,t+" flat recipe");
+            assertTrue(step<.005,t+" discontinuous "+step);
         }
     }
 }

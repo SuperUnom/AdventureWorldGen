@@ -2,6 +2,7 @@ package io.github.luoyan.adventureworldgen.erosion;
 
 import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
+import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 
 /** Frozen erosion followed by FTF's block-radius full-height smoothing, before hydrology.
  * Queries never re-run droplets. Cache contents have no effect on the generated heights.
@@ -68,15 +69,20 @@ public final class ErodedTerrain implements MacroTerrain {
         double modifier=1-StrictMath.max(0,StrictMath.min(1,(ground-65)/119));
         double correction=0;
         if(modifier>0) {
-            // Radius 1.8 BLOCKS, quadratic radial weights, rate 0.9, one snapshot pass.
-            // The persisted erosion grid spacing must not enlarge this physical radius.
+            // The kernel constants come from HydrologyProfile.Smoothing, which is the single source
+            // for them and rejects anything other than the implemented pass. They used to be
+            // repeated here as literals, so a profile carrying different values would have been
+            // accepted by the profile and ignored by the kernel.
+            double radius=HydrologyProfile.Smoothing.SUPPORTED.radius();
+            double rate=HydrologyProfile.Smoothing.SUPPORTED.rate();
+            // Radius is measured in BLOCKS: the persisted erosion grid spacing must not enlarge it.
             double sum=ground,weights=1;
             for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++) {
                 if(dx==0&&dz==0)continue;
-                double weight=1-(dx*dx+dz*dz)/(1.8*1.8);
+                double weight=1-(dx*dx+dz*dz)/(radius*radius);
                 sum+=weight*rawHeight(x+dx,z+dz);weights+=weight;
             }
-            correction=(sum/weights-ground)*.9*modifier;
+            correction=(sum/weights-ground)*rate*modifier;
         }
         synchronized(tile){tile[index]=correction;}
         return correction;

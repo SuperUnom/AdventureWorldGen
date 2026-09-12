@@ -1,6 +1,8 @@
 import io.github.luoyan.adventureworldgen.config.*;
 import io.github.luoyan.adventureworldgen.persistence.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.*;
+import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import java.nio.file.*;
 import java.util.*;
 
@@ -8,7 +10,7 @@ import java.util.*;
 public class DefaultDiversityAudit {
  public static void main(String[] args)throws Exception {
   var config=new AdventureWorldConfigParser().parse(Files.readString(Path.of(args[0])));
-  var plan=new PlanV2Codec().decode(Files.readAllBytes(Path.of(args[1])),new ContentId("adventureworldgen:default"),"audit",config);
+  var plan=GeneratedAdventurePlan.restore(config,new PlanV2Codec().decode(Files.readAllBytes(Path.of(args[1])),new ContentId("adventureworldgen:default"),"audit"));
   Map<String,Integer> recipes=new TreeMap<>(),biomes=new TreeMap<>();int total=0;
   int radius=(int)config.world().radius();
   for(int x=-radius;x<=radius;x+=16)for(int z=-radius;z<=radius;z+=16) {

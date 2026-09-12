@@ -50,7 +50,34 @@ public final class AdjacentEdgeCache {
     public record Directed(boolean passable, long micros) {
         public static final Directed BLOCKED = new Directed(false, Long.MAX_VALUE);
     }
-    public record Stats(long computations, long hits, int entries) {}
+    /**
+     * Adjacent-pair counters, named for the quantities they actually measure.
+     *
+     * @param computedPairs canonical undirected pairs whose cost has been computed. A blocked pair
+     *                      counts too, and querying a pair in the reverse direction afterwards does
+     *                      not increment it. It is neither a directed-pair count nor a slot count.
+     * @param hits          queries answered from an already-computed pair.
+     * @param allocatedSlots slots the compact graph reserved. By construction this is
+     *                      {@code nodeCount * 4}: one slot per node per canonical direction,
+     *                      including the slots whose neighbour falls outside the rectangle. It is
+     *                      capacity, never the number of real edges - use
+     *                      {@link #theoreticalPairs} for that.
+     */
+    public record Stats(long computedPairs, long hits, long allocatedSlots) {
+        /**
+         * In-bounds adjacent pairs of a {@code width x height} node rectangle: the four adjacent
+         * directions per node minus the slots that point outside the rectangle. This is the largest
+         * number of pairs the compact graph can ever compute, and it is strictly smaller than
+         * {@link #allocatedSlots} whenever a border exists.
+         */
+        public static long theoreticalPairs(long width, long height) {
+            if (width <= 0 || height <= 0) return 0;
+            long horizontal = Math.multiplyExact(width - 1, height);
+            long vertical = Math.multiplyExact(width, height - 1);
+            long diagonals = Math.multiplyExact(Math.multiplyExact(width - 1, height - 1), 2);
+            return Math.addExact(Math.addExact(horizontal, vertical), diagonals);
+        }
+    }
     private record PairKey(String terrainVersion, String costVersion, int originX, int originZ, int spacing,
                            Node low, Node high) {}
 }

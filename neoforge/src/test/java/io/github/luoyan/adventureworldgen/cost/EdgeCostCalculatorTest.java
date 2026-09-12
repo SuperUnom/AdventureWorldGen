@@ -33,7 +33,7 @@ class EdgeCostCalculatorTest {
         int afterFirst = calls.get();
         assertFalse(cache.edge(new Node(1, 0), new Node(0, 0)).passable());
         assertEquals(afterFirst, calls.get());
-        assertEquals(1, cache.stats().computations());
+        assertEquals(1, cache.stats().computedPairs());
         assertEquals(1, cache.stats().hits());
     }
 

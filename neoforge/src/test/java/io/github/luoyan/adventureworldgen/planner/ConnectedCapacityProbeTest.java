@@ -3,6 +3,7 @@ package io.github.luoyan.adventureworldgen.planner;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
 
 class ConnectedCapacityProbeTest {
     @Test void thousandsOfAnchorsInTheSameInsufficientComponentAreExploredOnce() {

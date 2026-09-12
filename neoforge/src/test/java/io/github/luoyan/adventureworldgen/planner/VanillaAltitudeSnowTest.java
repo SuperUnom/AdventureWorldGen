@@ -4,6 +4,10 @@ import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.config.*;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.TemperatureType;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 
 class VanillaAltitudeSnowTest {
     @Test void nativeSnowDoesNotOverrideConfiguredTemperature() {
@@ -16,12 +20,12 @@ class VanillaAltitudeSnowTest {
         assertTrue(VanillaAltitudeSnow.snowy(-1686,117,-1910),"reported native snow case regressed");
         for(int height:new int[]{80,180}) {
             MacroTerrain terrain=(x,z)->new MacroSample(height,Double.NaN,WaterKind.NONE,false,"r","hills","test");
-            var climate=new ClimatePlan(7331,config,terrain);
+            var climate=new ClimatePlan(7331,config,terrain,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(config,ClimatePlan.STEP));
+            var rules=new BiomeEnvironmentRules(config,climate);
             for(int x=-200;x<=200;x+=32)for(int z=-200;z<=200;z+=32) {
                 var sample=terrain.sample(x+2,z+2);
-                assertTrue(climate.allowsSnowClass(id,x+2,z+2,sample));
-                assertEquals(climate.typeAt(x+2,z+2,sample)==AdventureWorldConfig.TemperatureType.COLD,
-                        climate.prefersType(id,x+2,z+2,sample));
+                assertEquals(climate.typeAt(x+2,z+2,sample)==TemperatureType.COLD,
+                        rules.prefersType(id,x+2,z+2,sample));
             }
         }
     }

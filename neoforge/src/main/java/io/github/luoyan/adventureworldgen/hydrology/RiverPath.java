@@ -1,12 +1,13 @@
 package io.github.luoyan.adventureworldgen.hydrology;
 
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
-import io.github.luoyan.adventureworldgen.planner.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import io.github.luoyan.adventureworldgen.plan.PlanVersions;
 
 /** Upstream growth with persistent angular velocity and terrain-guided steering. */
 final class RiverPath {
@@ -97,7 +98,7 @@ final class RiverPath {
     }
 
     private static double random(long seed, String id, int index) {
-        return DeterministicRandom.sample(seed, RiverMorphology.VERSION, "path-growth", id, index);
+        return DeterministicRandom.sample(seed, PlanVersions.HYDROLOGY, "path-growth", id, index);
     }
     private static double wrap(double angle) {
         while (angle > StrictMath.PI) angle -= StrictMath.PI * 2;

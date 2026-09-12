@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.cost;
 
 import io.github.luoyan.adventureworldgen.cost.AdjacentEdgeCache.Directed;
 import io.github.luoyan.adventureworldgen.cost.AdjacentEdgeCache.Node;
-import io.github.luoyan.adventureworldgen.planner.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 
 import java.util.Arrays;
@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.function.Predicate;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Complete single-source planner-v2 Dijkstra result for one finite aligned grid. */
 public final class CostDistanceMap {
@@ -46,7 +47,7 @@ public final class CostDistanceMap {
         long nodeCount = bounds.nodeCount();
         long estimatedBytes = Math.multiplyExact(nodeCount, 25L);
         if (nodeCount > maximumNodes || estimatedBytes > maximumWorkingMemoryBytes || nodeCount > Integer.MAX_VALUE) {
-            throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, "cost-graph",
+            throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.COST_GRAPH,
                     "cost graph exceeds planner-v2 resource limits",
                     Map.of("nodes", nodeCount, "maximum_nodes", maximumNodes,
                             "estimated_bytes", estimatedBytes, "maximum_bytes", maximumWorkingMemoryBytes));
@@ -92,7 +93,7 @@ public final class CostDistanceMap {
                 try {
                     candidate = Math.addExact(distances[currentIndex], edge.micros());
                 } catch (ArithmeticException overflow) {
-                    throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, "cost-graph",
+                    throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.COST_GRAPH,
                             "Dijkstra distance overflow", Map.of("node", current, "edge_cost", edge.micros()));
                 }
                 if (candidate < distances[nextIndex]) {

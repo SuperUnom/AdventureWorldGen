@@ -7,6 +7,7 @@ import io.github.luoyan.adventureworldgen.spatial.*;
 import java.util.*;
 import java.security.*;
 import java.nio.charset.StandardCharsets;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 class PlanningOptimizationGoldenTest {
  // Records the deliberate r33 shelf revision (land and erosion vectors unchanged) and still protects every sampled field.
  @org.junit.jupiter.api.Test void preservesR33SamplingAndErosionBits()throws Exception {

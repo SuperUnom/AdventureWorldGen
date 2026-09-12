@@ -3,6 +3,8 @@ package io.github.luoyan.adventureworldgen.planner;
 import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 class QuotaAssignmentTest {
     @Test void spatialGrowthDoesNotJumpAcrossForbiddenTerrainWhenTheNearSideHasCapacity() {

@@ -5,6 +5,11 @@ import io.github.luoyan.adventureworldgen.config.*;
 import java.util.*;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** One coarse candidate catalog and lazily cached exact quart samples for a frozen terrain. */
 public final class PlacementIndex {
@@ -27,16 +32,22 @@ public final class PlacementIndex {
     private long queries;
 
     public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
-                          JointPlanner.BiomeConstraint adapters) {
-        this(config,terrain,levels,adapters,ignored -> {});
+                          JointPlanner.BiomeConstraint adapters, PlannerProfile profile) {
+        this(config,terrain,levels,adapters,profile,ignored -> {});
     }
+    /**
+     * @param profile the profile whose node budget bounds the candidate grid. It is passed in, not
+     *                read from {@code PlannerProfile.V2}, so a differently budgeted or re-versioned
+     *                profile reaches this stage instead of silently keeping the V2 limit.
+     */
     public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
-                          JointPlanner.BiomeConstraint adapters,java.util.function.DoubleConsumer progress) {
+                          JointPlanner.BiomeConstraint adapters, PlannerProfile profile,
+                          java.util.function.DoubleConsumer progress) {
         this.config = config; this.terrain = terrain; this.levels = levels; this.adapters = adapters;
         int extent = (int) StrictMath.ceil(config.world().radius() / 16);
         long nodes = (2L * extent + 1) * (2L * extent + 1);
-        if (nodes > PlannerProfile.V2.maximumCostNodes()) throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT,
-                "placement-index", "candidate grid exceeds node budget", Map.of("nodes", nodes));
+        if (nodes > profile.maximumCostNodes()) throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.PLACEMENT_INDEX, "candidate grid exceeds node budget",
+                Map.of("nodes", nodes, "maximum_nodes", (long) profile.maximumCostNodes()));
         for (int gz = -extent; gz <= extent; gz++) for (int gx = -extent; gx <= extent; gx++) {
             if(gx==-extent) progress.accept((gz+extent)/(double)(2*extent+1));
             int x = gx * 16, z = gz * 16;
@@ -94,7 +105,7 @@ public final class PlacementIndex {
             for(int gz=-extent;gz<=extent;gz++)for(int gx=-extent;gx<=extent;gx++) {
                 int x=gx*step,z=gz*step;
                 if(StrictMath.hypot(x,z)>config.world().radius())continue;
-                if(++visits>2_000_000)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"candidate-refinement",
+                if(++visits>2_000_000)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.CANDIDATE_REFINEMENT,
                         "fine candidate catalog exceeded cell budget",Map.of("spacing",step,"visits",visits));
                 var s=sample(x,z); if(s.waterKind()==WaterKind.NONE&&!s.hazardous())points.add(new Point(x,z));
             }
@@ -112,9 +123,4 @@ public final class PlacementIndex {
         return cache.computeIfAbsent(p.cell(),ignored->levels.penalty(level,p.x,p.z));
     }
     public long queries() { return queries; }
-    public static long mix(long x) {
-        x = (x ^ (x >>> 30)) * 0xbf58476d1ce4e5b9L;
-        x = (x ^ (x >>> 27)) * 0x94d049bb133111ebL;
-        return x ^ (x >>> 31);
-    }
 }

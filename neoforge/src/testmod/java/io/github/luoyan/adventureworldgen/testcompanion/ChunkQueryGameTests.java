@@ -20,6 +20,7 @@ import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.neoforged.neoforge.gametest.GameTestHolder;
 import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 @GameTestHolder("testcompanion_performance")
 @PrefixGameTestTemplate(false)
@@ -31,7 +32,7 @@ public final class ChunkQueryGameTests {
 
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)
     public static void nativeMaterialsStillMatchPlan(GameTestHelper helper) {
-        SurfaceGameTests.nativeMaterialsPreservePlannedRelief(helper);
+        SurfaceGameTests.nativeMaterialsAndSurfaceExtensions(helper);
     }
 
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)
@@ -54,7 +55,7 @@ public final class ChunkQueryGameTests {
                         new io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile.RiverShape(5, 2, 6, 20, 12, 0.75),
                         null)), List.of(), "query-test"), 64, 128, 256, "query-test", null);
         var id = ResourceLocation.fromNamespaceAndPath("testcompanion_performance", "columns");
-        RuntimePlanRegistry.start(id, () -> plan).join();
+        RuntimePlanRegistry.start(new ContentId(id.toString()), () -> plan).join();
         var level = helper.getLevel();
         var registries = level.registryAccess();
         var generator = new AdventureChunkGenerator(id, registries.lookupOrThrow(Registries.BIOME),

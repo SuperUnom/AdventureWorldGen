@@ -1,17 +1,35 @@
 package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.*;
-import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan.PlannedBiomePatch;
-import io.github.luoyan.adventureworldgen.terrain.ValueNoise;
+import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.noise.ValueNoise;
 import java.util.*;
 import java.util.function.DoubleConsumer;
 import it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import io.github.luoyan.adventureworldgen.spatial.CellMask;
+import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.StableIds;
+import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
+import io.github.luoyan.adventureworldgen.biome.OrganicGrowth;
+import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Competitive growth with bounded multi-region recovery; environmental admission never relaxes. */
 public final class BiomeAllocationPlanner {
     private static final int[][] DIR={{4,0},{-4,0},{0,4},{0,-4}};
-    private static final long BUDGET=12_000_000;
+    private final PlannerProfile profile;
+
+    /**
+     * @param profile supplies both the algorithm-version salt of the deterministic biome seeds and
+     *                the competitive-growth operation budget. Neither is read from a fixed V2
+     *                reference any more, so an injected profile really governs this stage.
+     */
+    public BiomeAllocationPlanner(PlannerProfile profile) { this.profile = profile; }
     private static final int MAX_REGION_SEEDS=64;
     private record Ranked(PlacementIndex.Point point,ContentId biome,int band,double score) {}
     private static final Comparator<Ranked> SEED_ORDER=Comparator.comparingInt(Ranked::band)
@@ -22,11 +40,12 @@ public final class BiomeAllocationPlanner {
     private long operations;
     private AdventureWorldConfig config;
     private PlacementIndex index;
-    private ClimatePlan climate;
+    private BiomeEnvironmentRules rules;
     private List<PlannedBiomePatch> reservations;
     private final Long2IntOpenHashMap owner=new Long2IntOpenHashMap();
     private final List<Region> regions=new ArrayList<>();
     private DoubleConsumer progress;
+    private PlanningObserver observer=PlanningObserver.NONE;
     private int requiredCount;
     private static final class Region {
         final RequirementExpander.PatchDemand demand;
@@ -50,12 +69,19 @@ public final class BiomeAllocationPlanner {
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations) {
-        return allocate(seed,config,index,demands,reservations,new ClimatePlan(seed,config,index::sampleAt),ignored->{});
+        return allocate(seed,config,index,demands,reservations,new BiomeEnvironmentRules(config,new ClimatePlan(seed,config,index::sampleAt,
+                new ClimateDiagnostics(config,ClimatePlan.STEP))),PlanningObserver.NONE,ignored->{});
     }
     public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
                            List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
-                           ClimatePlan climate,DoubleConsumer progress) {
-        this.config=config;this.index=index;this.reservations=reservations;this.climate=climate;this.progress=progress;
+                           BiomeEnvironmentRules rules,DoubleConsumer progress) {
+        return allocate(seed,config,index,demands,reservations,rules,PlanningObserver.NONE,progress);
+    }
+    public Result allocate(long seed,AdventureWorldConfig config,PlacementIndex index,
+                           List<RequirementExpander.PatchDemand> demands,List<PlannedBiomePatch> reservations,
+                           BiomeEnvironmentRules rules,PlanningObserver observer,DoubleConsumer progress) {
+        this.config=config;this.index=index;this.reservations=reservations;this.rules=rules;this.progress=progress;
+        this.observer=observer;
         operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
         String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
@@ -99,7 +125,7 @@ public final class BiomeAllocationPlanner {
                 var r=regions.get(i);if(r.cells.size()>=r.minimum())continue;
                 var point=nextSupplement(r);if(point==null)continue;
                 claim(i,point.cell(),0);r.seedCount++;added=true;
-                io.github.luoyan.adventureworldgen.runtime.PlanningProgress.detailCurrent(
+                observer.detail(
                         "补充区域 "+r.biome+"："+r.seedCount+" 个种子，保留温湿度与地形限制");
             }
             if(!added)break;
@@ -126,16 +152,16 @@ public final class BiomeAllocationPlanner {
         if(spawn&&config.spawn().hasBiome()) {
             var p=new PlacementIndex.Point(0,0);
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
-            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"spawn-core",
+            throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.SPAWN_CORE,
                     "spawn cell violates configured terrain/climate or land constraints",
-                    Map.of("biome",r.biome,"temperature",climate.typeAt(2,2,index.sample(0,0)),
-                            "allowed_temperatures",ClimatePlan.preferences(config,r.biome).keySet(),
-                            "humidity",climate.humidity().typeAt(2,2,index.sample(0,0))));
+                    Map.of("biome",r.biome,"temperature",rules.temperature().typeAt(2,2,index.sample(0,0)),
+                            "allowed_temperatures",BiomeEnvironmentRules.preferences(config,r.biome).keySet(),
+                            "humidity",rules.humidity().typeAt(2,2,index.sample(0,0))));
         }
         boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
                 StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
         double scale=Math.sqrt(r.demand.area().target()/Math.PI);
-        long salt=DeterministicRandom.seed(seed,PlannerProfile.V2.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
+        long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
         // Ownership does not change during selection. Reuse exhausted components across
         // candidates, capacity probe refinement and grid refinement, then discard the snapshot.
         Map<ContentId,ConnectedCapacityProbe> capacityProbes=new HashMap<>();
@@ -157,11 +183,11 @@ public final class BiomeAllocationPlanner {
                 }
                 int clearance=Math.max(16,(int)(scale*.55)/4*4);
                 for(int[] d:DIR)if(!legal(r,p.x()+d[0]*clearance/4,p.z()+d[1]*clearance/4))capacity+=2;
-                double u=Math.max(1e-12,(PlacementIndex.mix(p.cell()^salt)>>>11)*0x1.0p-53);
+                double u=Math.max(1e-12,(DeterministicRandom.mix(p.cell()^salt)>>>11)*0x1.0p-53);
                 // Temperature wins; deterministic jitter breaks close suitability ties.
-                double score=climate.cost(r.biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()))*3
+                double score=rules.cost(r.biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()))*3
                         +4*index.penalty(r.demand.adventureLevel(),p)+crowd+capacity+Math.log(-Math.log(u))*.35;
-                int band=climate.temperatureDistance(biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()));
+                int band=rules.temperatureDistance(biome,p.x()+2,p.z()+2,index.sample(p.x(),p.z()));
                 var candidate=new Ranked(p,biome,band,score);var bucket=ranked.get(band);
                 if(bucket.size()<1024)bucket.add(candidate);
                 else if(SEED_ORDER.compare(candidate,bucket.peek())<0){bucket.remove();bucket.add(candidate);}
@@ -189,7 +215,7 @@ public final class BiomeAllocationPlanner {
         // A missing ordinary biome is reported as zero supply. Spawn and required structures
         // still need a real legal anchor / usable footprint to construct a valid world.
         if(!central&&carrierCoreSide(r)==0)return null;
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,"biome-seed","no sufficiently connected legal seed with required carrier clearance",
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no sufficiently connected legal seed with required carrier clearance",
                 Map.of("biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));
     }
     private PlacementIndex.Point nextSupplement(Region r) {
@@ -232,7 +258,7 @@ public final class BiomeAllocationPlanner {
     private void seedFillers(long seed) {
         if(regions.stream().allMatch(r->r.cells.size()>=r.maximum()))return;
         var points=new ArrayList<>(index.candidates(0));
-        points.sort(Comparator.comparingLong(p->PlacementIndex.mix(seed^p.cell())));
+        points.sort(Comparator.comparingLong(p->DeterministicRandom.mix(seed^p.cell())));
         for(var point:points) {
             if(owner.containsKey(point.cell()))continue;
             // Distant empty components are seeded by the final filler pass. Here only sites able
@@ -243,7 +269,7 @@ public final class BiomeAllocationPlanner {
                 if(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())<Math.sqrt(r.demand.area().target()/Math.PI)*2.5+128){nearby=true;break;}
             }
             if(!nearby)continue;
-            double spacing=320+192*((PlacementIndex.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
+            double spacing=320+192*((DeterministicRandom.mix(point.cell()^seed^123)>>>11)*0x1.0p-53);
             boolean close=false;
             for(var r:regions) {
                 double separation=r.filler?spacing:Math.sqrt(r.demand.area().target()/Math.PI)*2.0;
@@ -252,18 +278,18 @@ public final class BiomeAllocationPlanner {
             if(close)continue;
             ContentId best=null;int bestBand=4;double score=Double.POSITIVE_INFINITY;
             for(var biome:config.biomes().filler()) {
-                if(!index.allows(biome,point.x(),point.z())||!climate.allowsEnvironment(biome,point.x(),point.z(),index.sample(point.x(),point.z())))continue;
-                int band=climate.temperatureDistance(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()));
+                if(!index.allows(biome,point.x(),point.z())||!rules.allows(biome,point.x(),point.z(),index.sample(point.x(),point.z())))continue;
+                int band=rules.temperatureDistance(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()));
                 if(band>bestBand)continue;
                 double density=0;
                 for(var r:regions)if(r.biome.equals(biome))density+=Math.exp(-Math.pow(Math.hypot(point.x()-r.anchor.x(),point.z()-r.anchor.z())/384,2));
                 var rule=config.biomes().terrainRules().get(biome);
                 double level=rule!=null&&rule.adventureLevel()!=null?rule.adventureLevel():config.biomes().required().stream()
                         .filter(r->r.id().equals(biome)).mapToInt(AdventureWorldConfig.RequiredBiome::adventureLevel).average().orElse(5);
-                double u=Math.max(1e-12,(PlacementIndex.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
-                double cost=climate.cost(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()))*6+density*.15
+                double u=Math.max(1e-12,(DeterministicRandom.mix(seed^point.cell()^biome.hashCode())>>>11)*0x1.0p-53);
+                double cost=rules.cost(biome,point.x()+2,point.z()+2,index.sample(point.x(),point.z()))*6+density*.15
                         +Math.pow((level-10*Math.hypot(point.x(),point.z())/config.world().radius())/5,2)
-                        +Math.log(-Math.log(u))-Math.log(ClimatePlan.weight(config,biome));
+                        +Math.log(-Math.log(u))-Math.log(BiomeEnvironmentRules.weight(config,biome));
                 if(band<bestBand||cost<score){score=cost;best=biome;bestBand=band;}
             }
             if(best==null)continue;
@@ -349,8 +375,8 @@ public final class BiomeAllocationPlanner {
     }
     private void queue(Region r,int ownerIndex,int x,int z,double next) {
         long cell=CellMask.key(x,z);r.queued.add(cell);var sample=index.sample(x,z);
-        double environment=climate.cost(r.biome,x+2,z+2,sample);
-        int band=climate.temperatureDistance(r.biome,x+2,z+2,sample);
+        double environment=rules.cost(r.biome,x+2,z+2,sample);
+        int band=rules.temperatureDistance(r.biome,x+2,z+2,sample);
         int support=0;for(int[] side:DIR)if(owner.get(CellMask.key(x+side[0],z+side[1]))==ownerIndex)support++;
         // Four-neighbour path length is a Manhattan metric: it produces diamonds and
         // straight competition fronts. Connectivity still comes from the frontier, while
@@ -366,12 +392,14 @@ public final class BiomeAllocationPlanner {
         var cache=environments.computeIfAbsent(r.biome,ignored->new it.unimi.dsi.fastutil.longs.Long2ByteOpenHashMap());
         long cell=CellMask.key(x,z);byte allowed=cache.get(cell);
         if(allowed!=0)return allowed==1;
-        if(++operations>BUDGET)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"competitive-growth",
-                "unique biome/cell eligibility budget exhausted",Map.of("biome",r.biome,"operations",operations,"budget",BUDGET));
+        long budget=profile.search().competitiveGrowthOperations();
+        if(++operations>budget)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.COMPETITIVE_GROWTH,
+                "unique biome/cell eligibility budget exhausted",
+                Map.of("biome",r.biome,"operations",operations,"budget",budget));
         boolean valid=Math.hypot(x,z)<=config.world().radius();
         if(valid)for(var p:reservations)if(p.contains(x,z)){valid=false;break;}
         if(valid)valid=index.allows(r.biome,x,z)
-                &&climate.allowsEnvironment(r.biome,x,z,index.sample(x,z));
+                &&rules.allows(r.biome,x,z,index.sample(x,z));
         cache.put(cell,(byte)(valid?1:2));
         return valid;
     }

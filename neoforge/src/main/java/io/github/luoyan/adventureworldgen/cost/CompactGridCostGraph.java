@@ -13,6 +13,7 @@ public final class CompactGridCostGraph implements CostGraph {
     private final CostDistanceMap.Bounds bounds;
     private final int originX, originZ, spacing;
     private final EdgeCostCalculator calculator;
+    private final int allocatedSlots;
     private final byte[] states;
     private final long[] forward;
     private final long[] reverse;
@@ -26,6 +27,7 @@ public final class CompactGridCostGraph implements CostGraph {
         this.spacing = spacing;
         this.calculator = calculator;
         int slots = Math.multiplyExact(Math.toIntExact(bounds.nodeCount()), 4);
+        this.allocatedSlots = slots;
         this.states = new byte[slots];
         this.forward = new long[slots];
         this.reverse = new long[slots];
@@ -79,7 +81,14 @@ public final class CompactGridCostGraph implements CostGraph {
         throw new IllegalArgumentException("invalid canonical neighbor direction");
     }
 
-    public AdjacentEdgeCache.Stats stats() { return new AdjacentEdgeCache.Stats(computations, hits, (int) computations); }
+    /**
+     * {@code computedPairs} counts canonical undirected pairs actually computed (blocked ones
+     * included), {@code allocatedSlots} reports the reserved capacity, which is
+     * {@code nodeCount * 4} and must not be read as an edge count.
+     */
+    public AdjacentEdgeCache.Stats stats() {
+        return new AdjacentEdgeCache.Stats(computations, hits, allocatedSlots);
+    }
 
     public static long retainedBytes(long nodeCount) {
         return Math.multiplyExact(nodeCount, 4L * (Byte.BYTES + 2L * Long.BYTES));

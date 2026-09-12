@@ -2,12 +2,15 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.AreaRange;
-import io.github.luoyan.adventureworldgen.config.ContentId;
+import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
+import io.github.luoyan.adventureworldgen.plan.StableIds;
+import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Expands normalized config into stable minimum-demand objects without making spatial choices. */
 public final class RequirementExpander {
@@ -32,7 +35,7 @@ public final class RequirementExpander {
             boolean spawn = config.spawn().hasStructure() && config.spawn().structure().id().equals(structure.id());
             long minimum = structure.effectiveMinimum(spawn);
             if (minimum > Integer.MAX_VALUE) {
-                throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, "requirements",
+                throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.REQUIREMENTS,
                         "structure minimum cannot be represented by planner-v2",
                         Map.of("structure", structure.id(), "minimum", minimum));
             }

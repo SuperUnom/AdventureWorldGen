@@ -1,5 +1,6 @@
 import io.github.luoyan.adventureworldgen.terrain.*;
 import io.github.luoyan.adventureworldgen.planner.*;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.nio.file.*;

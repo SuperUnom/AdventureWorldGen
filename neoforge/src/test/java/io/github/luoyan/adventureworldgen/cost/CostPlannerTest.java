@@ -2,7 +2,7 @@ package io.github.luoyan.adventureworldgen.cost;
 import io.github.luoyan.adventureworldgen.api.*;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
-import io.github.luoyan.adventureworldgen.planner.PlannerProfile;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import org.junit.jupiter.api.Test;
 import java.util.List;
 import static org.junit.jupiter.api.Assertions.*;
@@ -58,7 +58,13 @@ class CostPlannerTest {
     @Test void refinementPreservesSpawnAndDoesNotInventAPerimeterDetour() {
         var costs=flat();
         assertEquals(0,costs.refinedCostAt(0,0));
-        assertTrue(costs.accepts(0,0,0));
+        // Level is a soft preference in production: the coarse-grid signal ranks candidates and never
+        // rejects one. The removed `accepts` helper wrapped the refined cost in the coast interval,
+        // which no production caller used; this pins the signal that actually reaches the planner.
+        double origin=costs.normalizedPreferenceAt(0,0,1024);
+        assertTrue(origin>=0&&Double.isFinite(origin));
+        assertTrue(costs.normalizedPreferenceAt(300,300,1024)>origin,
+                "coarse preference must grow with distance from spawn");
         assertEquals(4_000_000,costs.refinedCostAt(4,0));
         assertEquals(128_000_000,costs.refinedCostAt(-128,0));
         assertEquals(256_000_000,costs.refinedCostAt(256,0));

@@ -121,10 +121,24 @@ configurations {
     testmodRuntimeOnly.extendsFrom runtimeOnly
 }
 
+// The layering rules in PackageBoundaryTest inspect the source tree. Handing them an absolute root
+// derived from the project directory keeps the guard identical whether Gradle runs from this
+// directory, from the repository root via -p neoforge, or from anywhere via an absolute -p.
+// -PawgSourceRoot=<path> overrides it, which is how a missing tree is shown to fail loudly.
+var awgSourceRoot = providers.gradleProperty('awgSourceRoot').getOrElse(
+        layout.projectDirectory.dir('src/main/java/io/github/luoyan/adventureworldgen').asFile.absolutePath)
+
+// GameTestInventoryTest reads the registered GameTest surface straight from the test companion
+// sources, for the same reason: the inventory must not depend on where Gradle was started.
+var awgTestmodSourceRoot = providers.gradleProperty('awgTestmodSourceRoot').getOrElse(
+        layout.projectDirectory.dir('src/testmod/java').asFile.absolutePath)
+
 tasks.named('test', Test) {
     // Full-world determinism checks retain multiple uncapped biome plans at once.
     maxHeapSize = '2g'
     useJUnitPlatform()
+    systemProperty 'adventureworldgen.sourceRoot', awgSourceRoot
+    systemProperty 'adventureworldgen.testmodSourceRoot', awgTestmodSourceRoot
 }
 
 // Keep the dedicated-server console interactive for local end-to-end verification.
