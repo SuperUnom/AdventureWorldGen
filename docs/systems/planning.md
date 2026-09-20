@@ -7,7 +7,7 @@
 
 | 层级 | 当前语义 |
 |---|---|
-| 硬条件 | 内容与适配器可用、温湿度集合、地形分类及配方、硬高度、合法地貌、结构数量范围、间距、承载与保护范围、出生安全、面积上限 |
+| 硬条件 | 内容与规划信息可用、温湿度集合、地形分类及配方、硬高度、合法地貌、结构数量范围、锚点间距、承载区域、出生安全、面积上限 |
 | 位置偏好 | adventure level、合法类型的权重、偏好高度、filler 权重、拥挤度和确定性扰动 |
 | 目标与优化 | 最低面积优先争取，target 连续调节扩张压力；可选结构在已有合法方案上尝试增加 |
 | 有界恢复 | 候选网格细化、多区域补种、尝试其他结构位置；不得扩大环境合法集合 |
@@ -23,12 +23,12 @@
 ## 需求与归属模型
 
 [RequirementExpander](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/planner/RequirementExpander.java)
-把配置变成稳定的 `PatchDemand` 和 `StructureInstanceDemand`，不作空间选择。
+把配置变成稳定的 `PatchDemand` 和 `StructureDemand`，不作空间选择。
 
 - 每个 `biomes.required` 条目拥有独立需求身份；重复群系不合并，数组顺序参与身份。
 - 出生群系若没有同 ID 的等级零显式需求，会补建隐含需求。
-- 必需结构从有效数量下界展开；出生结构把下界至少提升到一，并占用其中一个名额。
-- 每个必需实例创建独立 carrier 需求。允许群系列表为空时，从 filler 池选择；出生群系可进一步收窄。
+- 必需结构从 `count.min` 展开，每个实例创建独立 carrier 需求。
+- 允许群系列表为空时，从 filler 池选择。
 - `PlannedBiomePatch` 保存归属掩膜和锚点；`CellMask` / `AreaGrid` 定义最终世界对齐四分格。
 
 一个需求可包含多个不相连的区域，不能仅凭包围盒计算面积。
@@ -63,7 +63,7 @@
 备选承载群系需有足够可用模板与高度包络容量，提交后输出 `TerrainCapacityPlan`。
 
 容量是地形生成前的粗估承诺，尚未包含最终侵蚀、水文和气候合法域；
-它不能替代最终群系分配，也不保证结构 footprint 一定放得下。
+它不能替代最终群系分配，也不保证结构锚点一定有合法位置。
 terrain 只消费结果；高度拟合与地形管线见 [地形系统](terrain.md#regions)。
 
 <a id="allocation"></a>
@@ -87,19 +87,18 @@ terrain 只消费结果；高度拟合与地形管线见 [地形系统](terrain.
 <a id="structures"></a>
 ## 结构落位与可选实例
 
-必需群系布局先完成，必需结构再在各自 carrier 内搜索完整合法 footprint。
-出生实例优先，其后按等级及实例 ID 稳定排序；候选从较粗网格逐步细化。
-适配器准备后校验身份、原点、入口、占地、保护范围及与已有结构的冲突。
+必需群系布局先完成，必需结构再在各自 carrier 内搜索安全、较平坦的宏观锚点。
+实例按等级及实例 ID 稳定排序；候选从较粗网格逐步细化。
+`StructurePlanningCatalog` 提供纯 `StructurePlanningInfo`；缺少信息时在结构搜索前失败。
 
 当前实现是有界顺序规划，不是遍历所有数量向量与承载关系的全局联合回溯。
 必需结构失败不会自动搬迁整套已分配群系。
 可选实例在已有方案上尝试，单次失败不提交新 patch 或实例；达到 max 不是保证。
 `scattered` 表示当前支持的落位模式，不承诺全大陆均匀覆盖。
 
-同 ID 的间距是**结构原点之间两两水平欧氏距离**；max 也约束每一对，不是连通图边长。
-`StructureAdapterBridge` 使用适配器返回的实际入口，作者 `entrance` 字段的当前消费限制见
-[适配器契约](../reference/adapters.md#limits)。
-出生点从冻结原点、旋转和相对脚底坐标计算。
+同 ID 的间距是**锚点之间两两水平欧氏距离**；max 也约束每一对，不是连通图边长。
+输出 `PlannedStructurePlacement` 只含实例 ID、结构 ID 和 X/Z 锚点。
+它不含 Y、旋转、footprint、入口或 pieces，也不会被 worldgen 转为 Minecraft 结构。
 
 <a id="filler"></a>
 ## 剩余填充、过渡与终检
@@ -109,7 +108,7 @@ terrain 只消费结果；高度拟合与地形管线见 [地形系统](terrain.
 查询时对真实地形与环境重新检查候选，不存在合法 filler 就明确失败。
 它不保证池内每个 ID 都会出现，也没有公开 adapter 回调参数。
 
-`LocalBiomeBlend` 只引入附近真实归属且当前位置合法的群系，出生与结构保护区域限制混合。
+`LocalBiomeBlend` 只引入附近真实归属且当前位置合法的群系，出生保护区域限制混合。
 `MinimumAreaPolicy` 决定哪些 patch 需要保护，并要求最终有效面积不低于
 “请求最小值与已取得 patch 面积二者的较小值”；不足请求的合法结果通过日志报告。
 `PlanDiagnostics` 保存操作计数，不是逐需求放宽事件表。

@@ -118,8 +118,6 @@ public final class ClimatePlan implements ClimateField {
         slopeHeight=blur(heights,heightWidth,3);regionalHeight=blur(heights,heightWidth,8);
         if(sites.isEmpty())throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.CLIMATE,"no allocatable dry land");
         ContentId spawn=config.spawn().biome();
-        if(spawn==null&&config.spawn().hasStructure())spawn=config.structures().stream()
-                .filter(s->s.id().equals(config.spawn().structure().id())).flatMap(s->s.allowedBiomes().ids().stream()).findFirst().orElse(config.biomes().filler().getFirst());
         spawnType=config.temperaturePreferences(spawn).entrySet().stream().max(Comparator.<Map.Entry<TemperatureType,Double>>comparingDouble(Map.Entry::getValue)
                 .thenComparing(e->-e.getKey().ordinal())).orElseThrow().getKey();
         angle=(DeterministicRandom.mix(seed)>>>11)*0x1.0p-53*Math.PI*2;

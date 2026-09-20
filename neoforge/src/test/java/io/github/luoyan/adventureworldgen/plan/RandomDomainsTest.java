@@ -85,7 +85,7 @@ class RandomDomainsTest {
 
     @Test
     void thePlanRandomKeysArrayIsDescriptiveOnly() throws IOException {
-        // The plan-v2 array must not be mistaken for this inventory: it is metadata written for the
+        // The persisted array must not be mistaken for this inventory: it is metadata written for the
         // wire, its names are not the ones used above, and no decoder reads it.
         Path codec = sourceRoot().getParent().getParent().resolve("java")
                 .resolve("io/github/luoyan/adventureworldgen/persistence/PlanV2Codec.java");

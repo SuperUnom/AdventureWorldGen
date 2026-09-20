@@ -228,32 +228,24 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void theSharedChunkGeneratorRestoresOnlyRegisteredPieceTypes() throws IOException {
-        // P4: support for a structure is a registration, not a branch. The generator may resolve
-        // frozen pieces through the piece registry, but naming a concrete piece class or a single
-        // structure's piece type constant would mean every new structure edits the generator.
+    void plannedStructuresRemainPureDataAndWorldgenDoesNotExecuteThem() throws IOException {
         Path generator = sourceRoot.resolve("worldgen").resolve("AdventureChunkGenerator.java");
-        Path restore = sourceRoot.resolve("worldgen").resolve("FrozenPieceRestore.java");
-        // Both files are part of the P4 contract: a missing one is a broken guard, not a reason to
-        // stop checking, so the assertions below are hard failures.
+        Path planner = sourceRoot.resolve("planner").resolve("JointPlanner.java");
         assertTrue(Files.isRegularFile(generator), () -> "missing " + generator);
-        assertTrue(Files.isRegularFile(restore), () -> "missing " + restore);
+        assertTrue(Files.isRegularFile(planner), () -> "missing " + planner);
         String generatorCode = stripComments(Files.readString(generator, StandardCharsets.UTF_8));
-        assertFalse(generatorCode.contains("structure.structures."),
-                "the shared chunk generator must not reference a concrete structure piece class");
-        assertFalse(generatorCode.contains("StructurePieceType."),
-                "the shared chunk generator must not branch on a named structure piece type");
-        String restoreCode = stripComments(Files.readString(restore, StandardCharsets.UTF_8));
-        assertTrue(restoreCode.contains("BuiltInRegistries.STRUCTURE_PIECE"),
-                "frozen pieces must be resolved in the registry the game registers piece types in");
-        // P4.4: the companion mod's piece type proves the extension point. If the core named it -
-        // or named the companion mod at all - the test would be proving a branch instead.
-        for (String code : new String[]{generatorCode, restoreCode}) {
-            assertFalse(code.contains("testcompanion"),
-                    "the core must not name the test companion mod or its piece type");
-            assertFalse(code.contains("waystation"),
-                    "the core must not name the test companion's structure or piece");
-        }
+        assertFalse(generatorCode.contains("createStructures("),
+                "worldgen must leave native structure generation untouched");
+        assertFalse(generatorCode.contains("plannedStructures("),
+                "worldgen must not consume planned structure anchors");
+        String plannerCode = stripComments(Files.readString(planner, StandardCharsets.UTF_8));
+        for (String forbidden : List.of("StructurePiece", "StructureStart", "CompoundTag",
+                "StructureAdapter", "canonicalNbt", "minecraft:desert_pyramid"))
+            assertFalse(plannerCode.contains(forbidden), () -> "planner contains structure execution detail: " + forbidden);
+        for (String removed : List.of("api/StructureAdapter.java", "api/FrozenPieceSupport.java",
+                "runtime/StructureAdapterBridge.java", "worldgen/FrozenPieceRestore.java",
+                "worldgen/RegisteredPieceSupport.java"))
+            assertFalse(Files.exists(sourceRoot.resolve(removed)), () -> "removed structure execution class returned: " + removed);
     }
 
     private static long countJavaFiles(Path directory) throws IOException {

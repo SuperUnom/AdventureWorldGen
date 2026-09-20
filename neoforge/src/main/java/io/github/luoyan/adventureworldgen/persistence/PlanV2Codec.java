@@ -12,6 +12,7 @@ import io.github.luoyan.adventureworldgen.hydrology.HydrologyProfile;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
@@ -30,7 +31,7 @@ import java.nio.ByteBuffer;
 import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /**
- * Canonical, explicit plan-v2 payload.
+ * Canonical, explicit current plan payload (format {@code plan-v3}).
  *
  * <p>The codec reads and writes {@link PlanSnapshot}: frozen data only. It never receives the
  * executable plan object, so the storage layer cannot start depending on runtime query state, and
@@ -44,7 +45,7 @@ public final class PlanV2Codec {
     private static final com.google.gson.Gson LAYOUT_JSON=new com.google.gson.Gson();
 
     /**
-     * Frozen plan-v2 metadata: the random-key names a plan was published with.
+     * Frozen plan-v3 metadata: the random-key names a plan was published with.
      *
      * <p><strong>Historical descriptive metadata, nothing more.</strong> It is written for wire
      * compatibility and is deliberately not read back: {@code decode} ignores the array entirely,
@@ -61,7 +62,7 @@ public final class PlanV2Codec {
      */
     private static void writeHistoricalRandomKeys(JsonWriter json) throws IOException {
         json.name("random_keys").beginArray();
-        // Order and values are part of the frozen plan-v2 layout. Do not sort, rename or extend
+        // Order and values are part of the frozen plan-v3 layout. Do not sort, rename or extend
         // this list without a reviewed format decision: it would move every plan's bytes.
         json.value("coast-phase"); json.value("erosion"); json.value("filler-biome");
         json.value("hydrology"); json.value("joint-candidate"); json.value("region-center");
@@ -135,7 +136,7 @@ public final class PlanV2Codec {
             List<PlannedBiomePatch> patches = readPatches(array(terrain, "biome_patches"));
             ErosionDeltaField erosion = terrain.has("erosion") ? readErosion(object(terrain.get("erosion"), "$.terrain.erosion",
                     Set.of("deltas_base64", "height", "operation_count", "origin_x", "origin_z", "spacing", "width"))) : null;
-            List<AdventurePlanView.PlannedStructure> structures = readStructures(array(root, "structures"));
+            List<PlannedStructurePlacement> structures = readStructures(array(root, "structures"));
             return new PlanSnapshot(seed, diagnostics, spawn, coast, network, seaSurface, landBand, seaBand,
                     terrainVersion, readSettings(terrain), readRecipeRegions(terrain), patches, structures, erosion,
                     readCapacities(terrain),
@@ -144,7 +145,7 @@ public final class PlanV2Codec {
             throw failure;
         } catch (RuntimeException malformed) {
             throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.PLAN_LOAD,
-                    "READY plan-v2 payload is invalid", Map.of("reason", String.valueOf(malformed.getMessage())));
+                    "READY plan-v3 payload is invalid", Map.of("reason", String.valueOf(malformed.getMessage())));
         }
     }
 
@@ -325,23 +326,12 @@ public final class PlanV2Codec {
                 exactInt(root, "spacing"), width, height, deltas, integer(root, "operation_count"));
     }
 
-    private static void writeStructures(JsonWriter json, List<AdventurePlanView.PlannedStructure> structures) throws IOException {
+    private static void writeStructures(JsonWriter json, List<PlannedStructurePlacement> structures) throws IOException {
         json.name("structures").beginArray();
         for (var structure : structures) {
             json.beginObject(); json.name("instance_id").value(structure.instanceId());
-            json.name("biome_protection"); writeBoxes(json, structure.biomeProtection());
-            json.name("entrance").beginArray().value(structure.entranceX()).value(structure.entranceY())
-                    .value(structure.entranceZ()).endArray();
-            json.name("footprint"); writeBoxes(json, structure.footprint());
-            json.name("origin").beginArray().value(structure.originX()).value(structure.originY()).value(structure.originZ()).endArray();
-            json.name("pieces").beginArray();
-            for (var piece : structure.pieces()) {
-                json.beginObject(); json.name("box").beginArray().value(piece.minX()).value(piece.minY()).value(piece.minZ())
-                        .value(piece.maxX()).value(piece.maxY()).value(piece.maxZ()).endArray();
-                json.name("nbt_base64").value(Base64.getEncoder().encodeToString(piece.canonicalNbt()));
-                json.name("piece_id").value(piece.pieceId()); json.endObject();
-            }
-            json.endArray(); json.name("rotation").value(structure.rotation());
+            json.name("anchor_x").value(structure.anchorX());
+            json.name("anchor_z").value(structure.anchorZ());
             json.name("structure_id").value(structure.structureId().value()); json.endObject();
         }
         json.endArray();
@@ -362,52 +352,16 @@ public final class PlanV2Codec {
         return List.copyOf(result);
     }
 
-    private static List<AdventurePlanView.PlannedStructure> readStructures(JsonArray encoded) {
-        List<AdventurePlanView.PlannedStructure> result = new ArrayList<>();
+    private static List<PlannedStructurePlacement> readStructures(JsonArray encoded) {
+        List<PlannedStructurePlacement> result = new ArrayList<>();
         for (JsonElement element : encoded) {
-            JsonObject item = object(element, "structure", Set.of("biome_protection", "entrance", "footprint",
-                    "instance_id", "origin", "pieces", "rotation", "structure_id"));
-            JsonArray entrance = array(item, "entrance");
-            if (entrance.size() != 3) throw new IllegalArgumentException("structure entrance must have three coordinates");
-            JsonArray origin = array(item, "origin");
-            if (origin.size() != 3) throw new IllegalArgumentException("structure origin must have three coordinates");
-            List<AdventurePlanView.PlannedPiece> pieces = new ArrayList<>();
-            for (JsonElement pieceElement : array(item, "pieces")) {
-                JsonObject piece = object(pieceElement, "piece", Set.of("box", "nbt_base64", "piece_id"));
-                JsonArray box = array(piece, "box");
-                if (box.size() != 6) throw new IllegalArgumentException("piece box must have six coordinates");
-                byte[] nbt = Base64.getDecoder().decode(string(piece, "nbt_base64"));
-                pieces.add(new AdventurePlanView.PlannedPiece(string(piece, "piece_id"), box.get(0).getAsInt(),
-                        box.get(1).getAsInt(), box.get(2).getAsInt(), box.get(3).getAsInt(), box.get(4).getAsInt(),
-                        box.get(5).getAsInt(), nbt));
-            }
-            result.add(new AdventurePlanView.PlannedStructure(string(item, "instance_id"),
-                    new ContentId(string(item, "structure_id")), origin.get(0).getAsInt(), origin.get(1).getAsInt(),
-                    origin.get(2).getAsInt(), string(item, "rotation"), entrance.get(0).getAsInt(),
-                    entrance.get(1).getAsInt(), entrance.get(2).getAsInt(), readBoxes(array(item, "footprint")),
-                    readBoxes(array(item, "biome_protection")), pieces));
+            JsonObject item = object(element, "structure",
+                    Set.of("anchor_x", "anchor_z", "instance_id", "structure_id"));
+            result.add(new PlannedStructurePlacement(string(item, "instance_id"),
+                    new ContentId(string(item, "structure_id")), exactInt(item, "anchor_x"),
+                    exactInt(item, "anchor_z")));
         }
         return List.copyOf(result);
-    }
-
-    private static void writeBoxes(JsonWriter json, List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> boxes)
-            throws IOException {
-        json.beginArray();
-        for (var box : boxes) json.beginArray().value(box.minX()).value(box.minZ())
-                .value(box.maxX()).value(box.maxZ()).endArray();
-        json.endArray();
-    }
-
-    private static List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> readBoxes(JsonArray encoded) {
-        List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> boxes = new ArrayList<>();
-        for (JsonElement element : encoded) {
-            if (!element.isJsonArray() || element.getAsJsonArray().size() != 4)
-                throw new IllegalArgumentException("horizontal box must have four coordinates");
-            JsonArray box = element.getAsJsonArray();
-            boxes.add(new io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox(
-                    box.get(0).getAsInt(), box.get(1).getAsInt(), box.get(2).getAsInt(), box.get(3).getAsInt()));
-        }
-        return List.copyOf(boxes);
     }
 
     private static void writeShape(JsonWriter json, HydrologyProfile.RiverShape shape) throws IOException {

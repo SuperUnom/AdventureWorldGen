@@ -16,16 +16,7 @@
       "adventure_level": 4,
       "count": { "min": 1, "max": 1 },
       "allowed_biomes": { "id": ["minecraft:desert"], "area": { "min": 4096, "max": 8192 } },
-      "placement_mode": "scattered",
-      "entrance": [0, 1, -11]
-    },
-    {
-      "id": "testcompanion:waystation",
-      "adventure_level": 8,
-      "count": { "min": 1, "max": 1 },
-      "allowed_biomes": { "id": ["testcompanion:ashen_grove"], "area": { "min": 4096, "max": 8192 } },
-      "placement_mode": "scattered",
-      "entrance": [0, 1, -7]
+      "placement_mode": "scattered"
     }
   ]
 }

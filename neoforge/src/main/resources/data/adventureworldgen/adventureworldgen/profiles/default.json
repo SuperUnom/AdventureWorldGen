@@ -1293,25 +1293,5 @@
     },
     "blend_radius": 4
   },
-  "structures": [
-    {
-      "id": "minecraft:desert_pyramid",
-      "adventure_level": 4,
-      "count": {
-        "min": 1,
-        "max": 1
-      },
-      "allowed_biomes": {
-        "id": [
-          "minecraft:desert"
-        ]
-      },
-      "placement_mode": "scattered",
-      "entrance": [
-        0,
-        1,
-        -11
-      ]
-    }
-  ]
+  "structures": []
 }

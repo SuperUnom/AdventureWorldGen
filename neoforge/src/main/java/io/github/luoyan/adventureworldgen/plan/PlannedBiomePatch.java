@@ -8,7 +8,7 @@ import io.github.luoyan.adventureworldgen.spatial.CellMask;
  *
  * <p>This is shared plan data, deliberately independent of the runtime plan object so
  * planning code can produce it without depending on runtime assembly or Minecraft.
- * Field names are part of the persisted plan-v2 wire format; renaming a component or
+ * Field names are part of the persisted plan-v3 wire format; renaming a component or
  * changing its order requires a reviewed format change.
  */
 public record PlannedBiomePatch(String patchId, ContentId biomeId, int adventureLevel,

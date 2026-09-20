@@ -6,7 +6,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Optional;
 
-/** Transactional plan-v2 storage; implementations publish only fully validated READY snapshots. */
+/** Transactional plan-v3 storage; implementations publish only fully validated READY snapshots. */
 public interface PlanRepository {
     Optional<ReadyPlan> loadReady(Path worldDirectory, ContentId profileId,
                                   String expectedInputHash) throws IOException;

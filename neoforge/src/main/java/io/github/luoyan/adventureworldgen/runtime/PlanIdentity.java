@@ -24,8 +24,8 @@ import io.github.luoyan.adventureworldgen.plan.PlanVersions;
  * version marker - the two travel together by design.
  */
 public final class PlanIdentity {
-    /** Internal cache key revision; public data contracts deliberately remain planner-v2 / plan-v2. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-09-shelves-diverse-defaults-r33";
+    /** Internal cache key revision; the public planner remains v2 while the payload is plan-v3. */
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-20-structure-planning-only-r34";
 
     private PlanIdentity() {}
 

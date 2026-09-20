@@ -18,12 +18,12 @@
 | 需求展开与群系分配 | [规划系统](../systems/planning.md) | [planner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/planner/) | RequirementExpanderTest、MultiRegionAreaTest、MinimumAreaPolicyTest、planning 组 |
 | 地形容量 | [规划：容量](../systems/planning.md#capacity) | [TerrainCapacitySolver](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/planner/TerrainCapacitySolver.java) | TerrainCapacitySolverTest、capacity 与 planning 组 |
 | 到达成本与冒险偏好 | [规划：成本](../systems/planning.md#cost) | [cost](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/cost/) | CostPlannerTest、EdgeCostCalculatorTest、AdventurePreferenceTest、预算测试 |
-| 结构数量、承载与落位 | [规划：结构](../systems/planning.md#structures) | [JointPlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/planner/JointPlanner.java)、[StructureAdapterBridge](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/StructureAdapterBridge.java) | 结构规划 JUnit、planning/default 组、cold/ready |
+| 结构数量、承载与锚点 | [规划：结构](../systems/planning.md#structures) | [JointPlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/planner/JointPlanner.java)、[StructurePlanningCatalog](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/StructurePlanningCatalog.java) | 结构规划、codec 与 planning 测试 |
 | 配置字段与缺省 | [profile](../reference/profile.md) | [config](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/)、[发布默认值](../../neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json) | parser 与 canonical 断言、冲突输入、planning 组 |
-| 计划格式与身份 | [plan-v2](../reference/plan-v2.md) | [plan](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/)、[persistence](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/)、[PlanIdentity](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) | codec、原子发布、身份、确定性与 READY |
+| 计划格式与身份 | [计划 v3](../reference/plan-v2.md) | [plan](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/)、[persistence](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/)、[PlanIdentity](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) | codec、原子发布、身份、确定性与 READY |
 | 首次规划或会话加载 | [生命周期](../architecture/pipeline.md) | [runtime](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/)、[AdventureEvents](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/AdventureEvents.java) | planning 组、异常屏障、普通世界 cold/ready |
 | Minecraft 区块与材料 | [runtime/worldgen](../systems/runtime-worldgen.md) | [worldgen](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/)、[mixin](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/mixin/) | JUnit + 完整 GameTest，按需客户端观察 |
-| 第三方 adapter | [适配器契约](../reference/adapters.md) | [api](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/)、[compat](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/compat/)、[testcompanion](../../neoforge/src/testmod/java/io/github/luoyan/adventureworldgen/testcompanion/) | 注册/冻结/重放与跨区块完整路径 |
+| 第三方群系 adapter | [适配器契约](../reference/adapters.md) | [api](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/)、[compat](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/compat/)、[testcompanion](../../neoforge/src/testmod/java/io/github/luoyan/adventureworldgen/testcompanion/) | 注册冲突、版本身份、准入与实际群系查询 |
 | 进度界面 | [生命周期](../architecture/pipeline.md) | [client](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/client/)、[PlanningProgress](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanningProgress.java) | PlanningProgressTest、客户端；进度不得改变生成 |
 | 文档入口与契约 | [文档目录](../README.md) | 当前对应主题 + 真实来源 | check-docs.py、示例与命令核对 |
 
@@ -44,7 +44,7 @@
 
 ## 保持文档可维护
 
-字段定义写入 profile，冻结兼容性写入 plan-v2，模块行为写入对应 systems，验证命令写入 testing。
+字段定义写入 profile，冻结兼容性写入计划格式参考，模块行为写入对应 systems，验证命令写入 testing。
 源文件和类型用链接或明确代码标识，避免行号、当前测试总量和完整默认 JSON。
 生成产物路径要注明为运行后产生，命令参数占位符要解释输入格式。
 

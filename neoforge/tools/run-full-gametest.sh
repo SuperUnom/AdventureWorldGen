@@ -14,7 +14,7 @@
 #
 # Coverage is checked against the method inventory in
 # src/test/java/io/github/luoyan/adventureworldgen/GameTestInventoryTest.java:
-#   default 16 + performance 6 + capacity 1 + planning 1 = 24 methods.
+#   default 9 + performance 6 + capacity 1 + planning 1 = 17 methods.
 #
 # A passing run means the methods were discovered and passed. It is not a performance verdict:
 # the performance group reports its own timings in the log, and the planning group must use a
@@ -33,11 +33,11 @@ GRADLE_ARGS="${GRADLE_ARGS:---offline}"
 GROUP_TIMEOUT="${GROUP_TIMEOUT:-2700}"
 
 # group:expected method count. The default group also enables the minecraft and adventureworldgen
-# namespaces; neither currently contributes a test, which is why discovery must equal 16.
+# namespaces; neither currently contributes a test, which is why discovery must equal 9.
 # The variable is NOT named GROUPS: that is a special bash array of the caller's group IDs and an
 # assignment to it is silently ignored, which made this loop iterate over the user's gids instead.
 GAMETEST_GROUPS=(
-  "default:16"
+  "default:9"
   "performance:6"
   "capacity:1"
   "planning:1"

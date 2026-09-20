@@ -21,40 +21,36 @@ public final class RequirementExpander {
             patches.add(new PatchDemand(required.patchId(), List.of(required.id()), required.adventureLevel(),
                     required.area(), required.requestId(), false));
         }
-        if (config.spawn().hasBiome()) {
-            boolean represented = config.biomes().required().stream().anyMatch(required ->
-                    required.adventureLevel() == 0 && required.id().equals(config.spawn().biome()));
-            if (!represented) {
-                patches.add(new PatchDemand(StableIds.implicitSpawnPatch(), List.of(config.spawn().biome()), 0,
-                        AreaRange.DEFAULT, "spawn.biome", true));
-            }
+        boolean represented = config.biomes().required().stream().anyMatch(required ->
+                required.adventureLevel() == 0 && required.id().equals(config.spawn().biome()));
+        if (!represented) {
+            patches.add(new PatchDemand(StableIds.implicitSpawnPatch(), List.of(config.spawn().biome()), 0,
+                    AreaRange.DEFAULT, "spawn.biome", true));
         }
 
-        List<StructureInstanceDemand> instances = new ArrayList<>();
+        List<StructureDemand> instances = new ArrayList<>();
         for (var structure : config.structures()) {
-            boolean spawn = config.spawn().hasStructure() && config.spawn().structure().id().equals(structure.id());
-            long minimum = structure.effectiveMinimum(spawn);
+            long minimum = structure.effectiveMinimum();
             if (minimum > Integer.MAX_VALUE) {
                 throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.REQUIREMENTS,
-                        "structure minimum cannot be represented by planner-v2",
+                        "structure minimum cannot be represented by the planner",
                         Map.of("structure", structure.id(), "minimum", minimum));
             }
             for (int sequence = 0; sequence < minimum; sequence++) {
-                instances.add(new StructureInstanceDemand(StableIds.structureInstance(structure.id(), sequence),
+                instances.add(new StructureDemand(StableIds.structureInstance(structure.id(), sequence),
                         structure.id(), sequence, structure.adventureLevel(), structure.allowedBiomes().ids(),
-                        structure.allowedBiomes().area(), structure.entrance(), spawn && sequence == 0, true));
+                        structure.allowedBiomes().area(), structure.spacing(), true));
             }
         }
         for(var instance:instances) {
             var allowed=instance.allowedBiomes().isEmpty()?config.biomes().filler():instance.allowedBiomes();
-            if(instance.spawnInstance()&&config.spawn().hasBiome())allowed=List.of(config.spawn().biome());
             patches.add(new PatchDemand(StableIds.carrierPatch(instance.instanceId()),allowed,instance.adventureLevel(),
                     instance.carrierArea(),instance.instanceId(),true));
         }
         return new ExpandedRequirements(patches, instances);
     }
 
-    public record ExpandedRequirements(List<PatchDemand> patches, List<StructureInstanceDemand> structures) {
+    public record ExpandedRequirements(List<PatchDemand> patches, List<StructureDemand> structures) {
         public ExpandedRequirements {
             patches = List.copyOf(patches);
             structures = List.copyOf(structures);
@@ -66,10 +62,10 @@ public final class RequirementExpander {
         public PatchDemand { allowedBiomes = List.copyOf(allowedBiomes); }
     }
 
-    public record StructureInstanceDemand(String instanceId, ContentId structureId, int sequence,
-                                          int adventureLevel, List<ContentId> allowedBiomes, AreaRange carrierArea,
-                                          AdventureWorldConfig.Vec3d relativeEntrance,
-                                          boolean spawnInstance, boolean required) {
-        public StructureInstanceDemand { allowedBiomes = List.copyOf(allowedBiomes); }
+    /** One expanded author-requested structure instance; it contains no structure-intrinsic facts. */
+    public record StructureDemand(String instanceId, ContentId structureId, int sequence,
+                                  int adventureLevel, List<ContentId> allowedBiomes, AreaRange carrierArea,
+                                  AdventureWorldConfig.Spacing spacing, boolean required) {
+        public StructureDemand { allowedBiomes = List.copyOf(allowedBiomes); }
     }
 }

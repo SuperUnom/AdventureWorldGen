@@ -33,18 +33,12 @@ import net.minecraft.world.level.levelgen.SurfaceRules;
 import net.minecraft.world.level.levelgen.WorldGenerationContext;
 import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.core.RegistryAccess;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.levelgen.structure.Structure;
-import net.minecraft.world.level.levelgen.structure.StructureStart;
-import net.minecraft.world.level.levelgen.structure.pieces.PiecesContainer;
-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
-import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
 
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-/** plan-v2 terrain executor. Its serialized form contains only the fixed profile ID. */
+/** Current-plan terrain executor. Its serialized form contains only the fixed profile ID. */
 public final class AdventureChunkGenerator extends ChunkGenerator {
     public static final MapCodec<AdventureChunkGenerator> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
             ResourceLocation.CODEC.fieldOf("profile").forGetter(AdventureChunkGenerator::profile),
@@ -203,33 +197,6 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
 
     @Override public void spawnOriginalMobs(WorldGenRegion region) { vanillaDelegate.spawnOriginalMobs(region); }
 
-    @Override
-    public void createStructures(RegistryAccess registries, ChunkGeneratorStructureState state,
-                                 StructureManager manager, ChunkAccess chunk, StructureTemplateManager templates) {
-        // Generate non-controlled vanilla structures normally, then erase the controlled native candidate before publish.
-        super.createStructures(registries, state, manager, chunk, templates);
-        AdventurePlanView plan = RuntimePlanRegistry.await(planKey());
-        var structureRegistry = registries.registryOrThrow(Registries.STRUCTURE);
-        for (var controlledId : plan.controlledStructureIds()) {
-            Structure controlled = structureRegistry.get(ResourceLocation.parse(controlledId.value()));
-            if (controlled == null) throw new IllegalStateException("controlled structure is missing: " + controlledId);
-            if (chunk.getAllStarts().containsKey(controlled))
-                chunk.setStartForStructure(controlled, StructureStart.INVALID_START);
-        }
-
-        ChunkPos chunkPos = chunk.getPos();
-        // Piece types come from the registry, so any adapter that froze a piece can have it
-        // restored here. This generator names no structure and no piece class of its own.
-        var pieceContext = FrozenPieceRestore.context(registries, templates);
-        for (var planned : plan.structuresIntersecting(chunkPos.x, chunkPos.z)) {
-            if (Math.floorDiv(planned.originX(), 16) != chunkPos.x
-                    || Math.floorDiv(planned.originZ(), 16) != chunkPos.z) continue;
-            Structure controlled = structureRegistry.get(ResourceLocation.parse(planned.structureId().value()));
-            if (controlled == null) throw new IllegalStateException("planned structure is missing: " + planned.structureId());
-            chunk.setStartForStructure(controlled, new StructureStart(controlled, chunkPos, 0,
-                    new PiecesContainer(FrozenPieceRestore.restore(planned, pieceContext))));
-        }
-    }
     @Override public int getGenDepth() { return DEPTH; }
     @Override public int getSeaLevel() { return SEA_LEVEL; }
     @Override public int getMinY() { return MIN_Y; }

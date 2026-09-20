@@ -23,7 +23,7 @@ import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
  * the layout for that reason. Keeping the computation in one named place makes that independence
  * explicit and lets the statistics be verified on their own.
  *
- * <p>Wire format: {@link ClimateSupply} is serialized reflectively as part of the plan-v2 layout
+ * <p>Wire format: {@link ClimateSupply} is serialized reflectively as part of the plan-v3 layout
  * state, so its component names and order are part of the persisted format and must not be changed
  * casually. {@code ClimateState} deliberately keeps flat {@code ratios} / {@code actual} /
  * {@code supply} components rather than nesting this object, because that is the existing wire shape.

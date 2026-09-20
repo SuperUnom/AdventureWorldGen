@@ -18,7 +18,7 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 
 | 包 | 职责 |
 |---|---|
-| `api` | 群系与结构适配契约、计划查询视图和存储接口；不放内置适配实现 |
+| `api` | 群系适配契约、计划查询视图和存储接口；不放内置适配实现 |
 | `config` | 作者模型、严格 JSON 解析、规范化与内容预检；注册表查询由外部注入 |
 | `plan` | ID、版本、规划参数、冻结环境状态、进度与失败词汇 |
 | `spatial` | 世界对齐网格、稀疏掩膜、坐标和查询缓存基础件 |
@@ -32,8 +32,8 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 | `planner` | 需求展开、容量预留、群系竞争分配、结构落位与填充 |
 | `persistence` | 冻结快照、内部计划编解码、校验和及原子发布 |
 | `runtime` | 首次规划编排、READY 恢复、计划组装与会话查询屏障 |
-| `compat` | 原版内容的具体适配器与水体群系规则 |
-| `worldgen` | 数据包读取、Minecraft 注册表接入、区块执行和结构部件恢复 |
+| `compat` | 原版群系兼容实现与水体群系规则 |
+| `worldgen` | 数据包读取、Minecraft 注册表接入与区块执行；不执行规划结构 |
 | `client` | 规划进度加载界面 |
 | `mixin` | 原版功能的受限接入钩子，目前用于泉口过滤 |
 
@@ -53,7 +53,9 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 - `hydrology` 与 `erosion` 不选择 Minecraft 方块或群系。
 - `persistence` 只处理冻结数据，不依赖 `runtime` 查询对象。
 - `api` 不引用内部求解与执行实现，`compat` 通过公开契约实现具体内容。
-- 共享结构恢复按部件注册表分派，不在生成器中增加具体结构类型分支。
+- planner 只接收纯 `StructurePlanningInfo`，只输出纯 `PlannedStructurePlacement`；不得依赖结构部件、NBT 或区块执行。
+- 生成器不得消费规划结构来抑制原生候选、恢复 pieces 或注入 Minecraft 结构起点。
+- planner 不得按具体 structure ID 添加特例；未来结构差异只能通过纯 `StructurePlanningInfo` 输入。
 
 护栏按源码中的包引用检查，不是对所有运行时行为的证明。
 增加依赖前同时核对实际数据流和测试约束，不通过反射或全限定名绕过检查。
@@ -64,6 +66,10 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 |---|---|
 | 配置字段与校验 | [AdventureWorldConfigParser](neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/AdventureWorldConfigParser.java)、[AdventureWorldConfig](neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/AdventureWorldConfig.java) |
 | 随包默认 profile | [default.json](neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json) |
+| 作者结构需求 | `AdventureWorldConfig.StructureSettings` 与 `RequirementExpander.StructureDemand` |
+| 结构固有规划信息 | [StructurePlanningInfo](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/StructurePlanningInfo.java) 与 `StructurePlanningCatalog` |
+| 结构规划位置 | [PlannedStructurePlacement](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannedStructurePlacement.java) |
+| Minecraft 实际结构 | Minecraft 原生/数据包 worldgen；AdventureWorldGen 当前没有结构生成器 |
 | 缺省地形参数 | [TerrainSettings](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainSettings.java)、[TerrainTemplate](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainTemplate.java) |
 | 算法与格式身份 | [PlanVersions](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlanVersions.java)、[PlannerProfile](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannerProfile.java)、[PlanIdentity](neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) |
 | 架构边界 | 上述 `PackageBoundaryTest` |
@@ -88,13 +94,13 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 不要假定修改任意版本常量都会自动改变 `input_sha256`。
 改变预算也可能改变规划结果，需要审查身份标记与持久化约束。
 
-结构适配必须冻结完整部件，通过注册部件类型恢复。
-使用 [公开适配契约](docs/reference/adapters.md)，不要让第三方接入依赖内部 planner。
+结构配置是作者的 `StructureDemand`，结构目录提供 `StructurePlanningInfo`，冻结结果是宏观锚点。
+三者都不是 Minecraft 生成指令；第三方 Java 扩展目前只开放 [群系适配契约](docs/reference/adapters.md)。
 
 ## 验证与交付
 
 按 [测试指南](docs/development/testing.md) 选择验证层级。
-纯算法改动运行 JUnit；worldgen、结构恢复、注册与生命周期改动补跑对应 GameTest。
+纯算法改动运行 JUnit；worldgen、注册与生命周期改动补跑对应 GameTest。
 首次规划用新目录，READY 对照复用同一目录和完全匹配的配置。
 
 报告实际执行的命令、输入、结果和未验证范围。

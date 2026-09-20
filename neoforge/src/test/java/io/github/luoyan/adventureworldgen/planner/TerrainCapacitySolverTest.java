@@ -20,7 +20,7 @@ class TerrainCapacitySolverTest {
              "test:impossible":{"min_height":319},"test:badlands":{"allowed_templates":["badlands"]}}},
            "structures":[{"id":"test:keep","adventure_level":7,"count":{"min":1,"max":1},
              "allowed_biomes":{"id":["test:impossible","test:badlands"],
-             "area":{"min":4096,"target":100000000}},"entrance":[0,0,0]}]}
+             "area":{"min":4096,"target":100000000}}}]}
           """);
         var coast=new Coastline(List.of(new Vec2(-1300,-1300),new Vec2(1300,-1300),new Vec2(1300,1300),new Vec2(-1300,1300)));
         var plan=TerrainCapacitySolver.reserve(PlannerProfile.V2, 7331,config,coast,64);

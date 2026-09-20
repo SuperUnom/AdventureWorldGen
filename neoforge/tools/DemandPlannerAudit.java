@@ -19,7 +19,7 @@ import java.awt.*;
 import java.awt.image.BufferedImage;
 import javax.imageio.ImageIO;
 
-/** Full frozen environment and biome pipeline; structures use a bounded test footprint, not Minecraft NBT. */
+/** Full frozen environment, biome and abstract structure-placement pipeline. */
 public class DemandPlannerAudit {
  public static void main(String[] args)throws Exception {
   var config=new AdventureWorldConfigParser().parse(Files.newBufferedReader(Path.of("src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json")));
@@ -45,15 +45,16 @@ public class DemandPlannerAudit {
    System.out.println("MAPS "+out.resolve(seed+"-temperature.png")+" "+out.resolve(seed+"-terrain.png"));
    var levels=new JointPlanner.LevelConstraint(){public boolean accepts(int l,int x,int z){return true;}
     public double penalty(int l,int x,int z){return io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(l,10*Math.hypot(x,z)/radius);}};
-   var joint=new JointPlanner(profile).plan(seed,config,terrain,(d,x,y,z,s)->new AdventurePlanView.PlannedStructure(d.instanceId(),d.structureId(),x,y,z,"north",
-    java.util.List.of(new AdventurePlanView.PlannedPiece(d.instanceId()+"/0",x-10,y,z-10,x+10,y+14,z+10,new byte[]{1}))),levels);
+   var joint=new JointPlanner(profile).plan(seed,config,terrain,
+    io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
+     config.structures().stream().map(AdventureWorldConfig.StructureSettings::id).toList()),levels);
    System.out.println("SEED "+seed+" filler and validation");
    var plan=new GeneratedAdventurePlan(seed,config,coast.coastline(),rivers,64,coast.landBand(),coast.seaBand(),"terrain-r21",joint.spawn(),joint.patches(),joint.structures(),
     PlanDiagnostics.basic(coast.coastline().vertices().size(),rivers.channels().size(),rivers.channels().stream().mapToLong(channel->channel.points().size()).sum(),"terrain-r21"),erosion,capacity);
    validateAndReport(out,seed,config,plan);
    renderBiomes(out,seed,config,plan);
    Files.writeString(out.resolve(seed+"-summary.txt"),"seed="+seed+"\ntarget_ratios="+Arrays.toString(plan.climate().targetRatios())+"\nactual_ratios="+Arrays.toString(plan.climate().actualRatios())+"\nfiller_seeds="+plan.fillerSeedCount()+"\noperations="+joint.operationCount()+"\nseconds="+(System.nanoTime()-start)/1e9+"\nsupply="+plan.climate().supply()+"\n");
-   // Exercise the production codec, without publishing an artificial test footprint to a game world.
+   // Exercise the production codec with placement-only structure data.
    var codec=new io.github.luoyan.adventureworldgen.persistence.PlanV2Codec();
    byte[] encoded=codec.encode(new ContentId("adventureworldgen:default"),"audit",plan.snapshot());
    Files.write(out.resolve(seed+"-plan.json"),encoded);
@@ -123,7 +124,7 @@ public class DemandPlannerAudit {
   var g=im.createGraphics();g.setColor(Color.WHITE);
   for(var p:plan.biomePatches()){if(p.patchId().startsWith("filler/"))continue;int px=30+(p.anchorX()+3100)*780/6200,pz=80+(p.anchorZ()+3100)*780/6200;g.drawOval(px-3,pz-3,6,6);}
   g.setColor(new Color(0xFF8A40));
-  for(var structure:plan.structures()){int px=30+(structure.originX()+3100)*780/6200,pz=80+(structure.originZ()+3100)*780/6200;g.drawRect(px-4,pz-4,8,8);}
+  for(var structure:plan.structures()){int px=30+(structure.anchorX()+3100)*780/6200,pz=80+(structure.anchorZ()+3100)*780/6200;g.drawRect(px-4,pz-4,8,8);}
   int row=0;g.setFont(new Font("SansSerif",0,13));
   for(var id:legendIds(c)){g.setColor(new Color(color(id,c)));g.fillRect(838,85+row*25,15,15);g.setColor(Color.WHITE);g.drawString(id.value().replace("minecraft:",""),862,97+row*25);row++;}
   g.dispose();label(im,"White dots: required biome seeds | Orange squares: structures placed afterward", "Generated from current code and frozen terrain; not an in-game screenshot.");ImageIO.write(im,"png",out.resolve(seed+"-biomes.png").toFile());

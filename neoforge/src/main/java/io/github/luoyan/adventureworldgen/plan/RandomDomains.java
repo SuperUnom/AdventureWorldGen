@@ -12,7 +12,7 @@ import java.util.Set;
  * a random-domain name and fails when one is missing here. Adding a new domain is therefore a
  * deliberate act: either reuse an existing name or register it.
  *
- * <p>Why it exists: {@code plan-v2}'s {@code random_keys} array is historical descriptive metadata,
+ * <p>Why it exists: the plan's {@code random_keys} array is historical descriptive metadata,
  * not a manifest - it is written for wire compatibility, never read back, and its names are not the
  * names the code uses. Someone reading it would conclude the random surface is validated when it is
  * not. This class is the honest list; {@code PlanV2Codec} points here.

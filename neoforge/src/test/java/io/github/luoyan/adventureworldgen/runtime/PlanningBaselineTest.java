@@ -1,8 +1,6 @@
 package io.github.luoyan.adventureworldgen.runtime;
 
-import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
-import io.github.luoyan.adventureworldgen.api.StructureAdapter;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
@@ -19,6 +17,7 @@ import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog;
 import io.github.luoyan.adventureworldgen.spatial.Vec2;
 import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.terrain.ExactGridTerrain;
@@ -44,7 +43,7 @@ import io.github.luoyan.adventureworldgen.testing.TerrainSnapshots;
  *
  * <p>This drives the same stage order as {@link RuntimePlanner} without any Minecraft
  * registry, adapter or client dependency, then pins everything the refactor must not
- * change: the canonical plan-v2 bytes, the READY round trip, and sampled terrain /
+ * change: the canonical plan-v3 bytes, the READY round trip, and sampled terrain /
  * water / biome / structure / spawn observations. Coverage of the deterministic
  * planning path lives here so a purely structural change that alters output fails
  * loudly instead of being absorbed by a stale expectation.
@@ -60,8 +59,7 @@ class PlanningBaselineTest {
              "biomes":{"required":[{"id":"test:forest","adventure_level":3,"area":{"min":4096,"target":8192}}],
                        "filler":["test:plains","test:forest","test:desert"]},
              "structures":[{"id":"test:keep","adventure_level":4,"count":{"min":1,"max":1},
-                            "allowed_biomes":{"id":["test:desert"],"area":{"min":4096,"target":8192}},
-                            "entrance":[0,0,0]}]}
+                            "allowed_biomes":{"id":["test:desert"],"area":{"min":4096,"target":8192}}}]}
             """;
 
     @Test
@@ -108,7 +106,9 @@ class PlanningBaselineTest {
         var costs = new CostPlanner(PlannerProfile.V2).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5));
 
         var jointPlanner = new JointPlanner(PlannerProfile.V2);
-        var joint = jointPlanner.plan(SEED, config, erodedTerrain, recorderFreezer(),
+        var joint = jointPlanner.plan(SEED, config, erodedTerrain,
+                StructurePlanningCatalog.fromIds(config.structures().stream()
+                        .map(AdventureWorldConfig.StructureSettings::id).toList()),
                 JointPlanner.preferenceOnly((level, x, z) ->
                         io.github.luoyan.adventureworldgen.cost.AdventurePreference.penalty(level,
                                 costs.normalizedPreferenceAt(x, z, radius))),
@@ -125,25 +125,6 @@ class PlanningBaselineTest {
                 erosion, capacities,
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain, jointPlanner.climate()),
                 PlanningObserver.NONE);
-    }
-
-    /**
-     * A frozen structure with two real pieces but an origin-sized reservation, so the
-     * baseline exercises piece NBT and rotation without depending on carrier geometry.
-     */
-    private static JointPlanner.StructureFreezer recorderFreezer() {
-        return (demand, x, y, z, structureSeed) -> {
-            String prefix = demand.instanceId() + "/piece/";
-            var pieces = List.of(
-                    new AdventurePlanView.PlannedPiece(prefix + "0", x - 12, y, z - 12, x + 12, y + 9, z + 12,
-                            ("baseline-nbt-0:" + demand.instanceId() + ":" + structureSeed)
-                                    .getBytes(StandardCharsets.UTF_8)),
-                    new AdventurePlanView.PlannedPiece(prefix + "1", x + 4, y, z - 4, x + 20, y + 5, z + 4,
-                            ("baseline-nbt-1:" + demand.instanceId()).getBytes(StandardCharsets.UTF_8)));
-            var reservation = List.of(new StructureAdapter.HorizontalBox(x, z, x, z));
-            return new AdventurePlanView.PlannedStructure(demand.instanceId(), demand.structureId(),
-                    x, y, z, "north", x, y, z, reservation, reservation, pieces);
-        };
     }
 
     private static String spawnSignature(GeneratedAdventurePlan plan) {
@@ -164,18 +145,9 @@ class PlanningBaselineTest {
                         + sample.landform() + "|" + plan.solidSurfaceAt(x, z, sample)).getBytes(StandardCharsets.UTF_8));
             }
         }
-        for (int chunkX = -34; chunkX <= 34; chunkX += 8) {
-            for (int chunkZ = -34; chunkZ <= 34; chunkZ += 8) {
-                var found = plan.structuresIntersecting(chunkX, chunkZ);
-                StringBuilder line = new StringBuilder(chunkX + "/" + chunkZ + "=");
-                for (var structure : found) line.append(structure.instanceId()).append('@')
-                        .append(structure.originX()).append(',').append(structure.originY()).append(',')
-                        .append(structure.originZ()).append(';').append(structure.rotation()).append(';')
-                        .append(structure.entranceX()).append(',').append(structure.entranceZ()).append(',')
-                        .append(structure.pieces().size()).append(' ');
-                digest.update(line.toString().getBytes(StandardCharsets.UTF_8));
-            }
-        }
+        for (var structure : plan.plannedStructures())
+            digest.update((structure.instanceId()+"@"+structure.anchorX()+","+structure.anchorZ())
+                    .getBytes(StandardCharsets.UTF_8));
         digest.update(("spawn=" + plan.spawnPosition()).getBytes(StandardCharsets.UTF_8));
         digest.update(("fillerSeedCount=" + plan.fillerSeedCount()).getBytes(StandardCharsets.UTF_8));
         return HexFormat.of().formatHex(digest.digest());
@@ -192,7 +164,7 @@ class PlanningBaselineTest {
     //
     // ============================ REVISION 2 (2026-09-11) ============================
     // EXPECTED_PLAN_SHA256 only. EXPECTED_FIELD_SHA256 and EXPECTED_SPAWN are untouched, and so are
-    // PlanningOptimizationGoldenTest, DeterminismAcceptanceTest and the plan-v2 round trip.
+    // PlanningOptimizationGoldenTest, DeterminismAcceptanceTest and the plan-v3 round trip.
     //
     // Old: 60db9c350e163356b58be39437bddc31e1cfde5ef9322994f2763e974421ccfe
     // New: 9c0327dea3bdc5798b6d9a21a2818417891fa7204724abb4a2593fc79f62e578
@@ -211,8 +183,8 @@ class PlanningBaselineTest {
     // item predicted: "该统计虽不反馈布局，却会持久化，因此统计变化需单独核对规范字节，不能称为绝对
     // 字节不变." This revision was re-recorded deliberately; it is not a batch refresh of every hash.
     private static final String EXPECTED_PLAN_SHA256 =
-            "9c0327dea3bdc5798b6d9a21a2818417891fa7204724abb4a2593fc79f62e578";
+            "0d3eac42f4da16daaa4e7a8e0bcd1e54dee67d4bf73e3b5e60e9f3a3759cf3ef";
     private static final String EXPECTED_FIELD_SHA256 =
-            "ce1ac745adc29f185a2867031eb7a8b29de29f895066226014e1211da0a92a0f";
+            "21a54e68a20299639024c094bfb85bd182b3a4808bf77a6fcd4e98e885044196";
     private static final String EXPECTED_SPAWN = "0.5/0.5/0.0";
 }

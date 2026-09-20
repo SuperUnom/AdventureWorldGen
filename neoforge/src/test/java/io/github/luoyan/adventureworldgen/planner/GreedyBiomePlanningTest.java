@@ -27,7 +27,7 @@ class GreedyBiomePlanningTest {
              "test:rare":{"allowed_templates":["badlands"]},
              "test:carrier":{"allowed_templates":["badlands"]}}},
            "structures":[{"id":"test:keep","adventure_level":8,"count":{"min":1,"max":1},
-             "allowed_biomes":{"id":["test:carrier"],"area":{"min":1024,"max":4096}},"entrance":[0,0,0]}]}
+             "allowed_biomes":{"id":["test:carrier"],"area":{"min":1024,"max":4096}}}]}
           """);
         MacroTerrain terrain=(x,z)->x>160&&x<320?new MacroSample(80,Double.NaN,WaterKind.NONE,false,
                 "rare","plateau","test","badlands","",0,0,0,0,0):FLAT.sample(x,z);

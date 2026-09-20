@@ -27,20 +27,9 @@ public record AdventureWorldConfig(
         public WorldSettings { Objects.requireNonNull(terrain); }
     }
 
-    public record SpawnSettings(ContentId biome, SpawnStructure structure) {
-        public boolean hasBiome() {
-            return biome != null;
-        }
-
-        public boolean hasStructure() {
-            return structure != null;
-        }
-    }
-
-    public record SpawnStructure(ContentId id, Vec3d spawnPoint) {
-        public SpawnStructure {
-            Objects.requireNonNull(id, "id");
-            Objects.requireNonNull(spawnPoint, "spawnPoint");
+    public record SpawnSettings(ContentId biome) {
+        public SpawnSettings {
+            Objects.requireNonNull(biome, "biome");
         }
     }
 
@@ -183,8 +172,7 @@ public record AdventureWorldConfig(
             CountRange count,
             AllowedBiomes allowedBiomes,
             PlacementMode placementMode,
-            Spacing spacing,
-            Vec3d entrance
+            Spacing spacing
     ) {
         public StructureSettings {
             Objects.requireNonNull(id, "id");
@@ -192,12 +180,9 @@ public record AdventureWorldConfig(
             Objects.requireNonNull(allowedBiomes, "allowedBiomes");
             Objects.requireNonNull(placementMode, "placementMode");
             Objects.requireNonNull(spacing, "spacing");
-            Objects.requireNonNull(entrance, "entrance");
         }
 
-        public long effectiveMinimum(boolean isSpawnStructure) {
-            return isSpawnStructure ? Math.max(1, count.min()) : count.min();
-        }
+        public long effectiveMinimum() { return count.min(); }
     }
 
     public record AllowedBiomes(List<ContentId> ids, AreaRange area) {
@@ -247,6 +232,4 @@ public record AdventureWorldConfig(
         SCATTERED
     }
 
-    public record Vec3d(double x, double y, double z) {
-    }
 }

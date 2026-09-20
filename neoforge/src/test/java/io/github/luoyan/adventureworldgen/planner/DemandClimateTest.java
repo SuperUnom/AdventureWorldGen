@@ -53,7 +53,8 @@ class DemandClimateTest {
            "filler":["test:a"]}}
           """);
         MacroTerrain river=(x,z)->x>20&&x<36?new MacroSample(65,68,WaterKind.RIVER,false,"r","plains","test"):FLAT.sample(x,z);
-        var result=new JointPlanner(PlannerProfile.V2).plan(1,config,river,(d,x,y,z,s)->{throw new AssertionError();});
+        var result=new JointPlanner(PlannerProfile.V2).plan(1,config,river,
+                io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(java.util.List.of()));
         var patch=result.patches().getFirst();assertTrue(patch.area()>=1024);
         for(long cell:patch.mask().cells())assertEquals(WaterKind.NONE,river.sample(CellMask.x(cell)+2,CellMask.z(cell)+2).waterKind());
         assertTrue(patch.maxXExclusive()>36,"river still acts as a biome boundary");

@@ -42,7 +42,7 @@ class AdventureWorldConfigParserTest {
         AdventureWorldConfig config = parser.parse(validStructureConfig());
 
         assertEquals("example:ruins", config.structures().getFirst().id().value());
-        assertEquals(1, config.structures().getFirst().effectiveMinimum(true));
+        assertEquals(0, config.structures().getFirst().effectiveMinimum());
         assertEquals(2, config.structures().getFirst().allowedBiomes().ids().size());
         assertEquals("example:forest", config.structures().getFirst().allowedBiomes().ids().getFirst().value());
         assertFalse(config.structures().getFirst().spacing().hasMaximum());
@@ -79,7 +79,7 @@ class AdventureWorldConfigParserTest {
         String base = validStructureConfig();
         assertPath(base.replace("\"min\":0,\"max\":1", "\"min\":2,\"max\":1"),
                 "$.structures[0].count.max", ConfigErrorCode.CONFIG_CONFLICT);
-        assertPath(base.replace("\"entrance\":[0,0,4]", "\"spacing\":{\"min\":3,\"max\":2},\"entrance\":[0,0,4]"),
+        assertPath(base.replace("\"allowed_biomes\"", "\"spacing\":{\"min\":3,\"max\":2},\"allowed_biomes\""),
                 "$.structures[0].spacing.max", ConfigErrorCode.CONFIG_CONFLICT);
         assertPath("""
                 {"world":{"radius":1000},"spawn":{"biome":"example:a"},"biomes":{"required":[{"id":"example:a","adventure_level":0,"area":{"min":10,"max":265}}],"filler":["example:a"]}}
@@ -87,14 +87,13 @@ class AdventureWorldConfigParserTest {
     }
 
     @Test
-    void validatesSpawnStructureReferenceLevelCountAndBiome() {
-        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() -> parser.parse(
-                validStructureConfig().replace("\"adventure_level\":0", "\"adventure_level\":1")));
-        assertPath(validStructureConfig().replace("\"min\":0,\"max\":1", "\"min\":0,\"max\":0"),
-                "$.spawn.structure.id", ConfigErrorCode.CONFIG_CONFLICT);
-        assertPath(validStructureConfig().replace(
-                        "\"example:plains\",\"example:forest\",\"example:plains\"", "\"example:desert\""),
-                "$.spawn.biome", ConfigErrorCode.CONFIG_CONFLICT);
+    void rejectsRemovedSpawnStructureAndEntranceFields() {
+        assertPath(validStructureConfig().replace("\"biome\":\"example:plains\"",
+                        "\"biome\":\"example:plains\",\"structure\":{\"id\":\"example:ruins\",\"spawn_point\":[1,2,3]}"),
+                "$.spawn.structure", ConfigErrorCode.CONFIG_ERROR);
+        assertPath(validStructureConfig().replace("\"placement_mode\":\"scattered\"",
+                        "\"placement_mode\":\"scattered\",\"entrance\":[0,0,4]"),
+                "$.structures[0].entrance", ConfigErrorCode.CONFIG_ERROR);
     }
 
     @Test
@@ -153,14 +152,14 @@ class AdventureWorldConfigParserTest {
         return """
                 {
                   "world":{"radius":6000},
-                  "spawn":{"biome":"example:plains","structure":{"id":"example:ruins","spawn_point":[1,2,3]}},
+                  "spawn":{"biome":"example:plains"},
                   "biomes":{"filler":["example:plains"]},
                   "structures":[{
                     "id":"example:ruins",
                     "adventure_level":0,
                     "count":{"min":0,"max":1},
                     "allowed_biomes":{"id":["example:plains","example:forest","example:plains"]},
-                    "entrance":[0,0,4]
+                    "placement_mode":"scattered"
                   }]
                 }
                 """;

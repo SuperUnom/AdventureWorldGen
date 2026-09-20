@@ -6,6 +6,7 @@ import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import io.github.luoyan.adventureworldgen.terrain.Coastline;
 import io.github.luoyan.adventureworldgen.terrain.RegionTerrain;
 import io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Everything a plan-v2 document freezes, as data.
+ * Everything a plan-v3 document freezes, as data.
  *
  * <p>This is the storage layer's whole contract: {@link PlanV2Codec} encodes and decodes this
  * record and never sees the executable plan object. The runtime builds one from the objects a first
@@ -46,7 +47,7 @@ public record PlanSnapshot(
         TerrainSettings recipeSettings,
         List<RegionTerrain.Region> recipeRegions,
         List<PlannedBiomePatch> biomePatches,
-        List<AdventurePlanView.PlannedStructure> structures,
+        List<PlannedStructurePlacement> structures,
         ErosionDeltaField erosion,
         TerrainCapacityPlan capacities,
         BiomeLayout biomeLayout

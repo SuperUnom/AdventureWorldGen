@@ -4,7 +4,6 @@ import com.google.gson.stream.JsonWriter;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.AllowedBiomes;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.AreaRange;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Spacing;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Vec3d;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -76,13 +75,7 @@ public final class CanonicalConfigJson {
             json.endObject();
 
             json.name("spawn").beginObject();
-            if (config.spawn().biome() != null) json.name("biome").value(config.spawn().biome().value());
-            if (config.spawn().structure() != null) {
-                json.name("structure").beginObject();
-                json.name("id").value(config.spawn().structure().id().value());
-                writeVector(json, "spawn_point", config.spawn().structure().spawnPoint());
-                json.endObject();
-            }
+            json.name("biome").value(config.spawn().biome().value());
             json.endObject();
 
             json.name("structures").beginArray();
@@ -94,7 +87,6 @@ public final class CanonicalConfigJson {
                 json.name("max").value(structure.count().max());
                 json.name("min").value(structure.count().min());
                 json.endObject();
-                writeVector(json, "entrance", structure.entrance());
                 json.name("id").value(structure.id().value());
                 json.name("placement_mode").value("scattered");
                 writeSpacing(json, structure.spacing());
@@ -148,11 +140,4 @@ public final class CanonicalConfigJson {
         json.endObject();
     }
 
-    private static void writeVector(JsonWriter json, String name, Vec3d vector) throws IOException {
-        json.name(name).beginArray();
-        json.value(vector.x());
-        json.value(vector.y());
-        json.value(vector.z());
-        json.endArray();
-    }
 }

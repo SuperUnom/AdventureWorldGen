@@ -3,7 +3,8 @@
 这里回答系统如何分层、模块如何协作，以及首次定位代码应从哪里进入。
 
 AdventureWorldGen 在主世界区块生成前完成宏观编排。
-作者配置是输入，冻结计划是规划与执行之间的边界，Minecraft 负责实际物化。
+作者配置是输入，冻结计划向 worldgen 提供地形、群系和出生查询。
+结构规划只保留宏观元数据；Minecraft 原生结构系统独立负责实际结构生成。
 默认 [普通世界预设](../../neoforge/src/main/resources/data/minecraft/worldgen/world_preset/normal.json)
 将主世界接到自定义生成器；下界和末地仍使用各自的原版生成器。
 
@@ -22,7 +23,8 @@ flowchart TD
     I --> J[persistence 原子发布]
     J --> K[runtime READY 恢复与查询]
     I --> K
-    K --> L[worldgen Minecraft 区块执行]
+    K --> L[worldgen 地形/群系/出生执行]
+    M[Minecraft 原生结构系统] --> L
 ```
 
 箭头表示主要数据流，不等同于 Java 包依赖。
@@ -40,7 +42,7 @@ flowchart TD
     root[根包生命周期] --> config & plan & runtime & worldgen
     client --> runtime
     mixin --> worldgen
-    worldgen --> api & compat & config & plan & runtime
+    worldgen --> api & config & plan & runtime
     runtime --> api & biome & climate & compat & config & cost & erosion & hydrology & noise & persistence & plan & planner & spatial & terrain
     planner --> api & biome & climate & config & noise & plan & spatial & terrain
     persistence --> api & erosion & hydrology & plan & spatial & terrain
@@ -51,7 +53,7 @@ flowchart TD
     erosion --> api & hydrology & noise & plan
     hydrology --> api & noise & plan & spatial & terrain
     terrain --> api & noise & plan & spatial
-    compat --> api & plan
+    compat --> plan
     api --> plan
     noise --> spatial
     plan --> spatial
@@ -67,12 +69,13 @@ flowchart TD
 | 配置怎样进入游戏 | [ProfileReloadListener](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/ProfileReloadListener.java) | [生命周期](pipeline.md#reload) |
 | 世界什么时候开始规划 | [AdventureEvents](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/AdventureEvents.java) | [运行时](../systems/runtime-worldgen.md) |
 | 哪一步构造什么 | [RuntimePlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/RuntimePlanner.java) | [首次规划](pipeline.md#initial) |
-| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结契约](../reference/plan-v2.md) |
+| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v3](../reference/plan-v2.md) |
 | 如何写入区块 | [AdventureChunkGenerator](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/AdventureChunkGenerator.java) | [区块执行](../systems/runtime-worldgen.md#chunk) |
 
 ## 能力范围
 
 系统编排宏观位置，不证明玩家路线、首次遇见顺序或每条道路的可达性。
+规划结构锚点不保证 Minecraft 会在该处生成同 ID 结构，也不会抑制其他原生结构。
 冒险等级和面积的保证范围见 [规划约束分层](../systems/planning.md#constraints)。
 群系查询当前是水平归属；表层与地物使用 Minecraft 内容，不提供垂直群系规划。
 独立工具、测试伴随模组与生产资源的边界见 [测试指南](../development/testing.md)。

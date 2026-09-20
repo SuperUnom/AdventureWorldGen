@@ -8,21 +8,16 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.TreeMap;
 import io.github.luoyan.adventureworldgen.plan.FailureStage;
 
 /** Deterministically ordered adapter registrations, frozen before planning starts. */
 public final class AdapterRegistry {
     private final Map<ContentId, BiomeAdapter> biomes;
-    private final Map<ContentId, StructureAdapter> structures;
     private final BiomeAdapter genericBiome;
 
-    private AdapterRegistry(Map<ContentId, BiomeAdapter> biomes,
-                            Map<ContentId, StructureAdapter> structures,
-                            BiomeAdapter genericBiome) {
+    private AdapterRegistry(Map<ContentId, BiomeAdapter> biomes, BiomeAdapter genericBiome) {
         this.biomes = Collections.unmodifiableMap(new TreeMap<>(biomes));
-        this.structures = Collections.unmodifiableMap(new TreeMap<>(structures));
         this.genericBiome = genericBiome;
     }
 
@@ -30,14 +25,9 @@ public final class AdapterRegistry {
         return biomes.getOrDefault(id, genericBiome);
     }
 
-    public Optional<StructureAdapter> structure(ContentId id) {
-        return Optional.ofNullable(structures.get(id));
-    }
-
     public Collection<String> versionKeys() {
         ArrayList<String> result = new ArrayList<>();
         biomes.forEach((id, adapter) -> result.add("biome/" + id + "=" + adapter.adapterVersion()));
-        structures.forEach((id, adapter) -> result.add("structure/" + id + "=" + adapter.adapterVersion()));
         result.add("biome/*=" + genericBiome.adapterVersion());
         return ListCopy.sorted(result);
     }
@@ -46,7 +36,6 @@ public final class AdapterRegistry {
 
     public static final class Builder {
         private final TreeMap<ContentId, BiomeAdapter> biomes = new TreeMap<>();
-        private final TreeMap<ContentId, StructureAdapter> structures = new TreeMap<>();
         private final BiomeAdapter genericBiome;
 
         private Builder(BiomeAdapter genericBiome) { this.genericBiome = genericBiome; }
@@ -57,13 +46,7 @@ public final class AdapterRegistry {
             return this;
         }
 
-        public Builder add(StructureAdapter adapter) {
-            if (structures.putIfAbsent(adapter.structureId(), adapter) != null)
-                duplicate("structure", adapter.structureId());
-            return this;
-        }
-
-        public AdapterRegistry build() { return new AdapterRegistry(biomes, structures, genericBiome); }
+        public AdapterRegistry build() { return new AdapterRegistry(biomes, genericBiome); }
 
         private static void duplicate(String kind, ContentId id) {
             throw new PlanningFailure(PlanningFailure.Code.CONFIG_CONFLICT, FailureStage.ADAPTER_REGISTRATION,

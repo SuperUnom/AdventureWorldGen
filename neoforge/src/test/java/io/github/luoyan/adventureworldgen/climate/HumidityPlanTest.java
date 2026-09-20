@@ -91,7 +91,8 @@ class HumidityPlanTest {
                 base.biomes().filler(),base.biomes().terrainRules()),List.of());
         var climate=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
         var rules=new BiomeEnvironmentRules(c,climate);
-        var result=new JointPlanner(PlannerProfile.V2).plan(7331,c,TERRAIN,(d,x,y,z,s)->{throw new AssertionError();});
+        var result=new JointPlanner(PlannerProfile.V2).plan(7331,c,TERRAIN,
+                io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(java.util.List.of()));
         assertTrue(result.patches().stream().anyMatch(p->p.biomeId().equals(DESERT)&&p.area()>=4096));
         for(var patch:result.patches())for(long cell:patch.mask().cells()) {
             int x=CellMask.x(cell)+2,z=CellMask.z(cell)+2;

@@ -20,7 +20,6 @@ import net.minecraft.world.level.storage.LevelResource;
 import io.github.luoyan.adventureworldgen.config.ContentPreflight;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.MinecraftAdapters;
-import io.github.luoyan.adventureworldgen.worldgen.RegisteredPieceSupport;
 import net.minecraft.resources.ResourceLocation;
 
 @EventBusSubscriber(modid = AdventureWorldGen.MOD_ID)
@@ -64,7 +63,7 @@ public final class AdventureEvents {
         // that listener exists and cannot render a loading screen during this event. Biome/chunk
         // queries and levelLoaded retain the READY barrier while the loading screen renders.
         RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
-                adapters, RegisteredPieceSupport.INSTANCE));
+                adapters));
     }
 
     @SubscribeEvent
@@ -76,7 +75,7 @@ public final class AdventureEvents {
         var worldDirectory = server.getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
         var plan = RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
-                adapters, RegisteredPieceSupport.INSTANCE)).join();
+                adapters)).join();
         var spawn = plan.spawnPosition();
         server.overworld().setDefaultSpawnPos(BlockPos.containing(spawn.x(), spawn.y(), spawn.z()), spawn.yaw());
     }
@@ -90,7 +89,7 @@ public final class AdventureEvents {
         var worldDirectory = level.getServer().getWorldPath(LevelResource.ROOT);
         var adapters = MinecraftAdapters.builtIn();
         RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(level.getSeed(), loaded, worldDirectory,
-                adapters, RegisteredPieceSupport.INSTANCE)).join();
+                adapters)).join();
     }
 
     @SubscribeEvent

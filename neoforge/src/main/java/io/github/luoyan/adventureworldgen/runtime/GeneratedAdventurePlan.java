@@ -9,6 +9,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.BiomeLayout;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.noise.DeterministicRandom;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
@@ -52,7 +53,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final double seaBand;
     private final String terrainVersion;
     private final List<PlannedBiomePatch> biomePatches;
-    private final List<PlannedStructure> structures;
+    private final List<PlannedStructurePlacement> structures;
     /**
      * The planning parameters this instance was built with. Every sub-stage that needs a budget or a
      * version string reads it from here, so the plan genuinely carries the profile that produced it.
@@ -68,7 +69,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
-                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion) {
         this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
                 biomePatches,structures,diagnostics,erosion,
@@ -77,7 +78,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
-                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities) {
         this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
@@ -89,7 +90,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
-                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout) {
@@ -106,7 +107,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                               Coastline coastline,
                                               RiverNetwork riverNetwork, double seaSurface, double landBand,
                                               double seaBand, String terrainVersion, SpawnPosition spawn,
-                                              List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                              List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                               PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                               io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                               PlanningInputs prepared, PlanningObserver observer) {
@@ -125,7 +126,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
-                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructure> structures,
+                                  List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout, PlanningInputs prepared, PlanningObserver observer) {
@@ -190,7 +191,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     }
 
     /**
-     * The frozen data of this plan: everything a plan-v2 document stores, as data.
+     * The frozen data of this plan: everything a plan-v3 document stores, as data.
      *
      * <p>The first planning run publishes exactly this, and a READY reload rebuilds a query object
      * from exactly this, so the two paths cannot drift apart.
@@ -210,7 +211,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
      */
     public static GeneratedAdventurePlan restore(AdventureWorldConfig config, PlanSnapshot snapshot) {
         try {
-            // A decoded payload has already been checked against the plan-v2 contract by PlanV2Codec
+            // A decoded payload has already been checked against the current plan contract by PlanV2Codec
             // (algorithm/format/hydrology all equal the contract values), so the restoring profile IS
             // the contract profile: V2 is not a shortcut here, it is what the format pins.
             GeneratedAdventurePlan plan = new GeneratedAdventurePlan(PlannerProfile.V2, snapshot.seed(), config,
@@ -229,7 +230,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             throw failure;
         } catch (RuntimeException malformed) {
             throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.PLAN_LOAD,
-                    "READY plan-v2 payload is invalid", java.util.Map.of("reason", String.valueOf(malformed.getMessage())));
+                    "READY plan-v3 payload is invalid", java.util.Map.of("reason", String.valueOf(malformed.getMessage())));
         }
     }
 
@@ -262,8 +263,6 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
             if(blendProtectedPatches.contains(patch.patchId()) || Math.hypot(x-spawnPositionX(),z-spawnPositionZ())<=32)
                 return fallback;
         }
-        for(var structure:structures)for(var box:structure.biomeProtection())
-            if(x>=box.minX()&&x<=box.maxX()&&z>=box.minZ()&&z<=box.maxZ())return fallback;
         return blockBlend.sample(x,z,(nx,nz)-> {
             int qx=Math.floorDiv(nx,4)*4+2,qz=Math.floorDiv(nz,4)*4+2;
             var nearby=terrain.sample(qx,qz);
@@ -295,21 +294,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         return terrain.sample(blockX, blockZ);
     }
     public int solidSurfaceAt(int x, int z, MacroSample sample) { return waterTerrain.solidSurfaceAt(x, z, sample); }
-    @Override public List<PlannedStructure> structuresIntersecting(int chunkX, int chunkZ) {
-        int minX = chunkX << 4, minZ = chunkZ << 4, maxX = minX + 15, maxZ = minZ + 15;
-        List<PlannedStructure> result = new ArrayList<>();
-        for (PlannedStructure structure : structures) {
-            boolean intersects = structure.pieces().stream().anyMatch(piece -> piece.minX() <= maxX && piece.maxX() >= minX
-                    && piece.minZ() <= maxZ && piece.maxZ() >= minZ);
-            if (intersects) result.add(structure);
-        }
-        result.sort(Comparator.comparing(PlannedStructure::instanceId));
-        return List.copyOf(result);
-    }
+    @Override public List<PlannedStructurePlacement> plannedStructures() { return structures; }
     @Override public SpawnPosition spawnPosition() { return spawn; }
-    @Override public List<ContentId> controlledStructureIds() {
-        return config.structures().stream().map(AdventureWorldConfig.StructureSettings::id).distinct().sorted().toList();
-    }
 
     public long seed() { return seed; }
     public double oceanCarvingAt(double x, double z) {
@@ -331,7 +317,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     }
     public String terrainVersion() { return terrainVersion; }
     public List<PlannedBiomePatch> biomePatches() { return biomePatches; }
-    public List<PlannedStructure> structures() { return structures; }
+    public List<PlannedStructurePlacement> structures() { return structures; }
     public PlanDiagnostics diagnostics() { return diagnostics; }
     public ErosionDeltaField erosion() { return erosion; }
     public io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities() { return capacities; }

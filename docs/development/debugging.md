@@ -53,7 +53,7 @@
 [READY 契约](../reference/plan-v2.md#reload) 区分两层：
 
 - 缺 READY、manifest 不匹配、输入摘要不同或包损坏：repository 返回未命中，走首次规划。
-- 包通过但 codec/快照/piece 支持失败：恢复可能直接中止，需要修复语义或明确兼容性策略。
+- 包通过但 codec 或快照恢复失败：恢复可能直接中止，需要修复语义或明确兼容性策略。
 
 不要单凭日志出现 CACHE 阶段就认定成功复用。
 记录实际输入摘要、manifest、payload 校验和以及是否继续进入规划阶段。
@@ -64,21 +64,17 @@
 保存故障包再在新实验目录复现，已有世界和区块不能作为可随意清空的缓存。
 原子移动或落盘失败按文件系统与权限定位，发布事务的实际替换边界见 [存储](../reference/plan-v2.md#repository)。
 
-## 结构恢复与注入
+## 原生结构与规划锚点
 
-从实例 ID、piece 索引、NBT id、已注册 StructurePieceType 查起。
-注册能力检查不运行实际 loader；模板缺失或 null resourceManager 的使用可能到区块期才暴露。
-具体限制见 [适配器](../reference/adapters.md#limits)。
-
-起点只在原点区块注入；相交区块依靠 Minecraft 引用完成分块物化。
-排查“计划里有、世界里没有”时同时看冻结范围、原点区块、引用、恢复异常和实际 FULL 区块。
-受控 ID 的普通原生起点会被抑制，不能把原生候选数等同于计划实例数。
-用普通世界 cold/ready 审计验证 NBT、方块与容器。
+先区分宏观锚点没有被规划，还是 Minecraft 原生结构没有生成。
+两者是独立系统：计划锚点不会被注入为结构起点，也不保证与原生结构重合。
+原生结构问题应检查活动结构/structure set、Minecraft 起点与区块引用；
+规划问题检查结构需求、planning info、carrier、锚点和间距。
 
 ## 地形与群系视觉排查
 
 先导出冻结 plan 的地形/群系图，再对争议坐标比较 MacroSample、最终 biome、实际列和表层。
-规划海床、结构地基、原版海洋空腔和 surface rules 属于不同数据来源；
+规划海床、原生结构地基、原版海洋空腔和 surface rules 属于不同数据来源；
 见 [区块执行](../systems/runtime-worldgen.md#chunk)。
 
 用 CoastDetailPreview / OceanShelfPreview / RiverPreview 隔离几何，

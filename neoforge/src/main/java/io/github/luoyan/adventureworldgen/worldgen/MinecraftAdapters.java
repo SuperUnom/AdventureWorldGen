@@ -6,7 +6,6 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistrations;
-import io.github.luoyan.adventureworldgen.compat.vanilla.VanillaDesertPyramidAdapter;
 
 /** Built-in v1 adapter set. Other mods may build the same public registry contract in tests/integration. */
 public final class MinecraftAdapters {
@@ -27,11 +26,9 @@ public final class MinecraftAdapters {
         var builder = AdapterRegistry.builder(new GenericBiomeAdapter())
                 .add(vanilla("minecraft:ocean"))
                 .add(new VanillaRiverBiomeAdapter(new ContentId("minecraft:river")))
-                .add(new VanillaRiverBiomeAdapter(new ContentId("minecraft:frozen_river")))
-                .add(new VanillaDesertPyramidAdapter());
+                .add(new VanillaRiverBiomeAdapter(new ContentId("minecraft:frozen_river")));
         var external = AdapterRegistrations.freeze();
         external.biomes().forEach(builder::add);
-        external.structures().forEach(builder::add);
         return builder.build();
     }
 

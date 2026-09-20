@@ -41,10 +41,6 @@ public final class ContentPreflight {
         for (var structure : config.structures()) structureIds.add(structure.id());
         for (ContentId id : structureIds) {
             if (!registries.structureExists(id)) missing("structure", id);
-            var adapter = adapters.structure(id).orElse(null);
-            if (adapter == null) unsupported("structure", id, "no structure adapter");
-            if (!adapter.describe().canFreezeAllPieces())
-                unsupported("structure", id, "adapter cannot freeze all structure pieces");
         }
     }
 

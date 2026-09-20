@@ -12,10 +12,10 @@ class RequirementExpanderTest {
     @Test
     void expandsStableMinimumInstancesAndImplicitSpawnPatch() {
         var config = new AdventureWorldConfigParser().parse("""
-                {"world":{"radius":6000},"spawn":{"biome":"minecraft:plains","structure":{"id":"minecraft:desert_pyramid","spawn_point":[0,1,0]}},
+                {"world":{"radius":6000},"spawn":{"biome":"minecraft:plains"},
                  "biomes":{"filler":["minecraft:plains"]},
-                 "structures":[{"id":"minecraft:desert_pyramid","adventure_level":0,"count":{"min":0,"max":2},
-                   "allowed_biomes":{"id":[]},"entrance":[0,0,0]}]}
+                 "structures":[{"id":"minecraft:desert_pyramid","adventure_level":0,"count":{"min":1,"max":2},
+                   "allowed_biomes":{"id":[]}}]}
                 """);
 
         var expanded = new RequirementExpander().expandMinimum(config);
@@ -28,19 +28,20 @@ class RequirementExpanderTest {
         assertEquals(config.biomes().filler(),carrier.allowedBiomes());
         assertEquals(1, expanded.structures().size());
         assertEquals("instance/minecraft:desert_pyramid/0", expanded.structures().getFirst().instanceId());
-        assertTrue(expanded.structures().getFirst().spawnInstance());
+        assertTrue(expanded.structures().getFirst().required());
     }
 
     @Test
-    void spawnStructureUsesTheExplicitSpawnBiomeAmongAllowedAlternatives() {
+    void structureDemandKeepsAuthorAllowedBiomeAlternatives() {
         var config=new AdventureWorldConfigParser().parse("""
-          {"world":{"radius":512},"spawn":{"biome":"test:plains","structure":{"id":"test:keep","spawn_point":[0,1,0]}},
+          {"world":{"radius":512},"spawn":{"biome":"test:plains"},
            "biomes":{"filler":["test:plains"]},"structures":[{"id":"test:keep","adventure_level":0,
-           "count":{"min":0,"max":1},"allowed_biomes":{"id":["test:desert","test:plains"]},"entrance":[0,0,0]}]}
+           "count":{"min":1,"max":1},"allowed_biomes":{"id":["test:desert","test:plains"]}}]}
           """);
         var expanded=new RequirementExpander().expandMinimum(config);
         var carrier=expanded.patches().stream().filter(d->d.patchId().startsWith("patch/carrier/")).findFirst().orElseThrow();
-        assertEquals(java.util.List.of(config.spawn().biome()),carrier.allowedBiomes());
+        assertEquals(java.util.List.of(new io.github.luoyan.adventureworldgen.plan.ContentId("test:desert"),
+                new io.github.luoyan.adventureworldgen.plan.ContentId("test:plains")),carrier.allowedBiomes());
     }
 
     @Test

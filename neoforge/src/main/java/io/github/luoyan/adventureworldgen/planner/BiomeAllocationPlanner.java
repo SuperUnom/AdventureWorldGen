@@ -83,14 +83,11 @@ public final class BiomeAllocationPlanner {
         this.config=config;this.index=index;this.reservations=reservations;this.rules=rules;this.progress=progress;
         this.observer=observer;
         operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
-        String spawn=demands.stream().filter(d->config.spawn().hasBiome()&&d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
+        String spawn=demands.stream().filter(d->d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
-        if(!config.spawn().hasBiome()&&config.spawn().hasStructure())
-            spawn=StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0));
         final String spawnId=spawn;
-        String spawnCarrier=config.spawn().hasStructure()?StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)):null;
         var ordered=new ArrayList<>(demands);
-        ordered.sort(Comparator.comparingInt((RequirementExpander.PatchDemand d)->d.patchId().equals(spawnId)?-2:d.patchId().equals(spawnCarrier)?-1:0)
+        ordered.sort(Comparator.comparingInt((RequirementExpander.PatchDemand d)->d.patchId().equals(spawnId)?-2:0)
                 .thenComparingLong(d->index.terrainCapacity(d.allowedBiomes()))
                 .thenComparing(Comparator.comparingLong((RequirementExpander.PatchDemand d)->d.area().target()).reversed())
                 .thenComparingInt(RequirementExpander.PatchDemand::adventureLevel)
@@ -149,7 +146,7 @@ public final class BiomeAllocationPlanner {
         progress.accept(1);return new Result(List.copyOf(patches),operations);
     }
     private PlacementIndex.Point selectSeed(long seed,Region r,boolean spawn) {
-        if(spawn&&config.spawn().hasBiome()) {
+        if(spawn) {
             var p=new PlacementIndex.Point(0,0);
             if(legal(r,p.x(),p.z())&&!owner.containsKey(p.cell()))return p;
             throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.SPAWN_CORE,
@@ -158,8 +155,7 @@ public final class BiomeAllocationPlanner {
                             "allowed_temperatures",BiomeEnvironmentRules.preferences(config,r.biome).keySet(),
                             "humidity",rules.humidity().typeAt(2,2,index.sample(0,0))));
         }
-        boolean central=spawn || config.spawn().hasStructure()&&r.demand.patchId().equals(
-                StableIds.carrierPatch(StableIds.structureInstance(config.spawn().structure().id(),0)));
+        boolean central=spawn;
         double scale=Math.sqrt(r.demand.area().target()/Math.PI);
         long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"biome-seed",r.demand.patchId(),r.retries);
         // Ownership does not change during selection. Reuse exhausted components across
@@ -213,7 +209,7 @@ public final class BiomeAllocationPlanner {
             if(fallback!=null){r.biome=fallback.biome;return fallback.point;}
         }
         // A missing ordinary biome is reported as zero supply. Spawn and required structures
-        // still need a real legal anchor / usable footprint to construct a valid world.
+        // still need a real legal anchor inside that carrier to construct a valid plan.
         if(!central&&carrierCoreSide(r)==0)return null;
         throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no sufficiently connected legal seed with required carrier clearance",
                 Map.of("biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));

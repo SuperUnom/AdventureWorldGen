@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.persistence;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
-import io.github.luoyan.adventureworldgen.api.StructureAdapter;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import io.github.luoyan.adventureworldgen.hydrology.RiverNetwork;
 import io.github.luoyan.adventureworldgen.plan.PlanDiagnostics;
 import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
@@ -127,22 +127,18 @@ class PlanV2CodecTest {
     }
 
     @Test
-    void preservesFrozenEntranceFootprintProtectionAndPieceBytes() {
+    void preservesAbstractStructurePlacements() {
         var config = new AdventureWorldConfigParser().parse(new StringReader("""
                 {"world":{"radius":6000},"spawn":{"biome":"minecraft:plains"},
                  "biomes":{"required":[],"filler":["minecraft:plains"]},
                  "structures":[{"id":"example:waystation","adventure_level":4,
-                 "count":{"min":1,"max":1},"allowed_biomes":{"id":["minecraft:plains"]},"entrance":[0,1,-7]}]}
+                 "count":{"min":1,"max":1},"allowed_biomes":{"id":["minecraft:plains"]}}]}
                 """));
         Coastline coast = new Coastline(List.of(new Vec2(-1000, -1000), new Vec2(1000, -1000),
                 new Vec2(1000, 1000), new Vec2(-1000, 1000)));
         var network = new RiverNetwork(List.of(), List.of(), PlannerProfile.V2.hydrologyVersion());
-        var box = new StructureAdapter.HorizontalBox(90, 190, 130, 220);
-        var protection = new StructureAdapter.HorizontalBox(82, 182, 138, 228);
-        var structure = new AdventurePlanView.PlannedStructure("instance/example:waystation/0",
-                new ContentId("example:waystation"), 100, 80, 200, "west", 93, 81, 200,
-                List.of(box), List.of(protection), List.of(new AdventurePlanView.PlannedPiece(
-                "instance/example:waystation/0/piece/0", 90, 80, 190, 130, 94, 220, new byte[]{3, 1, 4})));
+        var structure = new PlannedStructurePlacement("instance/example:waystation/0",
+                new ContentId("example:waystation"), 100, 200);
         var original = new GeneratedAdventurePlan(77, config, coast, network, 64, 128, 256, TerrainSnapshots.SYNTHETIC_TERRAIN,
                 null, List.of(), List.of(structure), diagnostics(coast, network), null);
         var codec = new PlanV2Codec();

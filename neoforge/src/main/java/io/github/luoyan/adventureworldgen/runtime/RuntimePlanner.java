@@ -8,8 +8,6 @@ import io.github.luoyan.adventureworldgen.terrain.CoastGenerator;
 import io.github.luoyan.adventureworldgen.persistence.AtomicPlanRepository;
 import io.github.luoyan.adventureworldgen.persistence.PlanV2Codec;
 import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
-import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
-import io.github.luoyan.adventureworldgen.api.FrozenPieceSupport;
 import io.github.luoyan.adventureworldgen.planner.JointPlanner;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 import io.github.luoyan.adventureworldgen.cost.AdventurePreference;
@@ -20,8 +18,6 @@ import io.github.luoyan.adventureworldgen.plan.PlanningFailure;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.github.luoyan.adventureworldgen.plan.PlanVersions;
@@ -33,10 +29,10 @@ public final class RuntimePlanner {
     private RuntimePlanner() {}
 
     public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
-                                              AdapterRegistry adapters, FrozenPieceSupport pieceSupport) {
+                                              AdapterRegistry adapters) {
         var progress = PlanningProgress.begin(loaded.id().toString());
         try {
-            var result = plan(seed, loaded, worldDirectory, adapters, pieceSupport, progress);
+            var result = plan(seed, loaded, worldDirectory, adapters, progress);
             progress.complete();
             return result;
         } catch (RuntimeException | Error failure) {
@@ -46,7 +42,7 @@ public final class RuntimePlanner {
     }
 
     private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
-                                               AdapterRegistry adapters, FrozenPieceSupport pieceSupport,
+                                               AdapterRegistry adapters,
                                                PlanningProgress.Run progress) {
         // The one place the production profile is chosen. Everything below receives it instead of
         // reaching for PlannerProfile.V2 on its own, so a re-versioned or re-budgeted profile
@@ -61,8 +57,6 @@ public final class RuntimePlanner {
                 LOGGER.info("AdventureWorldGen loading READY {} for {}", profile.planFormatVersion(), loaded.id());
                 var restored = GeneratedAdventurePlan.restore(loaded.config(),
                         codec.decode(existing.get().canonicalPlan(), loaded.id(), inputHash));
-                // A READY plan is handed back only if this environment can rebuild every piece in it.
-                checkFrozenPieces(restored.structures(), pieceSupport);
                 return restored;
             }
         } catch (IOException failure) {
@@ -72,8 +66,7 @@ public final class RuntimePlanner {
         var metrics=new PlanningMetrics();
         double radius = loaded.config().world().radius();
         double spawnRadius = StrictMath.min(256.0, radius / 10.0);
-        double spawnFootprint = StructureAdapterBridge.spawnReservationRadius(adapters, loaded.config());
-        double keep = spawnRadius + spawnFootprint + StrictMath.min(32.0, radius / 20.0);
+        double keep = spawnRadius + StrictMath.min(32.0, radius / 20.0);
         LOGGER.info("AdventureWorldGen planning coast for {} with seed {}", loaded.id(), seed);
         progress.stage(PlanningStage.COAST);
         var coast = new CoastGenerator(profile).generate(seed, radius, keep);
@@ -114,8 +107,10 @@ public final class RuntimePlanner {
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
         progress.stage(PlanningStage.PLACEMENT);
         var jointPlanner = new JointPlanner(profile);
+        var structurePlanning = io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
+                loaded.config().structures().stream().map(io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.StructureSettings::id).toList());
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
-                new StructureAdapterBridge(adapters, erodedTerrain),
+                structurePlanning,
                 // Adventure level is a soft preference: it ranks candidates by the coarse-grid cost
                 // signal and never rejects a position (see JointPlanner.preferenceOnly).
                 JointPlanner.preferenceOnly((level, x, z) -> AdventurePreference.penalty(level,
@@ -144,8 +139,6 @@ public final class RuntimePlanner {
                 });
         metrics.finish(PlanningMetrics.Stage.VALIDATION);
         metrics.adventure(joint.patches(),costs,radius);
-        // Nothing is published unless every frozen piece can be rebuilt in this environment.
-        checkFrozenPieces(plan.structures(), pieceSupport);
         progress.stage(PlanningStage.SAVE);
         try {
             repository.publishAtomically(worldDirectory, loaded.id(), codec.encode(loaded.id(), inputHash, plan.snapshot()), inputHash);
@@ -159,22 +152,4 @@ public final class RuntimePlanner {
         return plan;
     }
 
-    /**
-     * Every frozen piece must have a registered piece type before a plan is published or restored.
-     * The environment answers this; the frozen NBT, not a descriptor or a plan field, names the
-     * type, so a companion mod is covered by registering its piece type.
-     */
-    private static void checkFrozenPieces(List<AdventurePlanView.PlannedStructure> structures,
-                                          FrozenPieceSupport pieceSupport) {
-        for (var structure : structures) {
-            var unsupported = pieceSupport.firstUnsupported(structure);
-            if (unsupported.isEmpty()) continue;
-            throw new PlanningFailure(PlanningFailure.Code.UNSUPPORTED_CONTENT, FailureStage.STRUCTURE_PIECE_RESTORE,
-                    "frozen structure piece has no registered piece type",
-                    Map.of("structure_id", structure.structureId().value(),
-                            "instance_id", structure.instanceId(),
-                            "piece_id", unsupported.get().pieceId(),
-                            "piece_type", unsupported.get().pieceType()));
-        }
-    }
 }

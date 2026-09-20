@@ -26,7 +26,7 @@ import java.util.UUID;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
-/** Same-filesystem, READY-last persistence for immutable plan-v2 payloads. */
+/** Same-filesystem, READY-last persistence for immutable plan-v3 payloads. */
 public final class AtomicPlanRepository implements PlanRepository {
     private static final String PAYLOAD = "plan.json.gz";
     private static final String MANIFEST = "manifest.json";

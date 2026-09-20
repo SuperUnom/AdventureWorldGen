@@ -16,9 +16,7 @@ import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.PlacementM
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.RequiredBiome;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Spacing;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.SpawnSettings;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.SpawnStructure;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.StructureSettings;
-import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.Vec3d;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.WorldSettings;
 import io.github.luoyan.adventureworldgen.plan.TemperatureType;
 
@@ -40,13 +38,12 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 public final class AdventureWorldConfigParser {
     private static final Set<String> TOP_FIELDS = Set.of("world", "spawn", "biomes", "structures");
     private static final Set<String> WORLD_FIELDS = Set.of("radius", "terrain");
-    private static final Set<String> SPAWN_FIELDS = Set.of("biome", "structure");
-    private static final Set<String> SPAWN_STRUCTURE_FIELDS = Set.of("id", "spawn_point");
+    private static final Set<String> SPAWN_FIELDS = Set.of("biome");
     private static final Set<String> BIOME_FIELDS = Set.of("required", "filler", "terrain_rules", "blend_radius");
     private static final Set<String> REQUIRED_BIOME_FIELDS = Set.of("id", "adventure_level", "area");
     private static final Set<String> AREA_FIELDS = Set.of("min", "max", "target");
     private static final Set<String> STRUCTURE_FIELDS = Set.of(
-            "id", "adventure_level", "count", "allowed_biomes", "placement_mode", "spacing", "entrance");
+            "id", "adventure_level", "count", "allowed_biomes", "placement_mode", "spacing");
     private static final Set<String> COUNT_FIELDS = Set.of("min", "max");
     private static final Set<String> ALLOWED_BIOME_FIELDS = Set.of("id", "area");
     private static final Set<String> SPACING_FIELDS = Set.of("min", "max");
@@ -83,7 +80,6 @@ public final class AdventureWorldConfigParser {
                 : List.of();
 
         AdventureWorldConfig result = new AdventureWorldConfig(world, spawn, biomes, structures);
-        validateCrossFields(result);
         var enabled=result.world().terrain().enabled();
         for(var entry:result.biomes().terrainRules().entrySet()) {
             if(java.util.Collections.disjoint(enabled,entry.getValue().effectiveTemplates()))
@@ -154,19 +150,8 @@ public final class AdventureWorldConfigParser {
 
     private SpawnSettings parseSpawn(JsonElement element, String path) {
         JsonObject object = object(element, path, SPAWN_FIELDS);
-        ContentId biome = object.has("biome") ? contentId(nonNull(object.get("biome"), path + ".biome"), path + ".biome") : null;
-        SpawnStructure structure = null;
-        if (object.has("structure")) {
-            String structurePath = path + ".structure";
-            JsonObject value = object(nonNull(object.get("structure"), structurePath), structurePath, SPAWN_STRUCTURE_FIELDS);
-            structure = new SpawnStructure(
-                    contentId(required(value, "id", structurePath), structurePath + ".id"),
-                    vector(required(value, "spawn_point", structurePath), structurePath + ".spawn_point"));
-        }
-        if (biome == null && structure == null) {
-            throw conflict(path, "must specify at least one of biome or structure");
-        }
-        return new SpawnSettings(biome, structure);
+        ContentId biome = contentId(required(object, "biome", path), path + ".biome");
+        return new SpawnSettings(biome);
     }
 
     private BiomeSettings parseBiomes(JsonElement element, String path) {
@@ -298,8 +283,7 @@ public final class AdventureWorldConfigParser {
                     count,
                     allowedBiomes,
                     placementMode,
-                    spacing,
-                    vector(required(item, "entrance", itemPath), itemPath + ".entrance")));
+                    spacing));
         }
         structures.sort(Comparator.comparing(StructureSettings::id));
         return List.copyOf(structures);
@@ -365,24 +349,6 @@ public final class AdventureWorldConfigParser {
         return new Spacing(min, max);
     }
 
-    private void validateCrossFields(AdventureWorldConfig config) {
-        if (!config.spawn().hasStructure()) {
-            return;
-        }
-        ContentId spawnId = config.spawn().structure().id();
-        StructureSettings structure = config.structures().stream()
-                .filter(candidate -> candidate.id().equals(spawnId))
-                .findFirst()
-                .orElseThrow(() -> conflict("$.spawn.structure.id", "does not reference an entry in $.structures"));
-        if (structure.count().max() < 1) {
-            throw conflict("$.spawn.structure.id", "referenced structure must have count.max >= 1");
-        }
-        if (config.spawn().hasBiome() && !structure.allowedBiomes().acceptsAnySupportedBiome()
-                && !structure.allowedBiomes().ids().contains(config.spawn().biome())) {
-            throw conflict("$.spawn.biome", "is not accepted by the spawn structure's $.structures allowed_biomes.id");
-        }
-    }
-
     private int adventureLevel(JsonElement element, String path) {
         long value = integer(element, path);
         if (value < 0 || value > 10) {
@@ -398,17 +364,6 @@ public final class AdventureWorldConfigParser {
         } catch (IllegalArgumentException error) {
             throw new ConfigException(ConfigErrorCode.CONFIG_ERROR, path, error.getMessage());
         }
-    }
-
-    private Vec3d vector(JsonElement element, String path) {
-        JsonArray array = array(element, path);
-        if (array.size() != 3) {
-            throw error(path, "must contain exactly three numbers");
-        }
-        return new Vec3d(
-                finiteNumber(nonNull(array.get(0), path + "[0]"), path + "[0]"),
-                finiteNumber(nonNull(array.get(1), path + "[1]"), path + "[1]"),
-                finiteNumber(nonNull(array.get(2), path + "[2]"), path + "[2]"));
     }
 
     private long integer(JsonElement element, String path) {

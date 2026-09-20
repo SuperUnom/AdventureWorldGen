@@ -3,7 +3,7 @@ package io.github.luoyan.adventureworldgen.plan;
 import java.util.List;
 
 /**
- * The frozen layout section of a plan-v2 document: climate state, filler grid and the patches whose
+ * The frozen layout section of a plan-v3 document: climate state, filler grid and the patches whose
  * ownership must survive boundary mixing.
  *
  * <p>This is the whole reflectively serialized {@code biome_layout} value, so its component names

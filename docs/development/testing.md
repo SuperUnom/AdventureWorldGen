@@ -12,7 +12,7 @@
 | 纯算法、配置或包依赖 | JUnit，包括 PackageBoundaryTest；算法变化加相关数值/预览检查 |
 | planner、容量、成本或气候准入 | JUnit + planning GameTest；容量规则加 capacity 组 |
 | codec、身份与冻结状态 | persistence/runtime JUnit + READY 对照 |
-| 结构与 adapter | 桥接和 codec JUnit + default GameTest + 普通世界 cold/ready |
+| 结构需求、规划信息与锚点 | planner/codec JUnit + planning GameTest |
 | worldgen、surface、海洋资源、mixin | JUnit + 完整 GameTest；必要时实际客户端观察 |
 | 性能 | 对应 performance 组和基准；固定 seed、配置、JVM 参数及 cold/READY 条件 |
 | 仅文档 | 文档检查、命令存在性与示例验证；不据此声称重新验证了游戏生成 |
@@ -65,7 +65,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 
 | 组 | 主要覆盖 |
 |---|---|
-| default | 内容注册、普通结构、表层、气候、区块与生成修正 |
+| default | 内容注册、出生、表层、气候、区块与生成修正 |
 | performance | 完整规划或查询的耗时与运行约束 |
 | capacity | 容量回归和受限配置 |
 | planning | 新世界生产规划、冻结结果和完整约束 |
@@ -92,28 +92,12 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 这类“通过”不是规划速度或关闭速度达到性能预算的证明。
 
 <a id="ready"></a>
-## READY 与真实结构重放
+## READY 对照
 
-纯数据往返先运行 persistence 和 runtime 测试。
-Minecraft 部件恢复还要覆盖 default GameTest，并用普通世界验证完整物化。
-
-使用 [waystation-audit.gradle](../../neoforge/tools/waystation-audit.gradle)
-驱动测试伴随服务器，对同一个专用世界先 cold 后 ready：
-
-```bash
-./gradlew runTestCompanionServer -I tools/waystation-audit.gradle -PauditWorld=run-waystation-audit -PauditPhase=cold
-./gradlew runTestCompanionServer -I tools/waystation-audit.gradle -PauditWorld=run-waystation-audit -PauditPhase=ready
-```
-
-cold 需要全新审计世界；ready 必须复用 cold 的世界、seed、配置和适配器。
-专用服务器需按启动提示处理 EULA，并确认服务器实际使用本项目生成器；
-内置资源覆盖 minecraft:normal 的主世界生成器，见 [默认 world preset](../../neoforge/src/main/resources/data/minecraft/worldgen/world_preset/normal.json)。
-不要删除用户存档来制造 cold 条件。
-
-`WaystationAudit` 检查跨区块引用、方块、容器、冻结 NBT、受控原生候选抑制及 READY 路径，
-保存世界内的 `waystation-audit.properties`，打印 `WAYSTATION AUDIT PASSED` 后保存退出。
-ready 会比较 cold 记录及计划 payload 摘要；失败打印 FAILED 并使进程失败。
-测试伴随配置不同于生产默认配置，不能把这一结果推广为所有生产配置均已验证。
+纯数据往返运行 persistence 和 runtime 测试；`PlanningBaselineTest` 检查规范字节、恢复后重编码与采样字段。
+GameTest 中需要 fresh planning 的组必须使用全新目录，恢复对照必须复用同一目录、seed 与配置。
+结构计划只保存宏观锚点，因此 READY 验证不再包含 piece/NBT 重放或结构起点注入。
+不要删除用户存档来制造 cold 条件；使用运行器生成的独立目录。
 
 <a id="tools"></a>
 ## Java audit / preview tools
@@ -150,8 +134,8 @@ AWG_TOOL_JAVA_OPTS=-Djava.awt.headless=true ./tools/run-audit-tool.sh OceanShelf
 | 多种子配方统计 | `TerrainRecipeAudit <output-dir> <seed> [seed…]` |
 | 独立需求规划审计 | `DemandPlannerAudit <output-dir> <seed> [seed…]` |
 
-`PlanningBenchmark` 拒绝已存在的输出目录，并使用简化结构 adapter 与占位 NBT；
-它生成的计划不能当作 Minecraft 可恢复世界使用。
+`PlanningBenchmark` 拒绝已存在的输出目录，并按 profile 构造纯结构规划目录；
+它生成的是规划审计包，不能据此声称 Minecraft 已生成对应结构。
 `PlanReloadBenchmark` 从 manifest 读取已有输入摘要，没有重新执行生产身份和完整包校验；
 它测量重建，不证明整个 READY 包有效。
 目录预览工具多使用当前内置 default 配置，读取其他配置的计划前必须核对工具源码。

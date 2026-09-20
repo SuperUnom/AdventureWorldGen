@@ -1,12 +1,11 @@
 import io.github.luoyan.adventureworldgen.config.*;
+import io.github.luoyan.adventureworldgen.api.AdapterRegistry;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanner;
 import io.github.luoyan.adventureworldgen.worldgen.GenericBiomeAdapter;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
-import io.github.luoyan.adventureworldgen.api.*;
-import java.util.List;
 import java.nio.file.*;
 
-/** Fresh default-profile planning, including validation and persistence, with a fixed test structure.
+/** Fresh default-profile planning, including validation and persistence.
  * Run with the game runtime classpath (no game bootstrap needed).
  * Args: profile JSON, new output directory, seed. Refuses cache hits so timings remain comparable. */
 public final class PlanningBenchmark {
@@ -19,23 +18,8 @@ public final class PlanningBenchmark {
         var loaded = new LoadedProfile(new ContentId("adventureworldgen:default"),
                 config, canonical, "benchmark");
         long start = System.nanoTime();
-        var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).add(new StructureAdapter() {
-            public ContentId structureId() { return new ContentId("minecraft:desert_pyramid"); }
-            public String adapterVersion() { return "benchmark-fixed-piece-v1"; }
-            public Descriptor describe() { return new Descriptor(List.of("north"), 15, true, true); }
-            public Prepared prepare(Candidate c, long seed) {
-                var piece = new AdventurePlanView.PlannedPiece(c.instanceId()+"/0", c.originX()-10,
-                        c.originY(), c.originZ()-10, c.originX()+10, c.originY()+14, c.originZ()+10, new byte[]{1});
-                var box = new HorizontalBox(piece.minX(), piece.minZ(), piece.maxX(), piece.maxZ());
-                return new Prepared(c, List.of(piece), List.of(box), List.of(box), c.originX(), c.originY(), c.originZ());
-            }
-            public List<String> validatePrepared(Prepared p, MacroTerrain t) { return List.of(); }
-        }).build();
-        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters,
-                // The benchmark freezes a placeholder piece it never restores, and it must not boot
-                // the game registries to answer a piece-type question. Production planning passes
-                // RegisteredPieceSupport, which is the same lookup the restore path uses.
-                structure -> java.util.Optional.empty());
+        var adapters = AdapterRegistry.builder(new GenericBiomeAdapter()).build();
+        var plan = RuntimePlanner.plan(Long.parseLong(args[2]), loaded, world, adapters);
         System.out.printf("PLANNING seconds=%.3f patches=%d structures=%d%n",
                 (System.nanoTime() - start) / 1e9, plan.biomePatches().size(), plan.structures().size());
     }

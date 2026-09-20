@@ -2,10 +2,11 @@ package io.github.luoyan.adventureworldgen.planner;
 
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.MacroTerrain;
-import io.github.luoyan.adventureworldgen.api.WaterKind;
 import io.github.luoyan.adventureworldgen.config.AdventureWorldConfig;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
+import io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
@@ -36,37 +37,38 @@ public final class JointPlanner {
     /** Frozen climate from the latest plan, reused immediately by runtime publication. */
     public ClimatePlan climate() { return java.util.Objects.requireNonNull(climate,"plan has not built climate"); }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer) {
-        return plan(seed, config, terrain, freezer, (level, x, z) -> true, (biome, x, z) -> true);
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog structures) {
+        return plan(seed, config, terrain, structures, (level, x, z) -> true, (biome, x, z) -> true);
     }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog structures,
                        LevelConstraint levelConstraint) {
-        return plan(seed, config, terrain, freezer, levelConstraint, (biome, x, z) -> true);
+        return plan(seed, config, terrain, structures, levelConstraint, (biome, x, z) -> true);
     }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog structures,
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint) {
-        return plan(seed,config,terrain,freezer,levelConstraint,adapterConstraint,ignored -> {});
+        return plan(seed,config,terrain,structures,levelConstraint,adapterConstraint,ignored -> {});
     }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog structures,
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, java.util.function.DoubleConsumer progress) {
-        return plan(seed,config,terrain,freezer,levelConstraint,adapterConstraint,progress,ignored -> {});
+        return plan(seed,config,terrain,structures,levelConstraint,adapterConstraint,progress,ignored -> {});
     }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog structures,
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, java.util.function.DoubleConsumer progress,
                        java.util.function.Consumer<String> checkpoint) {
-        return plan(seed,config,terrain,freezer,levelConstraint,adapterConstraint,PlanningObserver.NONE,progress,checkpoint);
+        return plan(seed,config,terrain,structures,levelConstraint,adapterConstraint,PlanningObserver.NONE,progress,checkpoint);
     }
 
-    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructureFreezer freezer,
+    public Result plan(long seed, AdventureWorldConfig config, MacroTerrain terrain, StructurePlanningCatalog planningCatalog,
                        LevelConstraint levelConstraint, BiomeConstraint adapterConstraint, PlanningObserver observer,
                        java.util.function.DoubleConsumer progress, java.util.function.Consumer<String> checkpoint) {
         var demands = new RequirementExpander().expandMinimum(config);
+        for (var settings : config.structures()) requirePlanningInfo(planningCatalog, settings.id());
         List<PlannedBiomePatch> patches = new ArrayList<>();
-        List<AdventurePlanView.PlannedStructure> structures = new ArrayList<>();
+        List<PlannedStructurePlacement> structures = new ArrayList<>();
         long operations = 0;
         long indexStart = System.nanoTime();
         placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, profile,
@@ -99,12 +101,11 @@ public final class JointPlanner {
         observer.stage(PlanningStage.STRUCTURES);
         // The entire required biome layout is frozen before any required structure is prepared.
         var structureOrder=new ArrayList<>(demands.structures());
-        structureOrder.sort(java.util.Comparator.comparing((RequirementExpander.StructureInstanceDemand d)->!d.spawnInstance())
-                .thenComparingInt(RequirementExpander.StructureInstanceDemand::adventureLevel)
-                .thenComparing(RequirementExpander.StructureInstanceDemand::instanceId));
+        structureOrder.sort(java.util.Comparator.comparingInt(RequirementExpander.StructureDemand::adventureLevel)
+                .thenComparing(RequirementExpander.StructureDemand::instanceId));
         for(var demand:structureOrder) {
             var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(demand.instanceId()))).findFirst().orElseThrow();
-            placeRequiredStructure(seed,config,terrain,freezer,levelConstraint,carrier,structures,demand);
+            placeRequiredStructure(seed,terrain,planningCatalog,levelConstraint,carrier,structures,demand);
             operations++;
             observer.within(PlanningStage.STRUCTURES)
                     .accept(structures.size()/(double)structureOrder.size());
@@ -114,39 +115,37 @@ public final class JointPlanner {
         // Optional instances are a soft optimization: each attempt commits atomically or leaves the legal minimum unchanged.
         long optionalAttempts = 0;
         for (var settings : config.structures()) {
-            long minimum = settings.effectiveMinimum(config.spawn().hasStructure()
-                    && config.spawn().structure().id().equals(settings.id()));
+            long minimum = settings.effectiveMinimum();
             for (long sequence = minimum; sequence < settings.count().max()
                     && optionalAttempts < profile.search().optionalCandidatePreparations(); sequence++, optionalAttempts++) {
-                var demand = new RequirementExpander.StructureInstanceDemand(
+                var demand = new RequirementExpander.StructureDemand(
                         StableIds.structureInstance(settings.id(), sequence), settings.id(), Math.toIntExact(sequence),
                         settings.adventureLevel(), settings.allowedBiomes().ids(), settings.allowedBiomes().area(),
-                        settings.entrance(), false, false);
-                if (!placeStructure(seed, config, terrain, freezer, levelConstraint, biomeConstraint, patches, structures,
+                        settings.spacing(), false);
+                if (!placeStructure(seed, config, terrain, planningCatalog, levelConstraint, biomeConstraint, patches, structures,
                         demand, 100_000 + Math.toIntExact(sequence), false)) break;
                 operations++;
             }
         }
 
-        AdventurePlanView.SpawnPosition spawn = resolveSpawn(config, terrain, structures);
+        AdventurePlanView.SpawnPosition spawn = resolveSpawn(terrain);
         validate(config, demands, patches, structures, spawn, terrain, levelConstraint, biomeConstraint);
         checkpoint.accept("area_assignment");
         return new Result(patches, structures, spawn, operations);
     }
 
-    private void placeRequiredStructure(long seed,AdventureWorldConfig config,MacroTerrain terrain,
-            StructureFreezer freezer,LevelConstraint levels,PlannedBiomePatch carrier,
-            List<AdventurePlanView.PlannedStructure> structures,RequirementExpander.StructureInstanceDemand demand) {
-        var settings=config.structures().stream().filter(v->v.id().equals(demand.structureId())).findFirst().orElseThrow();
+    private void placeRequiredStructure(long seed, MacroTerrain terrain, StructurePlanningCatalog planningCatalog,
+            LevelConstraint levels, PlannedBiomePatch carrier, List<PlannedStructurePlacement> structures,
+            RequirementExpander.StructureDemand demand) {
+        requirePlanningInfo(planningCatalog, demand);
         long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure-in-biome",demand.instanceId(),0);
-        long prepared=0, budget=Math.min(4096,profile.search().requiredCandidatePreparations());
+        long visited=0, budget=Math.min(4096,profile.search().requiredCandidatePreparations());
         var attempted=new HashSet<Long>();
         for(int step:new int[]{16,8,4}) {
             var candidates=new ArrayList<PlacementIndex.Point>();
             for(long cell:carrier.mask().cells()) {
                 int x=CellMask.x(cell),z=CellMask.z(cell);
                 if(Math.floorMod(x,step)!=0||Math.floorMod(z,step)!=0||attempted.contains(cell))continue;
-                if(demand.spawnInstance()&&Math.hypot(x,z)>Math.min(256,config.world().radius()/10)*.8)continue;
                 if(!levels.accepts(demand.adventureLevel(),x,z)||!sufficientlyFlat(terrain,x,z))continue;
                 candidates.add(new PlacementIndex.Point(x,z));
             }
@@ -157,52 +156,34 @@ public final class JointPlanner {
                     +(DeterministicRandom.mix(salt^p.cell())>>>11)*0x1.0p-53*.35).thenComparingLong(PlacementIndex.Point::cell));
             for(var point:candidates) {
                 attempted.add(point.cell());int x=point.x(),z=point.z();
-                if(!spacingAllows(new Center(x,z),demand.structureId(),settings.spacing(),structures))continue;
-                if(++prepared>budget)break;
-                try {
-                    int y=(int)Math.ceil(terrain.sample(x,z).groundSurface());
-                    var selected=new RequirementExpander.StructureInstanceDemand(demand.instanceId(),demand.structureId(),demand.sequence(),
-                            demand.adventureLevel(),List.of(carrier.biomeId()),demand.carrierArea(),demand.relativeEntrance(),demand.spawnInstance(),demand.required());
-                    var frozen=freezer.freeze(selected,x,y,z,DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure",demand.instanceId(),0));
-                    if(!frozen.instanceId().equals(demand.instanceId())||!frozen.structureId().equals(demand.structureId())
-                            ||frozen.originX()!=x||frozen.originZ()!=z||frozen.footprint().isEmpty()||frozen.biomeProtection().isEmpty()
-                            ||!levels.accepts(demand.adventureLevel(),frozen.entranceX(),frozen.entranceZ())
-                            ||!carrier.contains(frozen.entranceX(),frozen.entranceZ())
-                            ||frozen.biomeProtection().stream().anyMatch(box->!contains(carrier,box))
-                            ||frozen.footprint().stream().anyMatch(box->!contains(carrier,box))
-                            ||structures.stream().anyMatch(other->reservationsConflict(other,frozen)))continue;
-                    if(demand.spawnInstance()) {
-                        var spawn=resolveSpawn(config,terrain,List.of(frozen));
-                        var sample=terrain.sample(spawn.x(),spawn.z());
-                        if(sample.wet()||sample.hazardous()||!carrier.contains((int)Math.floor(spawn.x()),(int)Math.floor(spawn.z())))continue;
-                    }
-                    structures.add(frozen);return;
-                } catch(PlanningFailure|IllegalArgumentException rejected) { /* Try another position inside this same planned biome. */ }
+                if(!spacingAllows(new Center(x,z),demand.structureId(),demand.spacing(),structures))continue;
+                if(++visited>budget)break;
+                var sample=terrain.sample(x+.5,z+.5);
+                if(sample.wet()||sample.hazardous()||!carrier.contains(x,z))continue;
+                structures.add(new PlannedStructurePlacement(demand.instanceId(),demand.structureId(),x,z));
+                return;
             }
-            if(prepared>budget)break;
+            if(visited>budget)break;
         }
         throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
-                "no legal complete structure footprint in its planned required biome",
-                Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"prepared",prepared,"budget",budget));
+                "no legal structure anchor in its planned required biome",
+                Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"visited",visited,"budget",budget));
     }
 
     private boolean placeStructure(long seed, AdventureWorldConfig config, MacroTerrain terrain,
-                                   StructureFreezer freezer, LevelConstraint levels,
+                                   StructurePlanningCatalog planningCatalog, LevelConstraint levels,
                                    BiomeConstraint biomes,
                                    List<PlannedBiomePatch> patches,
-                                   List<AdventurePlanView.PlannedStructure> structures,
-                                   RequirementExpander.StructureInstanceDemand demand, int proposalSequence,
+                                   List<PlannedStructurePlacement> structures,
+                                   RequirementExpander.StructureDemand demand, int proposalSequence,
                                    boolean required) {
-        AdventureWorldConfig.StructureSettings settings = config.structures().stream()
-                .filter(item -> item.id().equals(demand.structureId())).findFirst().orElseThrow();
+        requirePlanningInfo(planningCatalog, demand);
         ContentId biome = demand.allowedBiomes().isEmpty() ? config.biomes().filler().getFirst()
                 : demand.allowedBiomes().getFirst();
         for (int fallback = 0; fallback < profile.search().spawnCandidateAttempts(); fallback++) {
             Center center;
             try {
-                center = demand.spawnInstance()
-                        ? findSpawnStructureCenter(seed, config.world().radius(), proposalSequence, fallback, terrain, levels)
-                        : findCenter(seed, demand.adventureLevel(),
+                center = findCenter(seed, demand.adventureLevel(),
                         proposalSequence + fallback * 1_000_000, terrain, levels, (x, z) -> {
                             if (!biomes.accepts(biome, x, z)) return false;
                             var possible = rectangle(StableIds.carrierPatch(demand.instanceId()), biome,
@@ -211,34 +192,20 @@ public final class JointPlanner {
                                     && patchCompatible(possible, biomes);
                         }, true);
             } catch (PlanningFailure failure) {
-                if (demand.spawnInstance() && fallback + 1 < profile.search().spawnCandidateAttempts()) continue;
                 if (required) throw failure;
                 return false;
             }
-            if (!spacingAllows(center, demand.structureId(), settings.spacing(), structures)) continue;
+            if (!spacingAllows(center, demand.structureId(), demand.spacing(), structures)) continue;
             if (!biomes.accepts(biome, center.x, center.z)) continue;
             var patch = rectangle(StableIds.carrierPatch(demand.instanceId()), biome, demand.adventureLevel(), center,
                     demand.carrierArea());
             if (patches.stream().anyMatch(existing -> overlaps(existing, patch)
                     && !existing.biomeId().equals(patch.biomeId()))) continue;
-            long structureSeed = DeterministicRandom.seed(seed, profile.algorithmVersion(), "structure", demand.instanceId(), 0);
-            int y = (int) StrictMath.ceil(terrain.sample(center.x, center.z).groundSurface());
-            try {
-                AdventurePlanView.PlannedStructure frozen = freezer.freeze(demand, center.x, y, center.z, structureSeed);
-                if (!frozen.instanceId().equals(demand.instanceId()) || !frozen.structureId().equals(demand.structureId())
-                        || frozen.originX() != center.x || frozen.originZ() != center.z)
-                    throw new IllegalArgumentException("structure adapter changed frozen identity or origin");
-                var carrier = fitCarrier(patch, frozen.biomeProtection(), demand.carrierArea().max());
-                if (carrier == null || !patchCompatible(carrier, biomes) || frozen.footprint().isEmpty() || frozen.biomeProtection().isEmpty()
-                        || !levels.accepts(demand.adventureLevel(), frozen.entranceX(), frozen.entranceZ())
-                        || patches.stream().anyMatch(existing -> overlaps(existing, carrier)
-                        && !existing.biomeId().equals(carrier.biomeId()))
-                        || structures.stream().anyMatch(existing -> reservationsConflict(existing, frozen))) continue;
-                patches.add(carrier); structures.add(frozen);
-                return true;
-            } catch (PlanningFailure | IllegalArgumentException rejected) {
-                // No state was mutated: retry position/rotation/carrier relation from the last legal snapshot.
-            }
+            var sample=terrain.sample(center.x+.5,center.z+.5);
+            if(sample.wet()||sample.hazardous()||!levels.accepts(demand.adventureLevel(),center.x,center.z))continue;
+            patches.add(patch);
+            structures.add(new PlannedStructurePlacement(demand.instanceId(),demand.structureId(),center.x,center.z));
+            return true;
         }
         if (required) throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.JOINT_PLACEMENT,
                 "required structure exhausted bounded spatial fallbacks: " + demand.instanceId(), Map.of("instance_id", demand.instanceId()));
@@ -250,24 +217,6 @@ public final class JointPlanner {
             for (int x = patch.minX() + 2; x < patch.maxXExclusive(); x += 4)
                 if (patch.contains(x, z) && !biomes.accepts(patch.biomeId(), x, z)) return false;
         return true;
-    }
-
-    private static PlannedBiomePatch fitCarrier(
-            PlannedBiomePatch patch,
-            List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> protection, long maximumArea) {
-        if (protection.isEmpty()) return null;
-        int minX = protection.stream().mapToInt(box -> box.minX()).min().orElseThrow();
-        int minZ = protection.stream().mapToInt(box -> box.minZ()).min().orElseThrow();
-        int maxX = protection.stream().mapToInt(box -> box.maxX()).max().orElseThrow();
-        int maxZ = protection.stream().mapToInt(box -> box.maxZ()).max().orElseThrow();
-        int centerX = align4((minX + maxX) / 2), centerZ = align4((minZ + maxZ) / 2);
-        for (int size = patch.maxXExclusive() - patch.minX(); ; size += 4) {
-            int x = align4(centerX - size / 2), z = align4(centerZ - size / 2);
-            var candidate = new PlannedBiomePatch(patch.patchId(), patch.biomeId(),
-                    patch.adventureLevel(), x, z, x + size, z + size);
-            if (candidate.area() > maximumArea) return null;
-            if (protection.stream().allMatch(box -> contains(candidate, box))) return candidate;
-        }
     }
 
     private Center findCenter(long seed, int level, int sequence, MacroTerrain terrain,
@@ -292,22 +241,6 @@ public final class JointPlanner {
                 "no compatible structure center in indexed domain",Map.of("level",level,"sequence",sequence,"candidates",visited));
     }
 
-    private Center findSpawnStructureCenter(long seed, double radius, int sequence, int attempt,
-                                            MacroTerrain terrain, LevelConstraint levels) {
-        double maximum = StrictMath.min(256.0, radius / 10.0) * 0.80;
-        double angle = DeterministicRandom.sample(seed, profile.algorithmVersion(), "spawn-structure",
-                "sequence/" + sequence, attempt * 2L) * StrictMath.PI * 2.0;
-        double distance = attempt == 0 ? 0.0 : maximum * StrictMath.sqrt(DeterministicRandom.sample(seed,
-                profile.algorithmVersion(), "spawn-structure", "sequence/" + sequence, attempt * 2L + 1));
-        int x = align4((int) StrictMath.rint(StrictMath.cos(angle) * distance));
-        int z = align4((int) StrictMath.rint(StrictMath.sin(angle) * distance));
-        var sample = terrain.sample(x + 0.5, z + 0.5);
-        if (sample.waterKind() == WaterKind.NONE && !sample.hazardous() && sufficientlyFlat(terrain, x, z)
-                && levels.accepts(0, x, z)) return new Center(x, z);
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.SPAWN_CANDIDATE,
-                "spawn structure candidate is not safe at this bounded attempt", Map.of("attempt", attempt));
-    }
-
     private PlannedBiomePatch rectangle(String id, ContentId biome, int level,
                                                                         Center center, AdventureWorldConfig.AreaRange area) {
         long minimumCells = area.inCells(4).min();
@@ -327,7 +260,7 @@ public final class JointPlanner {
 
     private void validate(AdventureWorldConfig config, RequirementExpander.ExpandedRequirements demands,
                                  List<PlannedBiomePatch> patches,
-                                 List<AdventurePlanView.PlannedStructure> structures,
+                                 List<PlannedStructurePlacement> structures,
                                  AdventurePlanView.SpawnPosition spawn,
                                  MacroTerrain terrain, LevelConstraint levels, BiomeConstraint biomes) {
         long visits = 0;
@@ -363,7 +296,7 @@ public final class JointPlanner {
                 if (!settings.allowedBiomes().acceptsAnySupportedBiome()
                         && !settings.allowedBiomes().ids().contains(patch.biomeId()))
                     fail("carrier biome is not allowed", patch.patchId());
-                if (!patch.contains(owner.originX(), owner.originZ())) fail("carrier does not contain structure origin", patch.patchId());
+                if (!patch.contains(owner.anchorX(), owner.anchorZ())) fail("carrier does not contain structure anchor", patch.patchId());
             }
             // Minimum area is best effort after bounded multi-region recovery. The configured
             // maximum and every per-cell environmental / structure constraint remain hard.
@@ -374,59 +307,43 @@ public final class JointPlanner {
         }
         Map<ContentId, Long> counts = new HashMap<>();
         for (var structure : structures) {
-            visits += 2L + structure.pieces().size();
+            visits++;
             if (!instanceIds.add(structure.instanceId())) fail("duplicate structure instance ID", structure.instanceId());
             var settings = settingsById.get(structure.structureId());
             if (settings == null) fail("unconfigured structure ID", structure.instanceId());
-            if (structure.pieces().isEmpty()) fail("structure has no frozen pieces", structure.instanceId());
-            if (structure.footprint().isEmpty() || structure.biomeProtection().isEmpty())
-                fail("structure has no frozen footprint or biome protection", structure.instanceId());
-            Set<String> pieceIds = new HashSet<>();
-            for (var piece : structure.pieces()) {
-                if (!pieceIds.add(piece.pieceId())) fail("duplicate piece ID", piece.pieceId());
-                if (piece.canonicalNbt().length == 0) fail("piece has no canonical NBT", piece.pieceId());
-            }
-            if (StrictMath.hypot(structure.originX(), structure.originZ()) > config.world().radius())
-                fail("structure origin is outside the planning domain", structure.instanceId());
-            var sample = terrain.sample(structure.originX() + 0.5, structure.originZ() + 0.5);
-            if (sample.wet() || sample.hazardous()) fail("structure origin is not safe dry terrain", structure.instanceId());
-            if (!levels.accepts(settings.adventureLevel(), structure.entranceX(), structure.entranceZ()))
+            if (StrictMath.hypot(structure.anchorX(), structure.anchorZ()) > config.world().radius())
+                fail("structure anchor is outside the planning domain", structure.instanceId());
+            var sample = terrain.sample(structure.anchorX() + 0.5, structure.anchorZ() + 0.5);
+            if (sample.wet() || sample.hazardous()) fail("structure anchor is not safe dry terrain", structure.instanceId());
+            if (!levels.accepts(settings.adventureLevel(), structure.anchorX(), structure.anchorZ()))
                 fail("structure violates the shared adventure level", structure.instanceId());
             var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(structure.instanceId()))).findFirst().orElseThrow();
-            if(!carrier.contains(structure.originX(),structure.originZ())||structure.biomeProtection().stream().anyMatch(box->!contains(carrier,box)))
-                fail("structure lost protected carrier ownership",structure.instanceId());
+            if(!carrier.contains(structure.anchorX(),structure.anchorZ()))
+                fail("structure anchor lost carrier ownership",structure.instanceId());
             counts.merge(structure.structureId(), 1L, Long::sum);
         }
         for (var settings : config.structures()) {
             long count = counts.getOrDefault(settings.id(), 0L);
-            long minimum = settings.effectiveMinimum(config.spawn().hasStructure()
-                    && config.spawn().structure().id().equals(settings.id()));
+            long minimum = settings.effectiveMinimum();
             if (count < minimum || count > settings.count().max())
                 fail("structure count outside configured range", settings.id().toString());
             var matching = structures.stream().filter(item -> item.structureId().equals(settings.id())).toList();
             for (int i = 0; i < matching.size(); i++) for (int j = i + 1; j < matching.size(); j++) {
                 visits++;
-                double distance = StrictMath.hypot(matching.get(i).originX() - matching.get(j).originX(),
-                        matching.get(i).originZ() - matching.get(j).originZ());
+                double distance = StrictMath.hypot(matching.get(i).anchorX() - matching.get(j).anchorX(),
+                        matching.get(i).anchorZ() - matching.get(j).anchorZ());
                 if (distance + 1e-9 < settings.spacing().min()
                         || (settings.spacing().hasMaximum() && distance - 1e-9 > settings.spacing().max()))
                     fail("structure spacing outside configured range", settings.id().toString());
             }
         }
-        for (int i = 0; i < structures.size(); i++) for (int j = i + 1; j < structures.size(); j++) {
-            visits++;
-            if (reservationsConflict(structures.get(i), structures.get(j)))
-                fail("structure footprint/protection conflict", structures.get(i).instanceId() + "/" + structures.get(j).instanceId());
-        }
-        if (config.spawn().hasBiome() && patches.stream().noneMatch(patch -> patch.contains(0, 0)
-                && patch.biomeId().equals(config.spawn().biome())) && !config.spawn().hasStructure())
+        if (patches.stream().noneMatch(patch -> patch.contains(0, 0)
+                && patch.biomeId().equals(config.spawn().biome())))
             fail("spawn biome is not assigned at origin", "spawn");
         if (StrictMath.hypot(spawn.x(), spawn.z()) > StrictMath.min(256.0, config.world().radius() / 10.0) + 1e-9)
             fail("spawn is outside the reserved center domain", "spawn");
-        if (!config.spawn().hasStructure()) {
-            var spawnTerrain = terrain.sample(spawn.x(), spawn.z());
-            if (spawnTerrain.wet() || spawnTerrain.hazardous()) fail("spawn is not safe dry terrain", "spawn");
-        }
+        var spawnTerrain = terrain.sample(spawn.x(), spawn.z());
+        if (spawnTerrain.wet() || spawnTerrain.hazardous()) fail("spawn is not safe dry terrain", "spawn");
         if (visits > profile.search().finalValidationVisits()) throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FINAL_VALIDATION, "independent validation budget exhausted",
                 Map.of("visits", visits, "budget", profile.search().finalValidationVisits()));
     }
@@ -435,29 +352,9 @@ public final class JointPlanner {
         throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.FINAL_VALIDATION, message, Map.of("id", id));
     }
 
-    private static AdventurePlanView.SpawnPosition resolveSpawn(AdventureWorldConfig config, MacroTerrain terrain,
-                                                                 List<AdventurePlanView.PlannedStructure> structures) {
-        if (!config.spawn().hasStructure()) {
-            double y = StrictMath.ceil(terrain.sample(0.5, 0.5).groundSurface()) + 1.0;
-            return new AdventurePlanView.SpawnPosition(0.5, y, 0.5, 0);
-        }
-        String instanceId = StableIds.structureInstance(config.spawn().structure().id(), 0);
-        var structure = structures.stream().filter(item -> item.instanceId().equals(instanceId)).findFirst()
-                .orElseThrow(() -> new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.SPAWN_RESOLUTION,
-                        "spawn structure instance is absent", Map.of("instance_id", instanceId)));
-        var relative = config.spawn().structure().spawnPoint();
-        double rx, rz;
-        float yaw;
-        switch (structure.rotation()) {
-            case "north" -> { rx = relative.x(); rz = relative.z(); yaw = 0; }
-            case "east" -> { rx = -relative.z(); rz = relative.x(); yaw = 90; }
-            case "south" -> { rx = -relative.x(); rz = -relative.z(); yaw = 180; }
-            case "west" -> { rx = relative.z(); rz = -relative.x(); yaw = 270; }
-            default -> throw new PlanningFailure(PlanningFailure.Code.EXECUTION_FAILED, FailureStage.SPAWN_RESOLUTION,
-                    "adapter returned unsupported spawn rotation", Map.of("rotation", structure.rotation()));
-        }
-        return new AdventurePlanView.SpawnPosition(structure.originX() + rx,
-                structure.originY() + relative.y(), structure.originZ() + rz, yaw);
+    private static AdventurePlanView.SpawnPosition resolveSpawn(MacroTerrain terrain) {
+        double y = StrictMath.ceil(terrain.sample(0.5, 0.5).groundSurface()) + 1.0;
+        return new AdventurePlanView.SpawnPosition(0.5, y, 0.5, 0);
     }
     private static int align4(int value) { return Math.floorDiv(value, 4) * 4; }
     private static boolean overlaps(PlannedBiomePatch a,
@@ -468,27 +365,10 @@ public final class JointPlanner {
             if (a.contains(x + 2, z + 2) && b.contains(x + 2, z + 2)) return true;
         return false;
     }
-    private static boolean contains(PlannedBiomePatch patch,
-                                    io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox box) {
-        for (int x = align4(box.minX()); x <= box.maxX(); x+=4) for (int z = align4(box.minZ()); z <= box.maxZ(); z+=4)
-            if (!patch.contains(x, z)) return false;
-        return true;
-    }
-    private static boolean reservationsConflict(AdventurePlanView.PlannedStructure a,
-                                                AdventurePlanView.PlannedStructure b) {
-        return boxesIntersect(a.footprint(), b.biomeProtection()) || boxesIntersect(b.footprint(), a.biomeProtection());
-    }
-    private static boolean boxesIntersect(List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> a,
-                                          List<io.github.luoyan.adventureworldgen.api.StructureAdapter.HorizontalBox> b) {
-        for (var left : a) for (var right : b)
-            if (left.minX() <= right.maxX() && left.maxX() >= right.minX()
-                    && left.minZ() <= right.maxZ() && left.maxZ() >= right.minZ()) return true;
-        return false;
-    }
     private static boolean spacingAllows(Center center, ContentId id, AdventureWorldConfig.Spacing spacing,
-                                         List<AdventurePlanView.PlannedStructure> structures) {
+                                         List<PlannedStructurePlacement> structures) {
         for (var existing : structures) if (existing.structureId().equals(id)) {
-            double distance = StrictMath.hypot(center.x - existing.originX(), center.z - existing.originZ());
+            double distance = StrictMath.hypot(center.x - existing.anchorX(), center.z - existing.anchorZ());
             if (distance + 1e-9 < spacing.min() || (spacing.max() != null && distance - 1e-9 > spacing.max())) return false;
         }
         return true;
@@ -504,9 +384,17 @@ public final class JointPlanner {
         return maximum - minimum <= 8.0;
     }
 
-    public interface StructureFreezer {
-        AdventurePlanView.PlannedStructure freeze(RequirementExpander.StructureInstanceDemand demand,
-                                                   int x, int y, int z, long structureSeed);
+    private static void requirePlanningInfo(StructurePlanningCatalog catalog,
+                                            RequirementExpander.StructureDemand demand) {
+        requirePlanningInfo(catalog, demand.structureId());
+    }
+
+    private static void requirePlanningInfo(StructurePlanningCatalog catalog, ContentId structureId) {
+        var info = catalog.find(structureId).orElseThrow(() -> new PlanningFailure(
+                PlanningFailure.Code.UNSUPPORTED_CONTENT, FailureStage.REQUIREMENTS,
+                "structure has no planning information", Map.of("structure_id", structureId)));
+        if (!info.structureId().equals(structureId))
+            throw new IllegalArgumentException("structure planning catalog returned the wrong structure ID");
     }
     /**
      * How the adventure level reaches placement. Level is a <em>soft preference</em> in this product
@@ -548,7 +436,7 @@ public final class JointPlanner {
 
     @FunctionalInterface public interface BiomeConstraint { boolean accepts(ContentId biome, int x, int z); }
     public record Result(List<PlannedBiomePatch> patches,
-                         List<AdventurePlanView.PlannedStructure> structures,
+                         List<PlannedStructurePlacement> structures,
                          AdventurePlanView.SpawnPosition spawn, long operationCount) {
         public Result { patches = List.copyOf(patches); structures = List.copyOf(structures); }
     }

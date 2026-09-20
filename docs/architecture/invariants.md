@@ -50,7 +50,7 @@
 | `surface`（出现时生效） | `hydrology`、`planner`、`runtime`、`worldgen` |
 
 测试要求已声明的生产包存在且非空；`surface` 是唯一允许缺席的预留包。
-它还检查共享生成器不引用具体结构部件类或具体部件类型常量，恢复入口使用部件注册表。
+它还检查 planner 不引用结构执行模型，并检查共享生成器没有计划结构注入入口。
 没有列出的方向不等于鼓励添加依赖，仍应审查职责与环路。
 
 <a id="ownership"></a>
@@ -63,10 +63,10 @@
 | 侵蚀增量与高度滤波 | `erosion` | 查询时重新模拟水滴或选择材料 |
 | 河网、水位、湖湿地、切削和封岸量化 | `hydrology` | 决定河床方块与 Minecraft 群系 |
 | 气候准入与归属过渡 | `biome` | 重画地形或持有游戏生命周期 |
-| 最终方块和 surface rules | `worldgen` 与原版执行管线 | 重新规划地块或部件 |
+| 最终方块和 surface rules | `worldgen` 与原版执行管线 | 重新规划地块或执行规划结构 |
 
 连续采样使用同一组冻结输入；网格是用途相关的采样与归属表示，不是另一套低精度地形公式。
-结构地基是区块期显式适配，不能混同为已反馈到成本图的宏观高度。
+原生结构地基是区块期显式适配，不能混同为已反馈到成本图的宏观高度。
 
 <a id="constraints"></a>
 ## 约束层级
@@ -78,3 +78,14 @@ Adventure level 是位置软偏好，不是互斥空间区间。
 
 不能把有界搜索失败报告成全空间无解，也不能用评分放宽结构数量、间距或环境准入。
 当前实现的能力限制必须在对应系统文档中保留，并用 [测试与诊断](../development/testing.md) 验证。
+
+<a id="structure-boundary"></a>
+## 结构规划边界
+
+- `StructurePlanningInfo` 是结构类型向 planner 提供固有规划事实的唯一通道。
+- `StructureDemand` 是作者需求，不是结构自身属性。
+- `PlannedStructurePlacement` 是宏观锚点，不是 Minecraft 结构起点或最终原点。
+- planner 只产生纯规划数据，不产生 Minecraft 对象，也不得按具体 structure ID 写特例。
+- worldgen 当前不执行 planned structure placements；原生结构由 Minecraft 自身生成。
+- AdventureWorldGen 当前没有结构生成系统，不保留半实现的结构 adapter API。
+- 未来结构生成必须建立在 planner 输出之上，不能让 planner 调用生成实现。

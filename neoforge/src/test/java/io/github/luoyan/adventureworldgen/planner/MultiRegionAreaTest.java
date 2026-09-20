@@ -26,7 +26,8 @@ class MultiRegionAreaTest {
     }
     private static JointPlanner.Result plan(int minimum) {
         return new JointPlanner(PlannerProfile.V2).plan(7331,config(minimum),FLAT,
-                (d,x,y,z,s)->{throw new AssertionError("no structures requested");},(l,x,z)->true,MultiRegionAreaTest::allowed);
+                io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(java.util.List.of()),
+                (l,x,z)->true,MultiRegionAreaTest::allowed);
     }
     @Test void disconnectedRegionsCombineWithoutClaimingTheirIllegalGap() {
         var result=plan(1536);

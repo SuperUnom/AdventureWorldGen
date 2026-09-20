@@ -20,7 +20,7 @@ class AtomicPlanRepositoryTest {
     @Test
     void publishesLoadsAndTreatsIdenticalRepublishAsNoOp() throws Exception {
         var repository = new AtomicPlanRepository();
-        byte[] plan = "{\"format\":\"plan-v2\",\"seed\":42}".getBytes(StandardCharsets.UTF_8);
+        byte[] plan = "{\"format\":\"plan-v3\",\"seed\":42}".getBytes(StandardCharsets.UTF_8);
         String input = AtomicPlanRepository.sha256("input".getBytes(StandardCharsets.UTF_8));
         repository.publishAtomically(world, PROFILE, plan, input);
         Path directory = planDirectory();
@@ -36,7 +36,7 @@ class AtomicPlanRepositoryTest {
     @Test
     void rejectsTruncationWrongInputAndUnknownVersionThenCanRetry() throws Exception {
         var repository = new AtomicPlanRepository();
-        byte[] plan = "{\"format\":\"plan-v2\"}".getBytes(StandardCharsets.UTF_8);
+        byte[] plan = "{\"format\":\"plan-v3\"}".getBytes(StandardCharsets.UTF_8);
         String input = AtomicPlanRepository.sha256("input".getBytes(StandardCharsets.UTF_8));
         repository.publishAtomically(world, PROFILE, plan, input);
         assertFalse(repository.loadReady(world, PROFILE, "wrong").isPresent());
@@ -47,7 +47,7 @@ class AtomicPlanRepositoryTest {
         assertTrue(repository.loadReady(world, PROFILE, input).isPresent());
 
         String manifest = Files.readString(planDirectory().resolve("manifest.json"))
-                .replace("plan-v2", "plan-v999");
+                .replace("plan-v3", "plan-v999");
         Files.writeString(planDirectory().resolve("manifest.json"), manifest);
         assertFalse(repository.loadReady(world, PROFILE, input).isPresent());
     }
