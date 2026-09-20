@@ -87,7 +87,6 @@ def dependency_errors() -> list[str]:
 def check(gradle_log: Path | None) -> list[str]:
     docs = [ROOT / 'README.md', ROOT / 'AGENTS.md', ROOT / 'neoforge/README.md',
             ROOT / 'neoforge/tools/README.md', *sorted((ROOT / 'docs').rglob('*.md'))]
-    # DOCUMENTATION_REFACTOR.md 是任务输入，保留原文，不属于开发规范。
     bodies = {path: path.read_text() for path in docs}
     types, tasks = java_types(), declared_tasks()
     if gradle_log:
