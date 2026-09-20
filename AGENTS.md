@@ -105,6 +105,15 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 纯算法改动运行 JUnit；worldgen、注册与生命周期改动补跑对应 GameTest。
 首次规划用新目录，READY 对照复用同一目录和完全匹配的配置。
 
+### Gradle 缓存约束
+
+- 本机开发与验证统一使用系统默认 Gradle User Home：`${user.home}/.gradle`（即 `~/.gradle`）。
+- 运行 Gradle 前检查 `GRADLE_USER_HOME`；如果它指向其他位置，应取消该覆盖并使用默认目录。
+- 不得通过 `GRADLE_USER_HOME`、`--gradle-user-home` 或 `-g` 在 `/tmp`、`/private/tmp`、仓库内或其他位置创建独立缓存。
+- 如果沙箱不能写入 `~/.gradle`，应申请相应权限，不得通过新建临时缓存绕过限制。
+- 只有用户明确授权或既有 CI 配置明确要求时才可使用非默认 Gradle User Home，并应复用一个稳定路径、说明磁盘占用与清理方式。
+- `neoforge/.gradle` 是 Gradle 自动维护的项目状态目录，不是另一个 Gradle User Home；不要将 Minecraft 与 NeoForge 下载缓存重定向到其中。
+
 报告实际执行的命令、输入、结果和未验证范围。
 工具编译、纯 Java 查询、Minecraft 区块测试与客户端视觉检查是不同证据。
 不要把已有日志或 Git 提交中的通过记录当作本次运行结果。
