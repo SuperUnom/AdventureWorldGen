@@ -96,6 +96,8 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 
 结构配置是作者的 `StructureDemand`，结构目录提供 `StructurePlanningInfo`，冻结结果是宏观锚点。
 三者都不是 Minecraft 生成指令；第三方 Java 扩展目前只开放 [群系适配契约](docs/reference/adapters.md)。
+如果 `StructurePlanningInfo` 以后增加任何会影响 planner 输出的字段，必须把规范值纳入计划输入身份，
+并同步审查算法版本、冻结格式和 READY 失效条件；不能只扩展 catalog 而继续复用旧摘要。
 
 ## 验证与交付
 

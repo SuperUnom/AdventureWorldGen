@@ -99,7 +99,7 @@ public final class JointPlanner {
 
         checkpoint.accept("biomes");
         observer.stage(PlanningStage.STRUCTURES);
-        // The entire required biome layout is frozen before any required structure is prepared.
+        // The entire required biome layout is frozen before required structure anchor selection.
         var structureOrder=new ArrayList<>(demands.structures());
         structureOrder.sort(java.util.Comparator.comparingInt(RequirementExpander.StructureDemand::adventureLevel)
                 .thenComparing(RequirementExpander.StructureDemand::instanceId));
@@ -146,7 +146,7 @@ public final class JointPlanner {
             for(long cell:carrier.mask().cells()) {
                 int x=CellMask.x(cell),z=CellMask.z(cell);
                 if(Math.floorMod(x,step)!=0||Math.floorMod(z,step)!=0||attempted.contains(cell))continue;
-                if(!levels.accepts(demand.adventureLevel(),x,z)||!sufficientlyFlat(terrain,x,z))continue;
+                if(!levels.accepts(demand.adventureLevel(),x,z))continue;
                 candidates.add(new PlacementIndex.Point(x,z));
             }
             candidates.sort(java.util.Comparator.comparingDouble((PlacementIndex.Point p)->
@@ -184,13 +184,13 @@ public final class JointPlanner {
             Center center;
             try {
                 center = findCenter(seed, demand.adventureLevel(),
-                        proposalSequence + fallback * 1_000_000, terrain, levels, (x, z) -> {
+                        proposalSequence + fallback * 1_000_000, levels, (x, z) -> {
                             if (!biomes.accepts(biome, x, z)) return false;
                             var possible = rectangle(StableIds.carrierPatch(demand.instanceId()), biome,
                                     demand.adventureLevel(), new Center(x, z), demand.carrierArea());
                             return patches.stream().noneMatch(existing -> !existing.biomeId().equals(biome) && overlaps(existing, possible))
                                     && patchCompatible(possible, biomes);
-                        }, true);
+                        });
             } catch (PlanningFailure failure) {
                 if (required) throw failure;
                 return false;
@@ -219,9 +219,8 @@ public final class JointPlanner {
         return true;
     }
 
-    private Center findCenter(long seed, int level, int sequence, MacroTerrain terrain,
-                              LevelConstraint levelConstraint,
-                              java.util.function.BiPredicate<Integer, Integer> compatible, boolean requireFlat) {
+    private Center findCenter(long seed, int level, int sequence, LevelConstraint levelConstraint,
+                              java.util.function.BiPredicate<Integer, Integer> compatible) {
         long salt = DeterministicRandom.seed(seed,profile.algorithmVersion(),"indexed-structure","sequence/"+sequence,level);
         long visited=0;
         for(int step:new int[]{16,8,4}) {
@@ -233,7 +232,6 @@ public final class JointPlanner {
                 if(++visited>profile.search().requiredCandidatePreparations())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.STRUCTURE_CANDIDATES,"indexed structure candidate budget exhausted",Map.of("visits",visited,"spacing",step));
                 Center candidate = new Center(point.x(),point.z());
                 if (!levelConstraint.accepts(level,point.x(),point.z())) continue;
-                if (requireFlat && !sufficientlyFlat(terrain,point.x(),point.z())) continue;
                 if (compatible.test(point.x(),point.z())) return candidate;
             }
         }
@@ -373,17 +371,6 @@ public final class JointPlanner {
         }
         return true;
     }
-    static boolean sufficientlyFlat(MacroTerrain terrain, int x, int z) {
-        double minimum = Double.POSITIVE_INFINITY, maximum = Double.NEGATIVE_INFINITY;
-        for (int dx : new int[]{-16, 16}) for (int dz : new int[]{-16, 16}) {
-            var sample = terrain.sample(x + dx + 0.5, z + dz + 0.5);
-            if (sample.wet() || sample.hazardous()) return false;
-            minimum = StrictMath.min(minimum, sample.groundSurface());
-            maximum = StrictMath.max(maximum, sample.groundSurface());
-        }
-        return maximum - minimum <= 8.0;
-    }
-
     private static void requirePlanningInfo(StructurePlanningCatalog catalog,
                                             RequirementExpander.StructureDemand demand) {
         requirePlanningInfo(catalog, demand.structureId());
@@ -398,7 +385,7 @@ public final class JointPlanner {
     }
     /**
      * How the adventure level reaches placement. Level is a <em>soft preference</em> in this product
-     * (see {@code docs/设计原则.md}): the author model uses it to order candidates, not to admit or
+     * (see {@code docs/systems/planning.md}): the author model uses it to order candidates, not to admit or
      * reject a position. The interface keeps a boolean because the candidate catalog and the anchor
      * checks still ask the question, but {@link #accepts} is the compatibility no-filter answer here
      * - production supplies {@link #preferenceOnly}, which accepts everywhere and ranks through

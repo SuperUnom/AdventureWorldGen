@@ -39,7 +39,7 @@
 |---|---|
 | RESOURCE_LIMIT | 网格节点估算、工作内存、配方/河网或 profile 预算；区分规划预算与 JVM OutOfMemoryError |
 | 搜索耗尽 | 群系候选与实际合法性评估次数、细化预算；有界搜索失败不证明全空间无解 |
-| 无合法承载/落点 | 地形容量、温湿度硬集合、连通干地、完整结构 footprint、保护范围和间距 |
+| 无合法承载/落点 | 地形容量、温湿度硬集合、连通干地、carrier ownership、锚点自身安全性和间距 |
 | minimum area 警告 | 对照 [约束分层](../systems/planning.md#constraints)，区分上游容量承诺、分配结果和终检有效面积 |
 | filler 查询失败 | parser 的模板覆盖不等于每个温湿度点都有候选；检查该坐标的最终 MacroSample 与环境规则 |
 | EXECUTION_FAILED | 沿异常链找真实阶段：plan-load、生成组装、存储或终检；不能默认都是作者 JSON 问题 |

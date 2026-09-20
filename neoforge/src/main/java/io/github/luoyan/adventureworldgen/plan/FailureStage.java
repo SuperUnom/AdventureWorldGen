@@ -41,8 +41,6 @@ public enum FailureStage {
     EFFECTIVE_AREA("effective-area", PlanningStage.PLACEMENT),
     STRUCTURE_CANDIDATES("structure-candidates", PlanningStage.STRUCTURES),
     STRUCTURE_IN_BIOME("structure-in-biome", PlanningStage.STRUCTURES),
-    STRUCTURE_PREPARE("structure-prepare", PlanningStage.STRUCTURES),
-    STRUCTURE_PIECE_RESTORE("structure-piece-restore", PlanningStage.STRUCTURES),
     JOINT_PLACEMENT("joint-placement", PlanningStage.PLACEMENT),
     SPAWN_CORE("spawn-core", PlanningStage.PLACEMENT),
     SPAWN_RESERVATION("spawn-reservation", PlanningStage.PLACEMENT),

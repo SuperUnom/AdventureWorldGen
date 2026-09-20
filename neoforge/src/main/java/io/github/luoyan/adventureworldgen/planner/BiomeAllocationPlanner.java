@@ -102,7 +102,7 @@ public final class BiomeAllocationPlanner {
                 regions.removeLast();
                 continue;
             }
-            claimSeedCore(regions.size()-1);
+            claim(regions.size()-1,region.anchor.cell(),0);
             progress.accept(.18*regions.size()/Math.max(1,ordered.size()));
         }
         // Stable connected spawn core before any competitor can surround it.
@@ -200,7 +200,6 @@ public final class BiomeAllocationPlanner {
                 var capacity=capacityProbes.computeIfAbsent(r.biome,ignored->new ConnectedCapacityProbe(cell->
                         !owner.containsKey(cell)&&legal(r,CellMask.x(cell),CellMask.z(cell))));
                 if(capacity.knownInsufficient(candidate.point.cell(),r.minimum()))continue;
-                if(!supportsCarrierCore(r,candidate.point))continue;
                 int probe=(int)Math.min(r.minimum(),relaxation==0?4096:256);
                 var measured=capacity.measure(candidate.point.cell(),probe);
                 if(measured.supports(r.minimum(),probe))return candidate.point;
@@ -208,11 +207,14 @@ public final class BiomeAllocationPlanner {
             }
             if(fallback!=null){r.biome=fallback.biome;return fallback.point;}
         }
-        // A missing ordinary biome is reported as zero supply. Spawn and required structures
-        // still need a real legal anchor inside that carrier to construct a valid plan.
-        if(!central&&carrierCoreSide(r)==0)return null;
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no sufficiently connected legal seed with required carrier clearance",
-                Map.of("biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));
+        // A missing ordinary biome is reported as zero supply. Spawn and required-structure
+        // carriers still need one legal ownership seed, but the carrier does not reserve a core or
+        // imply any structure footprint around that seed.
+        boolean carrier=r.demand.patchId().startsWith("patch/carrier/");
+        if(!central&&!carrier)return null;
+        String role=central?"spawn":"required structure carrier";
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no legal biome seed for "+role,
+                Map.of("role",role,"biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));
     }
     private PlacementIndex.Point nextSupplement(Region r) {
         int[] steps={16,8,4};
@@ -223,31 +225,6 @@ public final class BiomeAllocationPlanner {
             }
             if(r.supplementStep==steps.length)return null;
             r.supplements=index.candidates(r.demand.adventureLevel(),steps[r.supplementStep++]).iterator();
-        }
-    }
-    /** Reserve ownership, never reshape terrain or prepare a structure before biome growth finishes. */
-    private static int carrierCoreSide(Region r) {
-        if(!r.demand.patchId().startsWith("patch/carrier/"))return 0;
-        return Math.max(1,Math.min(16,(int)Math.sqrt(r.minimum())));
-    }
-    private boolean supportsCarrierCore(Region r,PlacementIndex.Point p) {
-        int side=carrierCoreSide(r);if(side==0)return true;
-        if(!JointPlanner.sufficientlyFlat(index::sampleAt,p.x(),p.z()))return false;
-        for(int dz=0;dz<side;dz++)for(int dx=0;dx<side;dx++) {
-            int x=p.x()+(dx-side/2)*4,z=p.z()+(dz-side/2)*4;
-            if(owner.containsKey(CellMask.key(x,z))||!legal(r,x,z))return false;
-        }
-        return true;
-    }
-    private void claimSeedCore(int i) {
-        var r=regions.get(i);int side=carrierCoreSide(r);
-        claim(i,r.anchor.cell(),0);
-        // A bounded compact interior gives small carriers usable width. Their outer frontier
-        // still competes and grows organically under the same area and environment constraints.
-        for(int dz=0;dz<side;dz++)for(int dx=0;dx<side;dx++) {
-            int x=r.anchor.x()+(dx-side/2)*4,z=r.anchor.z()+(dz-side/2)*4;
-            long cell=CellMask.key(x,z);
-            if(!r.cells.contains(cell))claim(i,cell,Math.hypot(x-r.anchor.x(),z-r.anchor.z()));
         }
     }
     /** Introduce filler competitors after the minimum round; retain their claimed cells in the frozen plan. */

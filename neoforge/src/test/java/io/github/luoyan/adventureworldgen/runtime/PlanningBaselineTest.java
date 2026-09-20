@@ -182,9 +182,24 @@ class PlanningBaselineTest {
     // still produce identical bytes. Only the diagnostic statistics moved, which is exactly what the
     // item predicted: "该统计虽不反馈布局，却会持久化，因此统计变化需单独核对规范字节，不能称为绝对
     // 字节不变." This revision was re-recorded deliberately; it is not a batch refresh of every hash.
+    //
+    // ============================ REVISION 3 (2026-09-20) ============================
+    // EXPECTED_PLAN_SHA256 and EXPECTED_FIELD_SHA256. EXPECTED_SPAWN is untouched.
+    //
+    // Old plan:  0d3eac42f4da16daaa4e7a8e0bcd1e54dee67d4bf73e3b5e60e9f3a3759cf3ef
+    // New plan:  b5397002aae053d06bc01c224c455891a95cbf216052777fd483be051ade0d97
+    // Old field: 21a54e68a20299639024c094bfb85bd182b3a4808bf77a6fcd4e98e885044196
+    // New field: d104c30bc2cf264e0f617e628d2fa76c2e19514122c719e9dbadc397ebb789e5
+    //
+    // The plan hash changes because plan-v3 no longer writes the unused historical random_keys
+    // metadata. The field hash changes because structure carriers now seed exactly one ownership
+    // cell and grow under the ordinary biome-allocation rules instead of preclaiming a fixed core;
+    // structure anchors also no longer apply a fabricated 32x32 flatness check. Those are the
+    // reviewed contract changes under test, while repeated planning, READY round trips and the
+    // unchanged spawn signature remain independently checked above.
     private static final String EXPECTED_PLAN_SHA256 =
-            "0d3eac42f4da16daaa4e7a8e0bcd1e54dee67d4bf73e3b5e60e9f3a3759cf3ef";
+            "b5397002aae053d06bc01c224c455891a95cbf216052777fd483be051ade0d97";
     private static final String EXPECTED_FIELD_SHA256 =
-            "21a54e68a20299639024c094bfb85bd182b3a4808bf77a6fcd4e98e885044196";
+            "d104c30bc2cf264e0f617e628d2fa76c2e19514122c719e9dbadc397ebb789e5";
     private static final String EXPECTED_SPAWN = "0.5/0.5/0.0";
 }

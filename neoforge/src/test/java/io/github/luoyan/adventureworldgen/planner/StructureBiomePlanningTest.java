@@ -62,9 +62,19 @@ class StructureBiomePlanningTest {
     }
 
     @Test
-    void unevenTerrainStillProducesOnlyAMacroAnchorAndCarrier() {
+    void requiredCarrierStillNeedsOneLegalOwnershipSeed() {
         var config=config();
-        MacroTerrain uneven=(x,z)->new MacroSample(90+6*Math.sin(x/120)+4*Math.cos(z/80),
+        var error=assertThrows(PlanningFailure.class,()->new JointPlanner(PlannerProfile.V2)
+                .plan(7331,config,FLAT,catalog(config),(level,x,z)->true,
+                        (biome,x,z)->!biome.value().equals("test:forbidden")
+                                &&!biome.value().equals("test:desert")));
+        assertEquals("required structure carrier",error.diagnostics().get("role"));
+    }
+
+    @Test
+    void steepTerrainStillProducesOnlyAMacroAnchorAndCarrier() {
+        var config=config();
+        MacroTerrain uneven=(x,z)->new MacroSample(80+0.5*x,
                 Double.NaN,WaterKind.NONE,false,"r","hills","test");
         var result=new JointPlanner(PlannerProfile.V2).plan(8844,config,uneven,catalog(config));
         var placement=result.structures().getFirst();
@@ -72,5 +82,8 @@ class StructureBiomePlanningTest {
                 StableIds.carrierPatch(placement.instanceId()))).findFirst().orElseThrow();
         assertTrue(carrier.contains(placement.anchorX(),placement.anchorZ()));
         assertEquals(WaterKind.NONE,uneven.sample(placement.anchorX()+.5,placement.anchorZ()+.5).waterKind());
+        double west=uneven.sample(placement.anchorX()-15.5,placement.anchorZ()+.5).groundSurface();
+        double east=uneven.sample(placement.anchorX()+16.5,placement.anchorZ()+.5).groundSurface();
+        assertTrue(east-west>8,"regression terrain must reject the anchor under the removed ±16 flatness check");
     }
 }

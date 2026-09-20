@@ -37,6 +37,20 @@ public final class AdventureWorldGameTests {
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
+    public static void externalBiomeAdapterAndResourcesRemainActive(GameTestHelper helper) {
+        var biomeRegistry = helper.getLevel().registryAccess().registryOrThrow(Registries.BIOME);
+        var biome = biomeRegistry.get(ResourceLocation.parse(TestCompanionAdapters.ASHEN_GROVE_ID.value()));
+        helper.assertTrue(biome != null, "test companion biome was not loaded from datapack resources");
+        helper.assertTrue(biome.getGenerationSettings().features().size() > 9
+                        && biome.getGenerationSettings().features().get(9).size() > 0,
+                "test companion biome has no vegetation feature step");
+        helper.assertTrue(MinecraftAdapters.builtIn().biome(TestCompanionAdapters.ASHEN_GROVE_ID)
+                        == TestCompanionAdapters.ASHEN_GROVE,
+                "external biome compatibility adapter was not selected");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 1200)
     public static void plannedOceanColumnsPreserveDeepCavesAndContinuousWater(GameTestHelper helper) {
         var plan = plan();
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "ocean_regression");

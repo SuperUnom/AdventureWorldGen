@@ -87,7 +87,9 @@ terrain 只消费结果；高度拟合与地形管线见 [地形系统](terrain.
 <a id="structures"></a>
 ## 结构落位与可选实例
 
-必需群系布局先完成，必需结构再在各自 carrier 内搜索安全、较平坦的宏观锚点。
+必需群系布局先完成，必需结构再在各自 carrier 内搜索宏观锚点。锚点自身必须属于 carrier、
+满足环境准入且非水域、非危险地形，并满足结构间距；planner 不检查锚点周围的固定半径或平整度。
+carrier 只表达允许群系的 ownership，不预留任何假想结构 footprint。
 实例按等级及实例 ID 稳定排序；候选从较粗网格逐步细化。
 `StructurePlanningCatalog` 提供纯 `StructurePlanningInfo`；缺少信息时在结构搜索前失败。
 

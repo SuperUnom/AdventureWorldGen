@@ -8,7 +8,7 @@
 // tools/run-full-gametest.sh, which starts this script once per group with a separate world
 // directory and aggregates the results.
 //
-//   default      9 methods  namespaces minecraft, adventureworldgen, testcompanion
+//   default     10 methods  namespaces minecraft, adventureworldgen, testcompanion
 //   performance  6 methods  namespace  testcompanion_performance
 //   capacity     1 method   namespace  testcompanion_capacity
 //   planning     1 method   namespace  testcompanion_planning

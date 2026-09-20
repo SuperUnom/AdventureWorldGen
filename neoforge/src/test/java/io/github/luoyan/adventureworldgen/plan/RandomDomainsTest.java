@@ -22,10 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * Every random-domain literal in production code is registered.
  *
  * <p>The point is that the random surface cannot grow by accident. A new stage or noise domain is
- * one string away, and nothing else in the build would notice: the plan's {@code random_keys} array
- * is historical metadata, it is never read back and it does not name these values. This test scans
- * the production sources, extracts the domain argument of each random call, and requires it to be
- * registered in {@link RandomDomains}.
+ * one string away, and nothing else in the build would notice. This test scans the production
+ * sources, extracts the domain argument of each random call, and requires it to be registered in
+ * {@link RandomDomains}.
  *
  * <p>It deliberately covers all three shapes the code uses - {@code DeterministicRandom.seed},
  * {@code DeterministicRandom.sample} and the noise constructors - because scanning only one of them
@@ -84,9 +83,7 @@ class RandomDomainsTest {
     }
 
     @Test
-    void thePlanRandomKeysArrayIsDescriptiveOnly() throws IOException {
-        // The persisted array must not be mistaken for this inventory: it is metadata written for the
-        // wire, its names are not the ones used above, and no decoder reads it.
+    void thePlanPayloadDoesNotPublishAMisleadingRandomKeyInventory() throws IOException {
         Path codec = sourceRoot().getParent().getParent().resolve("java")
                 .resolve("io/github/luoyan/adventureworldgen/persistence/PlanV2Codec.java");
         Path repository = Path.of(System.getProperty("adventureworldgen.sourceRoot")).toAbsolutePath()
@@ -94,13 +91,8 @@ class RandomDomainsTest {
         Path file = Files.isRegularFile(repository) ? repository : codec;
         assertTrue(Files.isRegularFile(file), () -> "cannot locate PlanV2Codec at " + repository);
         String source = Files.readString(file, StandardCharsets.UTF_8);
-        assertTrue(source.contains("writeHistoricalRandomKeys"), "the metadata must stay in the encoder");
-        assertTrue(source.contains("not read back"),
-                "the encoder must say that random_keys is not read back");
-        // decode() must not consult the array at all.
-        String decode = source.substring(source.indexOf("public PlanSnapshot decode("));
-        assertFalse(decode.contains("random_keys"),
-                "decode() must ignore random_keys; reading it would turn metadata into a contract");
+        assertFalse(source.contains("random_keys"),
+                "plan-v3 must not persist an unvalidated historical random-domain list");
     }
 
     private static void assertDistinct(List<String> names, String role) {

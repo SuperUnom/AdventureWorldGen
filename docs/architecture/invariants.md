@@ -13,7 +13,7 @@
 缓存只允许复用可重算结果；命中、淘汰、线程或区块访问顺序不能成为新随机输入。
 验证时同时检查冷缓存、热缓存、恢复和负坐标，不能仅重复相同查询顺序。
 随机调用来源见 [RandomDomains](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/RandomDomains.java)，
-计划的 `random_keys` 字段不提供随机完整性证明。
+源码清单测试用于发现新增 domain；计划 payload 不重复保存一份无法校验的 domain 清单。
 当前气候缓存的验证缺口见 [环境查询边界](../systems/terrain.md#query-limits)。
 
 <a id="frozen"></a>
@@ -35,11 +35,11 @@
 | 包 | 禁止引用 |
 |---|---|
 | `config` | Minecraft、NeoForge、`planner`、`runtime` |
-| `plan` | `planner`、`runtime`、`config`、`hydrology` |
+| `plan` | Minecraft、NeoForge、`planner`、`runtime`、`config`、`hydrology` |
 | `spatial` | 其他本项目包 |
 | `noise` | `planner`、`runtime`、`terrain`、`config` |
 | `api` | `planner`、`runtime`、`hydrology`、`terrain`、`surface`、`worldgen` |
-| `planner` | `runtime` |
+| `planner` | Minecraft、NeoForge、`runtime`、`worldgen` |
 | `terrain` | `planner`、`runtime`、`config` |
 | `biome` | `planner`、`runtime` |
 | `climate` | `planner`、`runtime` |
@@ -89,3 +89,6 @@ Adventure level 是位置软偏好，不是互斥空间区间。
 - worldgen 当前不执行 planned structure placements；原生结构由 Minecraft 自身生成。
 - AdventureWorldGen 当前没有结构生成系统，不保留半实现的结构 adapter API。
 - 未来结构生成必须建立在 planner 输出之上，不能让 planner 调用生成实现。
+- 当前 carrier 只表达群系 ownership；没有结构尺寸输入时，planner 不预留固定核心或检查固定半径平整度。
+- 如果 `StructurePlanningInfo` 新增会影响 planner 输出的字段，这些字段必须进入计划输入身份；同时审查算法版本、
+  冻结格式和 READY 失效条件，不能让旧 READY 在结构规划输入已变化时继续命中。

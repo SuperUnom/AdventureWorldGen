@@ -40,35 +40,9 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
  */
 public final class PlanV2Codec {
     private static final Set<String> ROOT_KEYS = Set.of("algorithm", "format", "hydrology", "input_sha256",
-            "operation_counts", "profile", "random_keys", "seed", "spawn", "terrain", "structures", "biome_layout");
+            "operation_counts", "profile", "seed", "spawn", "terrain", "structures", "biome_layout");
 
     private static final com.google.gson.Gson LAYOUT_JSON=new com.google.gson.Gson();
-
-    /**
-     * Frozen plan-v3 metadata: the random-key names a plan was published with.
-     *
-     * <p><strong>Historical descriptive metadata, nothing more.</strong> It is written for wire
-     * compatibility and is deliberately not read back: {@code decode} ignores the array entirely,
-     * and nothing in the planner consults it, so it neither participates in a READY restore nor
-     * proves that the random calls a plan made are complete or unchanged. Treating it as an
-     * integrity check would be wrong twice over - the names are not the stages the code actually
-     * draws from, and no code validates them against a draw.
-     *
-     * <p>The corresponding inventory of the domains that <em>are</em> used lives in
-     * {@link io.github.luoyan.adventureworldgen.plan.RandomDomains}, which is maintained against
-     * the call sites by a source-level test. It is a description of today's code, not a substitute
-     * for this array: making the two agree is a versioned protocol change with its own
-     * old-payload and round-trip checks, not a tidy-up.
-     */
-    private static void writeHistoricalRandomKeys(JsonWriter json) throws IOException {
-        json.name("random_keys").beginArray();
-        // Order and values are part of the frozen plan-v3 layout. Do not sort, rename or extend
-        // this list without a reviewed format decision: it would move every plan's bytes.
-        json.value("coast-phase"); json.value("erosion"); json.value("filler-biome");
-        json.value("hydrology"); json.value("joint-candidate"); json.value("region-center");
-        json.value("recipe"); json.value("composite"); json.value("mountain-range"); json.value("structure"); json.value("terrain-noise");
-        json.endArray();
-    }
 
     public byte[] encode(ContentId profileId, String inputHash, PlanSnapshot plan) {
         StringWriter output = new StringWriter();
@@ -91,7 +65,6 @@ public final class PlanV2Codec {
             json.name("terrain_version").value(plan.diagnostics().terrainVersion());
             json.endObject();
             json.name("profile").value(profileId.value());
-            writeHistoricalRandomKeys(json);
             json.name("seed").value(plan.seed());
             json.name("biome_layout");
             LAYOUT_JSON.toJson(plan.biomeLayout(),BiomeLayout.class,json);

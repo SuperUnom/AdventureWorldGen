@@ -93,17 +93,21 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void planningAlgorithmsDoNotDependOnTheRuntimeLayer() throws IOException {
+    void planningAlgorithmsDoNotDependOnMinecraftRuntimeOrWorldgen() throws IOException {
         // Planner <-> runtime was a real package cycle; progress is now an explicit observer
-        // parameter and planned data lives in the plan package.
-        assertNoImport("planner", "io.github.luoyan.adventureworldgen.runtime");
+        // parameter and planned data lives in the plan package. Structure planning must remain a
+        // pure solver contract rather than importing Minecraft types through worldgen.
+        assertNoImport("planner", "net.minecraft", "net.neoforged",
+                "io.github.luoyan.adventureworldgen.runtime",
+                "io.github.luoyan.adventureworldgen.worldgen");
     }
 
     @Test
     void planDataDoesNotDependOnPlanningRuntimeConfigOrHydrology() throws IOException {
         // plan is the shared vocabulary layer (ids, patches, versions, profile, failure contract).
         // Nothing it depends on may import it, so it must stay at the bottom of the graph.
-        assertNoImport("plan", "io.github.luoyan.adventureworldgen.planner",
+        assertNoImport("plan", "net.minecraft", "net.neoforged",
+                "io.github.luoyan.adventureworldgen.planner",
                 "io.github.luoyan.adventureworldgen.runtime",
                 "io.github.luoyan.adventureworldgen.config",
                 "io.github.luoyan.adventureworldgen.hydrology");

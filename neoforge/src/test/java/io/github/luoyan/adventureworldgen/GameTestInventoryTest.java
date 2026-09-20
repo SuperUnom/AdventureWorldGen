@@ -42,6 +42,7 @@ class GameTestInventoryTest {
     /** The default entry: {@code ./gradlew runGameTestServer}. */
     private static final List<String> DEFAULT_GROUP = List.of(
             "AdventureWorldGameTests#companionProfilePlansSafeSpawn",
+            "AdventureWorldGameTests#externalBiomeAdapterAndResourcesRemainActive",
             "AdventureWorldGameTests#plannedOceanColumnsPreserveDeepCavesAndContinuousWater",
             "AdventureWorldGameTests#crashSeedPlansEveryRequiredBiome",
             "AdventureWorldGameTests#constrainedCoastStillPlansAllRequiredBiomes",
@@ -115,13 +116,13 @@ class GameTestInventoryTest {
     @Test
     void everyAcceptanceGroupHasTheDocumentedSize() throws IOException {
         Map<String, List<String>> found = scanTestmodSources();
-        // The four sizes quoted by tools/run-full-gametest.sh. 9 + 6 + 1 + 1 = 17.
-        assertEquals(9, found.getOrDefault("testcompanion", List.of()).size(), "default group size");
+        // The four sizes quoted by tools/run-full-gametest.sh. 10 + 6 + 1 + 1 = 18.
+        assertEquals(10, found.getOrDefault("testcompanion", List.of()).size(), "default group size");
         assertEquals(6, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
         assertEquals(1, found.getOrDefault("testcompanion_capacity", List.of()).size(), "capacity group size");
         assertEquals(1, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
         int total = GROUPS.values().stream().mapToInt(List::size).sum();
-        assertEquals(17, total, "the full acceptance entry covers every registered method exactly once");
+        assertEquals(18, total, "the full acceptance entry covers every registered method exactly once");
     }
 
     private Map<String, List<String>> scanTestmodSources() throws IOException {

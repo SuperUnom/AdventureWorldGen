@@ -12,10 +12,9 @@ import java.util.Set;
  * a random-domain name and fails when one is missing here. Adding a new domain is therefore a
  * deliberate act: either reuse an existing name or register it.
  *
- * <p>Why it exists: the plan's {@code random_keys} array is historical descriptive metadata,
- * not a manifest - it is written for wire compatibility, never read back, and its names are not the
- * names the code uses. Someone reading it would conclude the random surface is validated when it is
- * not. This class is the honest list; {@code PlanV2Codec} points here.
+ * <p>This class is the source-level inventory. The plan payload does not duplicate these names:
+ * persisted labels would be easy to mistake for an integrity manifest even though replay never
+ * validates random calls against them.
  *
  * <p><strong>Values are frozen.</strong> Every name here is an input to
  * {@code DeterministicRandom.seed/sample} or a noise-domain label, so changing one changes generated
@@ -51,7 +50,7 @@ public final class RandomDomains {
             // Climate.
             "climate", "humidity",
             // Placement, biome allocation and structures.
-            "indexed-structure", "biome-seed", "structure", "spawn-structure",
+            "indexed-structure", "structure-in-biome", "biome-seed",
             "region-center", "mountain-range", "filler-biome",
             // Query-time blending.
             "query-blend");

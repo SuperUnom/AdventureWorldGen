@@ -65,7 +65,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 
 | 组 | 主要覆盖 |
 |---|---|
-| default | 内容注册、出生、表层、气候、区块与生成修正 |
+| default | 内容注册、第三方群系 adapter 与资源、出生、表层、气候、区块与生成修正 |
 | performance | 完整规划或查询的耗时与运行约束 |
 | capacity | 容量回归和受限配置 |
 | planning | 新世界生产规划、冻结结果和完整约束 |

@@ -25,7 +25,7 @@
 | 出生坐标 | 生命周期使用同一出生结果 |
 
 结构条目不含 Y、旋转、入口、范围、piece 类型或 NBT，也不能据此创建 Minecraft 结构起点。
-codec 使用规范化 JSON、UTF-8 和 gzip；`random_keys` 是说明元数据，不是随机完整性证明。
+codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由源码与测试维护，不重复写入 payload。
 
 <a id="identity"></a>
 ## 计划身份
@@ -36,6 +36,8 @@ codec 使用规范化 JSON、UTF-8 和 gzip；`random_keys` 是说明元数据�
 
 `PlannerProfile.V2` 是保留的 Java 常量名，其活动 `planFormatVersion` 为 `plan-v3`。
 不要在文档或工具中另维护“当前格式”字符串。
+当前 `StructurePlanningInfo` 只有已由 canonical 配置覆盖的 structure ID。未来新增任何影响 planner 输出的字段时，
+必须把规范值纳入 `PlanIdentity` 的输入摘要，并同步审查算法版本、冻结格式与 READY 失效条件。
 
 <a id="compatibility"></a>
 ## 兼容性和失效条件
