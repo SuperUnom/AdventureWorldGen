@@ -14,8 +14,10 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -31,6 +33,16 @@ public final class AtomicPlanRepository implements PlanRepository {
     private static final String PAYLOAD = "plan.json.gz";
     private static final String MANIFEST = "manifest.json";
     private static final String READY = "READY";
+    private final boolean syncDirectories;
+
+    public AtomicPlanRepository() {
+        this(!System.getProperty("os.name", "").startsWith("Windows"));
+    }
+
+    // Allows exercising the Windows publication policy without changing JVM-wide OS properties.
+    AtomicPlanRepository(boolean syncDirectories) {
+        this.syncDirectories = syncDirectories;
+    }
 
     @Override
     public Optional<ReadyPlan> loadReady(Path worldDirectory, ContentId profileId,
@@ -117,7 +129,15 @@ public final class AtomicPlanRepository implements PlanRepository {
         Files.setLastModifiedTime(path, FileTime.fromMillis(0));
     }
 
-    private static void forceDirectory(Path directory) throws IOException {
+    void forceDirectory(Path directory) throws IOException {
+        if (!syncDirectories) {
+            // Windows cannot open a directory through FileChannel. File fsync and atomic rename
+            // remain mandatory, but directory-entry durability across power loss is not promised.
+            // Read attributes instead of isDirectory so missing paths and access errors still fail.
+            if (!Files.readAttributes(directory, BasicFileAttributes.class).isDirectory())
+                throw new NotDirectoryException(directory.toString());
+            return;
+        }
         try (FileChannel channel = FileChannel.open(directory, StandardOpenOption.READ)) { channel.force(true); }
     }
 
