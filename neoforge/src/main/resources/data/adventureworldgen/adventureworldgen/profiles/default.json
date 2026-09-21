@@ -91,6 +91,10 @@
         "area": {
           "min": 32768,
           "target": 393216
+        },
+        "road": {
+          "enabled": true,
+          "required": false
         }
       },
       {
@@ -99,6 +103,10 @@
         "area": {
           "min": 32768,
           "target": 393216
+        },
+        "road": {
+          "enabled": true,
+          "required": false
         }
       },
       {
@@ -235,6 +243,10 @@
         "area": {
           "min": 32768,
           "target": 393216
+        },
+        "road": {
+          "enabled": true,
+          "required": false
         }
       },
       {
@@ -1293,5 +1305,69 @@
     },
     "blend_radius": 4
   },
-  "structures": []
+  "structures": [
+    {
+      "id": "minecraft:village_plains",
+      "adventure_level": 1,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:plains"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:village_desert",
+      "adventure_level": 3,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:desert"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:village_taiga",
+      "adventure_level": 3,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:taiga"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    }
+  ],
+  "roads": {
+    "enabled": true
+  }
 }

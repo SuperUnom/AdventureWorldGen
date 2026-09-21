@@ -17,5 +17,6 @@
   "adventureworldgen.planning.transition": "过渡",
   "adventureworldgen.planning.validation": "验证",
   "adventureworldgen.planning.structures": "必要结构放置",
-  "adventureworldgen.planning.humidity": "建立湿度场"
+  "adventureworldgen.planning.humidity": "建立湿度场",
+  "adventureworldgen.planning.roads": "规划道路"
 }

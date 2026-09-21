@@ -17,5 +17,6 @@
   "adventureworldgen.planning.transition": "Boundary transition",
   "adventureworldgen.planning.validation": "Validation",
   "adventureworldgen.planning.structures": "Required structure placement",
-  "adventureworldgen.planning.humidity": "Planning humidity"
+  "adventureworldgen.planning.humidity": "Planning humidity",
+  "adventureworldgen.planning.roads": "Planning roads"
 }

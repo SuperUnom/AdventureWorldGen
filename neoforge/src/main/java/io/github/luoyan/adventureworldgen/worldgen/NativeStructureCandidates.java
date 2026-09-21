@@ -57,6 +57,7 @@ final class NativeStructureCandidates {
         var start = structure.generate(registries, generator, generator.getBiomeSource(), state.randomState(), templates,
                 state.getLevelSeed(), chunk.getPos(), existing == null ? 0 : existing.getReferences(), chunk, structure.biomes()::contains);
         if (!start.isValid()) return false;
+        if(generator instanceof AdventureChunkGenerator adventure && RoadWorldgen.intersects(adventure.roadPlanView(),start.getBoundingBox(),StructureTerrain.NATIVE_MARGIN))return false;
         manager.setStartForStructure(SectionPos.bottomOf(chunk), structure, start, chunk);
         return true;
     }

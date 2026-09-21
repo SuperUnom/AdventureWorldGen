@@ -23,7 +23,7 @@ import java.util.HexFormat;
 
 /** Conservative fingerprint of active definitions and template contents, including generated-template overrides. */
 public final class StructureExecutionIdentity {
-    public static final String VERSION = "chunk-structures-1";
+    public static final String VERSION = "chunk-structures-roads-2";
     private StructureExecutionIdentity() {}
     public static String hash(MinecraftServer server, StructureExecutionCatalog catalog, String planIdentity) {
         try {

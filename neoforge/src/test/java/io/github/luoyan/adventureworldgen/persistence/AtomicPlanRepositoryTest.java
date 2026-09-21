@@ -55,7 +55,7 @@ class AtomicPlanRepositoryTest {
         assertTrue(repository.loadReady(world, PROFILE, input).isPresent());
 
         String manifest = Files.readString(planDirectory().resolve("manifest.json"))
-                .replace("plan-v3", "plan-v999");
+                .replace(io.github.luoyan.adventureworldgen.plan.PlannerProfile.V2.planFormatVersion(), "plan-v999");
         Files.writeString(planDirectory().resolve("manifest.json"), manifest);
         assertFalse(repository.loadReady(world, PROFILE, input).isPresent());
     }

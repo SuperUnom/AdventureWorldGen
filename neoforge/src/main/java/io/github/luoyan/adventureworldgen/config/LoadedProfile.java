@@ -17,4 +17,9 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
  * one.
  */
 public record LoadedProfile(ContentId id, AdventureWorldConfig config, String canonicalJson,
-                            String sourcePack) {}
+                            String sourcePack, io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog structurePlanning) {
+    public LoadedProfile(ContentId id, AdventureWorldConfig config, String canonicalJson, String sourcePack) {
+        this(id, config, canonicalJson, sourcePack, io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
+                config.structures().stream().map(AdventureWorldConfig.StructureSettings::id).toList()));
+    }
+}

@@ -216,10 +216,13 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "crash-seed-r11");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "crash-seed-r11",
+                    io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
             var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
+            helper.assertTrue(!generated.roads().routes().isEmpty(), "production roads are empty for this seed");
             var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn());
+            helper.assertTrue(generated.roads().equals(reloaded.roads()), "READY changed frozen roads");
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
                     && progress.stage()==PlanningStage.CACHE,
@@ -227,9 +230,13 @@ public final class AdventureWorldGameTests {
             for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
                 helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");
             helper.assertTrue(!generated.terrainAt(generated.spawnPosition().x(),generated.spawnPosition().z()).wet(),"crash seed has wet spawn");
-            helper.assertTrue(generated.structures().isEmpty(),"production profile unexpectedly planned structures");
+            helper.assertTrue(generated.structures().size()==config.structures().size(),"production village count differs from configured count");
+            for(var placement:generated.structures()) helper.assertTrue(generated.roads().nodes().stream().anyMatch(
+                    n->n.id().equals("structure/"+placement.instanceId())&&n.required()),"village missing required road node: "+placement.instanceId());
+            helper.assertTrue(generated.roads().equals(reloaded.roads()),"READY changed village road connections");
+            RoadGameTests.assertPlannedVillageStarts(helper,generated);
             helper.succeed();
-        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
+        } catch (Exception failure) { throw new AssertionError(failure); }
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
@@ -238,7 +245,8 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "capacity-seed-r12");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "capacity-seed-r12",
+                    io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
             var generated = RuntimePlanner.plan(1, loaded, java.nio.file.Path.of("capacity-seed-r12"), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
             helper.assertTrue(Math.abs(java.util.Arrays.stream(generated.climate().actualRatios()).sum()-1)<1e-9, "climate land ratios do not sum to one");
@@ -258,7 +266,8 @@ public final class AdventureWorldGameTests {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             helper.assertTrue(config.world().radius() == 3000, "production radius is not 3000");
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "production-profile-test");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "production-profile-test",
+                    io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
             var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
             var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn());
@@ -269,11 +278,15 @@ public final class AdventureWorldGameTests {
             for(int z=-3000;z<3000;z+=71)for(int x=-3000;x<3000;x+=71)
                 helper.assertTrue(generated.biomeAt(x,64,z).equals(reloaded.biomeAt(x,64,z)),"reload changed biome ownership");
             helper.assertTrue(!generated.terrainAt(generated.spawnPosition().x(), generated.spawnPosition().z()).wet(), "wet production spawn");
-            helper.assertTrue(generated.structures().isEmpty(),"production profile unexpectedly planned structures");
+            helper.assertTrue(generated.structures().size()==config.structures().size(),"production village count differs from configured count");
+            for(var placement:generated.structures()) helper.assertTrue(generated.roads().nodes().stream().anyMatch(
+                    n->n.id().equals("structure/"+placement.instanceId())&&n.required()),"village missing required road node: "+placement.instanceId());
+            helper.assertTrue(generated.roads().equals(reloaded.roads()),"READY changed village road connections");
+            RoadGameTests.assertPlannedVillageStarts(helper,generated);
             helper.assertTrue(generated.coastline().vertices().stream().allMatch(point -> StrictMath.hypot(point.x(), point.z()) <= 3000.001),
                     "continent exceeds configured extent");
             helper.succeed();
-        } catch (java.io.IOException failure) { throw new AssertionError(failure); }
+        } catch (Exception failure) { throw new AssertionError(failure); }
     }
 
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
@@ -284,7 +297,8 @@ public final class AdventureWorldGameTests {
                 "../src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json"))) {
             var config = new io.github.luoyan.adventureworldgen.config.AdventureWorldConfigParser().parse(reader);
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
-            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "reported-river-seed");
+            var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "reported-river-seed",
+                    io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
             generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"), MinecraftAdapters.builtIn());
             assertTerrainBiomes(helper, generated, config);
         } catch (java.io.IOException failure) { throw new AssertionError(failure); }

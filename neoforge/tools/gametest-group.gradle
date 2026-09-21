@@ -21,6 +21,7 @@ def groups = [
         capacity   : ['testcompanion_capacity'],
         planning   : ['testcompanion_planning'],
         structure  : ['testcompanion_structure'],
+        roads      : ['testcompanion_roads'],
 ]
 
 allprojects {

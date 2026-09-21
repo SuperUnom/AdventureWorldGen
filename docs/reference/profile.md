@@ -78,6 +78,7 @@ parse 成功不等于内容预检或规划成功。
 | `required[].id` | 必填 ID | 需求群系；相同 ID 可重复 |
 | `required[].adventure_level` | 必填整数 [0,10] | 位置软偏好 |
 | `required[].area` | 可选面积对象 | 缺省取 AreaRange.DEFAULT |
+| `required[].road` | 可选对象 | 此群系的[道路连接](#roads)；缺省不连接 |
 | `filler` | 必填非空 ID 数组 | 剩余区域候选；排序去重，不保证每项都出现 |
 | `terrain_rules` | 可选 ID → 规则对象 | 缺省空；也会预检未被其他字段引用的规则 ID |
 | `blend_radius` | 可选整数 [0,32] | 方块单位的局部群系过渡半径，缺省 4 |
@@ -143,6 +144,7 @@ min、target、max 在容量阶段和最终分配中的不同强度，统一定�
 | `allowed_biomes.area` | 可选面积对象 | 每个原始承载需求的面积设置；合并规则见[需求池](../systems/planning.md#demands)，省略取 AreaRange.DEFAULT |
 | `placement_mode` | 可选字符串 | 缺省且仅支持 scattered |
 | `spacing` | 可选对象 | min 缺省 0，max 缺省不限制 |
+| `road` | 可选对象 | 该条目所有实例的[道路连接](#roads)；缺省不连接 |
 | `spacing.min` | 有限数值 ≥ 0 | 方块距离 |
 | `spacing.max` | 有限数值 > 0，且 ≥ min | 方块距离 |
 
@@ -159,3 +161,57 @@ spacing 检查同 ID 规划锚点的两两水平距离；只有一个实例时�
 
 校验覆盖由 `AdventureWorldConfigParserTest` 和 `TerrainTemplateConfigTest` 锁定；
 实际内容和复杂规则组合还需对应 planning GameTest。
+
+<a id="roads"></a>
+## 道路
+
+顶层可选 `roads` 只描述总开关与全局施工参数，省略时关闭。
+目的地配置与生成需求放在同一条目：`biomes.required[].road` 和 `structures[].road`。
+下面是可解析的示例；结构接入还需对应资源声明：
+
+```json
+{
+  "world": {"radius": 3000},
+  "spawn": {"biome": "minecraft:plains"},
+  "biomes": {
+    "filler": ["minecraft:plains", "minecraft:forest"],
+    "required": [
+      {"id": "minecraft:forest", "adventure_level": 2,
+       "road": {"enabled": true, "required": false}}
+    ]
+  },
+  "structures": [
+    {"id": "minecraft:village_plains", "adventure_level": 1,
+     "count": {"min": 1, "max": 1}, "allowed_biomes": {"id": ["minecraft:plains"]},
+     "road": {"enabled": true, "required": true}}
+  ],
+  "roads": {"enabled": true}
+}
+```
+
+出生点自动作为路网根节点。每条目的 `road.enabled` 和 `road.required` 都缺省为假；
+前者选择连接，后者要求必须接通，否则阻止 READY。`required: true` 必须同时设置 `enabled: true`。
+顶层 `roads.enabled` 是总开关，关闭时不规划道路；群系和结构的生成需求仍然生效。
+群系按 ID 合并为一个探索节点，多条同 ID 需求中任一启用且要求必连就按必连处理。
+未选择的群系不会自动成为目的地，filler 不提供单独的道路选择。
+结构的 `road` 适用于该条目所有已规划实例；`count.min` 决定必须生成的数量，
+与道路必连含义独立。结构须提供纯规划接入声明，见 [道路结构契约](../systems/roads.md#结构接入契约)。
+旧的 `roads.points`、`roads.biomes`、`roads.structures` 已删除，解析时按未知字段拒绝。
+发布默认配置的具体群系、村庄类型和数量以资源文件为准。
+
+以下字段均位于顶层 `roads`：
+
+| 字段 | 作用 |
+|---|---|
+| `width`、`clearance` | 奇数核心路宽和路面上方净空；陆路另铺窄路肩 |
+| `maximum_grade`、`maximum_earthwork` | 连续施工坡度和相对自然地面的挖填范围 |
+| `maximum_bridge_length` | 河流短桥最大跨度；零表示不允许跨河 |
+| `bend_spacing`、`bend_amplitude` | 平原长缓弯的特征间距和最大横向偏移 |
+| `maximum_bend_detour` | 缓弯相对对应直段的长度倍率上限 |
+| `loop_budget_fraction` | 相对骨架长度允许添加的环路长度比例 |
+| `maximum_nodes`、`maximum_operations`、`maximum_columns` | 节点、地形采样次数及冻结施工列预算 |
+| `surface`、`bridge`、`foundation` | 陆路路面、桥体、路基的方块 ID；须为无流体、无方块实体的实心方块 |
+
+完整缺省值和数值范围由 `RoadSettings` 单独定义；parser 拒绝未知字段、错误类型和非整数预算。
+规范配置保存全局道路设置及各需求条目的连接开关，因此连接选择、材料、几何和预算变化都会改变输入身份。
+生成与恢复语义统一见 [道路系统](../systems/roads.md)。

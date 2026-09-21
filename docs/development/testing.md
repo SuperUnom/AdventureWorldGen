@@ -12,6 +12,7 @@
 | 纯算法、配置或包依赖 | JUnit，包括 PackageBoundaryTest；算法变化加相关数值/预览检查 |
 | planner、容量、成本或气候准入 | JUnit + planning GameTest；容量规则加 capacity 组 |
 | codec、身份与冻结状态 | persistence/runtime JUnit + READY 对照 |
+| 道路规划、冻结施工列或道路 worldgen | 道路定向 JUnit、输入身份/READY、roads 组；生产规划接入补 planning 组 |
 | 结构需求、规划信息与锚点 | planner/codec JUnit + planning GameTest |
 | worldgen、surface、海洋资源、mixin | 相关 JUnit + 对应 GameTest 组；结构管线用 structure，地形合成回归用 performance |
 | 性能 | 对应 performance 组和基准；固定 seed、配置、JVM 参数及 cold/READY 条件 |
@@ -70,6 +71,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 | capacity | 容量回归和受限配置 |
 | planning | 新世界生产规划、冻结结果和完整约束 |
 | structure | 真实区块中三类结构、重载续接、地形策略、候选接管与资源身份 |
+| roads | 道路跨区块顺序、地物写入保护、短桥水体和玩家修改保留 |
 
 [run-full-gametest.sh](../../neoforge/tools/run-full-gametest.sh) 顺序运行全部组，使用独立目录并核对发现、执行和通过清单：
 
@@ -79,6 +81,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 ./tools/run-full-gametest.sh --group capacity
 ./tools/run-full-gametest.sh --group performance
 ./tools/run-full-gametest.sh --group structure
+./tools/run-full-gametest.sh --group roads
 ```
 
 运行器需要 Bash 和名为 `timeout` 的命令；macOS 环境应先确认该命令在 PATH 中。
@@ -100,6 +103,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 GameTest 中需要 fresh planning 的组必须使用全新目录，恢复对照必须复用同一目录、seed 与配置。
 READY 仍只恢复宏观锚点；pieces 与执行地基元数据在原生区块存档中恢复，由 structure 组独立覆盖。
 Mojang GameTest 服务器默认关闭结构；testmod 的专用 mixin 仅在 structure 组启用结构选项，不进入生产 JAR。
+planning 组的默认村庄起点检查使用显式启用结构的 `StructureManager` 调用生产生成入口；不等同于客户端方块外观验收。
 不要删除用户存档来制造 cold 条件；使用运行器生成的独立目录。
 
 <a id="tools"></a>
@@ -116,6 +120,7 @@ AWG_TOOL_JAVA_OPTS=-Djava.awt.headless=true ./tools/run-audit-tool.sh CoastDetai
 AWG_TOOL_JAVA_OPTS=-Djava.awt.headless=true ./tools/run-audit-tool.sh OceanShelfPreview build/reports/ocean.png
 ```
 
+`PlanningBenchmark` 从工具 classpath 读取结构规划声明，不加载游戏内数据包覆盖。
 改变依赖、编译环境或生产源码后先重新运行 classpath 任务；工具脚本发现已有 classpath 文件会复用它。
 `AWG_TOOL_MEM` 控制堆上限，`AWG_TOOL_JAVA_OPTS` 传额外 JVM 参数；
 `AWG_GRADLE_ARGS` 默认 --offline，仅用于缺失 classpath 时的 Gradle 调用。
@@ -131,6 +136,7 @@ AWG_TOOL_JAVA_OPTS=-Djava.awt.headless=true ./tools/run-audit-tool.sh OceanShelf
 | 热点查询基准 | `ChunkQueryBenchmark <plan-dir> <profile.json>`；轮数与采样量由工具源码定义 |
 | 地形与归属图 | `PlannerMapPreview <plan-dir> <output.png> [title]`、`BiomeDetailPreview <plan-dir> <output.png>` |
 | 边界切片 | `BoundaryPreview <plan-dir> <output-dir>` |
+| 道路形状与纵坡 | `RoadPreview <output.png>`（合成例）或 `RoadPreview <profile.json> <plan-dir> <output.png>`（冻结世界） |
 | 冻结计划地形/拓扑数值 | `PlanTerrainAudit <plan-dir> <output.tsv>`、`PlanPatchTopologyAudit <plan-dir> <output.tsv>` |
 | 温度场实验图 | `TemperatureFieldPreview <plan-dir> <output-dir> [实验参数…]` |
 | 单种子河流/配方 | `RiverPreview <seed> <output.png>`、`TerrainRecipePreview <seed> <output.png>` |

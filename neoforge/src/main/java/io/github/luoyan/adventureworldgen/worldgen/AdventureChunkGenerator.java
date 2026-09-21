@@ -97,10 +97,23 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private io.github.luoyan.adventureworldgen.plan.ContentId planKey() {
         return new io.github.luoyan.adventureworldgen.plan.ContentId(profile.toString());
     }
+    private volatile RoadWorldgen.Palette roadPalette;
+    private RoadWorldgen.Palette roadPalette(GeneratedAdventurePlan plan) {
+        var result=roadPalette;
+        if(result==null) { synchronized(this) { if(roadPalette==null)roadPalette=RoadWorldgen.palette(plan.roadSettings()); result=roadPalette; } }
+        return result;
+    }
+    public boolean protectsRoad(BlockPos pos) {
+        var road=RuntimePlanRegistry.await(planKey()).roadAt(pos.getX(),pos.getZ());
+        return road!=null&&road.protects(pos.getY());
+    }
+    public AdventurePlanView roadPlanView() { return RuntimePlanRegistry.await(planKey()); }
+
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return ModWorldgen.CHUNK_GENERATOR.get(); }
 
     /** Called inside the planning publication barrier, before any chunk sees the plan. */
     public void prepareStructureExecution(StructureExecutionCatalog catalog, AdventurePlanView plan) {
+        if (plan instanceof GeneratedAdventurePlan generated && generated.roadSettings().enabled()) roadPalette(generated);
         if (plannedStructureBridge != null) throw new IllegalStateException("structure execution already initialized");
         plannedStructureBridge = new PlannedStructureBridge(catalog, plan.plannedStructures());
     }
@@ -252,6 +265,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 BiomeManager.obfuscateSeed(plan.seed()));
         state.surfaceSystem().buildSurface(state, biomes, registries.registryOrThrow(Registries.BIOME),
                 false, new WorldGenerationContext(this, chunk), chunk, surfaceNoise, surfaceRule);
+        if (!plan.roadsInChunk(chunk.getPos().x,chunk.getPos().z).isEmpty()) RoadWorldgen.surface(chunk,plan,roadPalette(plan));
         Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG,
                 Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.MOTION_BLOCKING,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
@@ -262,6 +276,8 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                                        ChunkAccess chunk, GenerationStep.Carving step) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         if (!new StructureTerrain(structures, chunk.getPos()).isEmpty()) return;
+        for(int dx=-1;dx<=1;dx++)for(int dz=-1;dz<=1;dz++)
+            if(!plan.roadsInChunk(chunk.getPos().x+dx,chunk.getPos().z+dz).isEmpty())return;
         // Ocean caves and aquifers already come from native density generation. Carvers using
         // an unrelated overworld aquifer can drain custom river surfaces, so exclude wet chunks.
         int minX = chunk.getPos().getMinBlockX(), minZ = chunk.getPos().getMinBlockZ();
@@ -281,6 +297,8 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                              RandomState randomState) {
         var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
+        var road = plan.roadAt(x,z);
+        if (road != null) return road.deckY()+1;
         int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
         int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
                 MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
@@ -314,7 +332,10 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
             if (nativeOcean != null && y > MIN_Y && y < solidTop - 8 && !nativeOcean.getBlock(y).blocksMotion())
                 states[y - MIN_Y] = nativeOcean.getBlock(y);
         }
-        return new NoiseColumn(MIN_Y, states);
+        var column = new NoiseColumn(MIN_Y, states);
+        var road = plan.roadAt(x,z);
+        if(road!=null)RoadWorldgen.column(column,road,roadPalette(plan),plan);
+        return column;
     }
 
     @Override public void addDebugScreenInfo(List<String> lines, RandomState randomState, BlockPos pos) {

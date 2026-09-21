@@ -11,6 +11,9 @@ public interface AdventurePlanView {
     MacroSample terrainAt(double blockX, double blockZ);
     List<PlannedStructurePlacement> plannedStructures();
     SpawnPosition spawnPosition();
+    default io.github.luoyan.adventureworldgen.plan.RoadPlan roads() { return io.github.luoyan.adventureworldgen.plan.RoadPlan.EMPTY; }
+    default io.github.luoyan.adventureworldgen.plan.RoadPlan.Column roadAt(int x, int z) { return null; }
+    default List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsInChunk(int chunkX, int chunkZ) { return List.of(); }
 
     record SpawnPosition(double x, double y, double z, float yaw) {}
 }

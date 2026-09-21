@@ -13,9 +13,14 @@ public record AdventureWorldConfig(
         WorldSettings world,
         SpawnSettings spawn,
         BiomeSettings biomes,
-        List<StructureSettings> structures
+        List<StructureSettings> structures,
+        RoadSettings roads
 ) {
+    public AdventureWorldConfig(WorldSettings world, SpawnSettings spawn, BiomeSettings biomes, List<StructureSettings> structures) {
+        this(world, spawn, biomes, structures, RoadSettings.disabled());
+    }
     public AdventureWorldConfig {
+        Objects.requireNonNull(roads, "roads");
         Objects.requireNonNull(world, "world");
         Objects.requireNonNull(spawn, "spawn");
         Objects.requireNonNull(biomes, "biomes");
@@ -154,9 +159,20 @@ public record AdventureWorldConfig(
         }
     }
 
-    public record RequiredBiome(String requestId, ContentId id, int adventureLevel, AreaRange area) {
+    public record RoadConnection(boolean enabled, boolean required) {
+        public static final RoadConnection DISABLED = new RoadConnection(false, false);
+        public RoadConnection {
+            if (required && !enabled) throw new IllegalArgumentException("required road connection must be enabled");
+        }
+    }
+
+    public record RequiredBiome(String requestId, ContentId id, int adventureLevel, AreaRange area, RoadConnection road) {
+        public RequiredBiome(String requestId, ContentId id, int adventureLevel, AreaRange area) {
+            this(requestId, id, adventureLevel, area, RoadConnection.DISABLED);
+        }
         public RequiredBiome {
             Objects.requireNonNull(requestId, "requestId");
+            Objects.requireNonNull(road, "road");
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(area, "area");
         }
@@ -172,9 +188,15 @@ public record AdventureWorldConfig(
             CountRange count,
             AllowedBiomes allowedBiomes,
             PlacementMode placementMode,
-            Spacing spacing
+            Spacing spacing,
+            RoadConnection road
     ) {
+        public StructureSettings(ContentId id, int adventureLevel, CountRange count, AllowedBiomes allowedBiomes,
+                                 PlacementMode placementMode, Spacing spacing) {
+            this(id, adventureLevel, count, allowedBiomes, placementMode, spacing, RoadConnection.DISABLED);
+        }
         public StructureSettings {
+            Objects.requireNonNull(road, "road");
             Objects.requireNonNull(id, "id");
             Objects.requireNonNull(count, "count");
             Objects.requireNonNull(allowedBiomes, "allowedBiomes");

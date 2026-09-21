@@ -43,7 +43,7 @@ public final class ProfileReloadListener extends SimplePreparableReloadListener<
         try (var reader = selected.openAsReader()) {
             AdventureWorldConfig config = new AdventureWorldConfigParser().parse(reader);
             String canonical = CanonicalConfigJson.write(config);
-            return new LoadedProfile(DEFAULT_ID, config, canonical, selected.sourcePackId());
+            return new LoadedProfile(DEFAULT_ID, config, canonical, selected.sourcePackId(), StructureRoadInformation.load(resources, config));
         } catch (IOException failure) {
             throw new ConfigException(ConfigErrorCode.CONFIG_ERROR, "$",
                     "could not read profile from " + selected.sourcePackId() + ": " + failure.getMessage());

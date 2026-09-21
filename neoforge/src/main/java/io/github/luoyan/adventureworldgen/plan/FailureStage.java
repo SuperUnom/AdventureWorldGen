@@ -47,6 +47,7 @@ public enum FailureStage {
     SPAWN_CANDIDATE("spawn-candidate", PlanningStage.PLACEMENT),
     SPAWN_RESOLUTION("spawn-resolution", PlanningStage.PLACEMENT),
     FILLER("filler", PlanningStage.FILLER),
+    ROADS("roads", PlanningStage.ROADS),
     FINAL_VALIDATION("final-validation", PlanningStage.VALIDATION),
     PLAN_LOAD("plan-load", PlanningStage.CACHE),
     /** A stage string this build does not know. Never a silent alias for a real stage. */

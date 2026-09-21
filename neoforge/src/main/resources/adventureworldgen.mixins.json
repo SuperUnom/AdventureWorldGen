@@ -3,6 +3,6 @@
   "minVersion": "0.8",
   "package": "io.github.luoyan.adventureworldgen.mixin",
   "compatibilityLevel": "JAVA_21",
-  "mixins": ["SpringFeatureMixin", "StructureStartMixin", "JigsawStructureMixin"],
+  "mixins": ["SpringFeatureMixin", "RoadDecorationMixin", "StructureStartMixin", "JigsawStructureMixin"],
   "injectors": {"defaultRequire": 1}
 }

@@ -36,6 +36,12 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
 public final class GeneratedAdventurePlan implements AdventurePlanView {
     private static final ContentId OCEAN = new ContentId("minecraft:ocean");
     private final long seed;
+    private final io.github.luoyan.adventureworldgen.plan.RoadPlan roads;
+    private final RoadIndex roadIndex;
+    @Override public io.github.luoyan.adventureworldgen.plan.RoadPlan roads() { return roads; }
+    @Override public io.github.luoyan.adventureworldgen.plan.RoadPlan.Column roadAt(int x,int z) { return roadIndex.at(x,z); }
+    @Override public List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsInChunk(int x,int z) { return roadIndex.chunk(x,z); }
+    public io.github.luoyan.adventureworldgen.config.RoadSettings roadSettings() { return config.roads(); }
     private final io.github.luoyan.adventureworldgen.climate.ClimatePlan climate;
     private final io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules environmentRules;
     private final io.github.luoyan.adventureworldgen.planner.FillerLayout filler;
@@ -73,7 +79,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion) {
         this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
                 biomePatches,structures,diagnostics,erosion,
-                io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.empty(), null, null, PlanningObserver.NONE);
+                io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan.empty(), null, null, PlanningObserver.NONE, null);
     }
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
@@ -82,11 +88,16 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities) {
         this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,capacities,null,null,PlanningObserver.NONE);
+                biomePatches,structures,diagnostics,erosion,capacities,null,null,PlanningObserver.NONE,null);
     }
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
     /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
-    record PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate) {}
+    record PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate,
+                          io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog structurePlanning) {
+        PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate) {
+            this(terrain,climate,io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(List.of()));
+        }
+    }
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
                                   RiverNetwork riverNetwork, double seaSurface, double landBand,
                                   double seaBand, String terrainVersion, SpawnPosition frozenSpawn,
@@ -95,7 +106,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                   BiomeLayout frozenLayout) {
         this(PlannerProfile.V2, seed,config,coastline,riverNetwork,seaSurface,landBand,seaBand,terrainVersion,frozenSpawn,
-                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null,PlanningObserver.NONE);
+                biomePatches,structures,diagnostics,erosion,capacities,frozenLayout,null,PlanningObserver.NONE,null);
     }
     /**
      * First planning entry: this run just computed the layout, so its objects are reused and nothing
@@ -113,7 +124,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                               PlanningInputs prepared, PlanningObserver observer) {
         return new GeneratedAdventurePlan(profile, seed, config, coastline, riverNetwork, seaSurface, landBand,
                 seaBand, terrainVersion, spawn, biomePatches, structures, diagnostics, erosion, capacities, null,
-                java.util.Objects.requireNonNull(prepared, "prepared"), observer);
+                java.util.Objects.requireNonNull(prepared, "prepared"), observer, null);
     }
 
     /**
@@ -129,7 +140,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                   List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
                                   PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                   io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
-                                  BiomeLayout frozenLayout, PlanningInputs prepared, PlanningObserver observer) {
+                                  BiomeLayout frozenLayout, PlanningInputs prepared, PlanningObserver observer,
+                                  io.github.luoyan.adventureworldgen.plan.RoadPlan frozenRoads) {
         java.util.Objects.requireNonNull(observer,"observer");
         this.profile=java.util.Objects.requireNonNull(profile,"profile");
         this.capacities=capacities;
@@ -174,6 +186,13 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         // Minimum-area protection can change biome selection during construction.
         // Publish the cache only after that layout is final, and keep it local to this plan.
         columnBiomes = new ColumnQueryCache<>(16384);
+        if (frozenRoads == null && config.roads().enabled()) observer.stage(io.github.luoyan.adventureworldgen.plan.PlanningStage.ROADS);
+        roads = frozenRoads != null ? frozenRoads : new io.github.luoyan.adventureworldgen.planner.RoadPlanner(
+                seed, config, terrain).plan(spawn, this.biomePatches, this.structures,
+                prepared == null ? io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
+                        this.structures.stream().map(PlannedStructurePlacement::structureId).toList()) : prepared.structurePlanning(),
+                (x,z) -> biomeAt(x,64,z));
+        roadIndex = new RoadIndex(roads);
     }
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,
@@ -199,7 +218,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public PlanSnapshot snapshot() {
         return new PlanSnapshot(seed, diagnostics, spawn, coastline, riverNetwork, seaSurface, landBand, seaBand,
                 terrainVersion, config.world().terrain(), recipeRegions(), biomePatches, structures, erosion,
-                capacities, biomeLayout());
+                capacities, biomeLayout(), roads);
     }
 
     /**
@@ -219,7 +238,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                     snapshot.riverNetwork(), snapshot.seaSurface(), snapshot.landBand(), snapshot.seaBand(),
                     snapshot.terrainVersion(), snapshot.spawn(), snapshot.biomePatches(), snapshot.structures(),
                     snapshot.diagnostics(), snapshot.erosion(), snapshot.capacities(), snapshot.biomeLayout(),
-                    null, PlanningObserver.NONE);
+                    null, PlanningObserver.NONE, snapshot.roads());
             if (!snapshot.recipeSettings().equals(config.world().terrain()))
                 throw new IllegalArgumentException("frozen recipe settings do not match the active profile");
             // Recipe assignments are explicit plan data. Reject drift rather than silently regenerate them.

@@ -70,6 +70,12 @@ class PlanningBaselineTest {
 
         byte[] encoded = codec.encode(PROFILE, INPUT_HASH, plan.snapshot());
         String planHash = sha256(encoded);
+        // The format adds only an empty roads object for this roads-disabled fixture. Prove the
+        // previous canonical payload is byte-identical after removing that reviewed envelope change.
+        var legacy = com.google.gson.JsonParser.parseString(new String(encoded, StandardCharsets.UTF_8)).getAsJsonObject();
+        legacy.remove("roads"); legacy.addProperty("format", "plan-v3");
+        assertEquals("b5397002aae053d06bc01c224c455891a95cbf216052777fd483be051ade0d97",
+                sha256(legacy.toString().getBytes(StandardCharsets.UTF_8)), "roads changed pre-existing frozen fields");
 
         // READY reload must reproduce the same canonical bytes: restore never re-plans.
         GeneratedAdventurePlan reloaded = GeneratedAdventurePlan.restore(config,
@@ -218,7 +224,7 @@ class PlanningBaselineTest {
     // reviewed contract changes under test, while repeated planning, READY round trips and the
     // unchanged spawn signature remain independently checked above.
     private static final String EXPECTED_PLAN_SHA256 =
-            "b5397002aae053d06bc01c224c455891a95cbf216052777fd483be051ade0d97";
+            "ea1edcf95ac6998135434c36a920d277b3dd52c954829b039df15df3fa1f8186";
     private static final String EXPECTED_FIELD_SHA256 =
             "d104c30bc2cf264e0f617e628d2fa76c2e19514122c719e9dbadc397ebb789e5";
     private static final String EXPECTED_SPAWN = "0.5/0.5/0.0";

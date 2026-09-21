@@ -59,7 +59,7 @@ READY 恢复后，worldgen 组装结构锚点到起点区块的只读索引，�
 `PlanV2Codec` 只编码和解码快照；`AtomicPlanRepository` 只负责磁盘包和完整性。
 发布完成后，规划 future 返回计划，等待者才能继续。
 
-冻结对象关系、输入身份、READY 目录及损坏处理的唯一契约见 [计划 v3](../reference/plan-v2.md)。
+冻结对象关系、输入身份、READY 目录及损坏处理的唯一契约见 [计划 v4](../reference/plan-v2.md)。
 
 <a id="ready"></a>
 ## READY reload

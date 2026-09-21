@@ -19,7 +19,8 @@ flowchart TD
     E --> F[hydrology 河网与切削]
     F --> G[cost 到达成本 / climate 环境]
     G --> H[planner 群系与结构 / biome 准入]
-    H --> I[冻结 PlanSnapshot]
+    H --> R[planner 道路与施工几何]
+    R --> I[冻结 PlanSnapshot]
     I --> J[persistence 原子发布]
     J --> K[runtime READY 恢复与查询]
     I --> K
@@ -69,12 +70,12 @@ flowchart TD
 | 配置怎样进入游戏 | [ProfileReloadListener](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/ProfileReloadListener.java) | [生命周期](pipeline.md#reload) |
 | 世界什么时候开始规划 | [AdventureEvents](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/AdventureEvents.java) | [运行时](../systems/runtime-worldgen.md) |
 | 哪一步构造什么 | [RuntimePlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/RuntimePlanner.java) | [首次规划](pipeline.md#initial) |
-| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v3](../reference/plan-v2.md) |
+| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v4](../reference/plan-v2.md) |
 | 如何写入区块 | [AdventureChunkGenerator](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/AdventureChunkGenerator.java) | [区块执行](../systems/runtime-worldgen.md#chunk) |
 
 ## 能力范围
 
-系统编排宏观位置，不证明玩家路线、首次遇见顺序或每条道路的可达性。
+系统编排宏观位置；[道路系统](../systems/roads.md) 验证所选目的地的冻结道路连通，不证明玩家首次遇见顺序或任意第三方内容下的通行性。
 已接管结构在规划锚点对应的起点区块执行，并抑制同 ID 的随机候选；Java 结构自行决定最终原点。
 资源缺失、原生定位失败或超出引用范围会明确失败，规划锚点本身不证明所有第三方结构均可执行。
 冒险等级和面积的保证范围见 [规划约束分层](../systems/planning.md#constraints)。

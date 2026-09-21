@@ -50,9 +50,20 @@ public record PlanSnapshot(
         List<PlannedStructurePlacement> structures,
         ErosionDeltaField erosion,
         TerrainCapacityPlan capacities,
-        BiomeLayout biomeLayout
+        BiomeLayout biomeLayout,
+        io.github.luoyan.adventureworldgen.plan.RoadPlan roads
 ) {
+    public PlanSnapshot(long seed, PlanDiagnostics diagnostics, AdventurePlanView.SpawnPosition spawn,
+                        Coastline coastline, RiverNetwork riverNetwork, double seaSurface, double landBand, double seaBand,
+                        String terrainVersion, TerrainSettings recipeSettings, List<RegionTerrain.Region> recipeRegions,
+                        List<PlannedBiomePatch> biomePatches, List<PlannedStructurePlacement> structures,
+                        ErosionDeltaField erosion, TerrainCapacityPlan capacities, BiomeLayout biomeLayout) {
+        this(seed, diagnostics, spawn, coastline, riverNetwork, seaSurface, landBand, seaBand, terrainVersion,
+                recipeSettings, recipeRegions, biomePatches, structures, erosion, capacities, biomeLayout,
+                io.github.luoyan.adventureworldgen.plan.RoadPlan.EMPTY);
+    }
     public PlanSnapshot {
+        Objects.requireNonNull(roads, "roads");
         Objects.requireNonNull(diagnostics, "diagnostics");
         Objects.requireNonNull(spawn, "spawn");
         Objects.requireNonNull(coastline, "coastline");

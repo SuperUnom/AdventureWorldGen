@@ -21,7 +21,7 @@ import net.neoforged.neoforge.common.world.PieceBeardifierModifier;
 
 /** Chunk-local application of saved support areas and native density adjustments. Base queries stay structure-free. */
 public final class StructureTerrain {
-    private static final int NATIVE_MARGIN = 12;
+    static final int NATIVE_MARGIN = 12;
     private record Area(Foundation support, TerrainSettings settings) {}
     private final List<Area> areas;
     private final Beardifier nativeDensity;

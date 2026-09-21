@@ -67,10 +67,11 @@ public final class AdventureEvents {
         // Do not join before Minecraft creates its ChunkProgressListener: the client spins until
         // that listener exists and cannot render a loading screen during this event. Biome/chunk
         // queries and levelLoaded retain the READY barrier while the loading screen renders.
+        if (loaded.config().roads().enabled()) io.github.luoyan.adventureworldgen.worldgen.RoadWorldgen.palette(loaded.config().roads());
         var managed = loaded.config().structures().stream().map(s -> ResourceLocation.parse(s.id().value()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         var execution = StructureExecutionCatalog.load(managed, server.registryAccess(), server.getResourceManager(), server.getStructureManager());
-        String identity = !managed.isEmpty() || java.nio.file.Files.exists(worldDirectory.resolve("adventureworldgen/structure-generation.sha256"))
+        String identity = loaded.config().roads().enabled() || !managed.isEmpty() || java.nio.file.Files.exists(worldDirectory.resolve("adventureworldgen/structure-generation.sha256"))
                 ? StructureExecutionIdentity.hash(server, execution, PlanIdentity.hash(seed, loaded, adapters, PlannerProfile.V2)) : null;
         if (identity != null) {
             try { GenerationIdentityFile.check(worldDirectory, identity); }

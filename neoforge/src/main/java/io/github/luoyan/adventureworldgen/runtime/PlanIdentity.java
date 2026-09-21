@@ -25,7 +25,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanVersions;
  */
 public final class PlanIdentity {
     /** Internal cache key revision; the public planner remains v2 while the payload is plan-v3. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-shared-biome-demands-r37";
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-nested-road-connections-r39";
 
     private PlanIdentity() {}
 
@@ -37,6 +37,7 @@ public final class PlanIdentity {
      */
     public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters, PlannerProfile profile) {
         String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + profile.algorithmVersion()
+                + "\nstructure_planning=" + loaded.structurePlanning().canonicalIdentity()
                 + "\nimplementation=" + IMPLEMENTATION_REVISION
                 + "\nhydrology=" + profile.hydrologyVersion() + "\nterrain=" + PlanVersions.TERRAIN + "\nadapters="
                 + String.join(",", adapters.versionKeys()) + "\ncost=directed-cost-16x8-v1\nerosion=ftf-erosion-block-units-v2";

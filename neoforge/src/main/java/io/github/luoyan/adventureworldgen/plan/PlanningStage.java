@@ -9,7 +9,7 @@ package io.github.luoyan.adventureworldgen.plan;
  * updating the language files.
  */
 public enum PlanningStage {
-    CACHE(0, 2), COAST(2, 8), EROSION(8, 46), RIVERS(46, 55), COSTS(55, 75), PLACEMENT(75, 78), TEMPERATURE(78, 80), HUMIDITY(80, 81), SEEDS(81, 84), GROWTH(84, 89), STRUCTURES(89, 90), FILLER(90, 94), TRANSITION(94, 95), VALIDATION(95, 98), SAVE(98, 100);
+    CACHE(0, 2), COAST(2, 8), EROSION(8, 46), RIVERS(46, 55), COSTS(55, 75), PLACEMENT(75, 78), TEMPERATURE(78, 80), HUMIDITY(80, 81), SEEDS(81, 84), GROWTH(84, 89), STRUCTURES(89, 90), FILLER(90, 94), TRANSITION(94, 95), ROADS(95, 97), VALIDATION(97, 98), SAVE(98, 100);
 
     private final int start, end;
 

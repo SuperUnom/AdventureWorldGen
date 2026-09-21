@@ -107,8 +107,7 @@ public final class RuntimePlanner {
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
         progress.stage(PlanningStage.PLACEMENT);
         var jointPlanner = new JointPlanner(profile);
-        var structurePlanning = io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
-                loaded.config().structures().stream().map(io.github.luoyan.adventureworldgen.config.AdventureWorldConfig.StructureSettings::id).toList());
+        var structurePlanning = loaded.structurePlanning();
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
                 structurePlanning,
                 // Adventure level is a soft preference: it ranks candidates by the coarse-grid cost
@@ -125,8 +124,10 @@ public final class RuntimePlanner {
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
                 costs.nodeCount(), costs.edgeStats().computedPairs(), joint.operationCount(),
                 PlanVersions.TERRAIN + "+" + profile.hydrologyVersion() + "+" + PlanVersions.EROSION), erosion,capacities,
-                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate()), progress);
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate(),structurePlanning), progress);
         metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
+        LOGGER.info("Frozen roads: {} routes, {} columns, {} operations", plan.roads().routes().size(), plan.roads().columns().size(), plan.roads().operations());
+        for (var skipped : plan.roads().skipped()) LOGGER.warn("Road destination {}: {}", skipped.id(), skipped.reason());
         progress.stage(PlanningStage.VALIDATION);
         // The policy compares request against achieved area; reporting and failure text stay here.
         io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.checkAchievedAreas(loaded.config(),

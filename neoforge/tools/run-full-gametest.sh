@@ -42,6 +42,7 @@ GAMETEST_GROUPS=(
   "capacity:1"
   "planning:2"
   "structure:4"
+  "roads:3"
 )
 
 selected=()

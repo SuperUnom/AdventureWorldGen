@@ -40,7 +40,7 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
  */
 public final class PlanV2Codec {
     private static final Set<String> ROOT_KEYS = Set.of("algorithm", "format", "hydrology", "input_sha256",
-            "operation_counts", "profile", "seed", "spawn", "terrain", "structures", "biome_layout");
+            "operation_counts", "profile", "seed", "spawn", "terrain", "structures", "biome_layout", "roads");
 
     private static final com.google.gson.Gson LAYOUT_JSON=new com.google.gson.Gson();
 
@@ -71,6 +71,8 @@ public final class PlanV2Codec {
             writeSpawn(json, plan.spawn());
             writeTerrain(json, plan);
             writeStructures(json, plan.structures());
+            json.name("roads");
+            LAYOUT_JSON.toJson(plan.roads(), io.github.luoyan.adventureworldgen.plan.RoadPlan.class, json);
             json.endObject();
         } catch (IOException impossible) {
             throw new IllegalStateException(impossible);
@@ -113,7 +115,8 @@ public final class PlanV2Codec {
             return new PlanSnapshot(seed, diagnostics, spawn, coast, network, seaSurface, landBand, seaBand,
                     terrainVersion, readSettings(terrain), readRecipeRegions(terrain), patches, structures, erosion,
                     readCapacities(terrain),
-                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),BiomeLayout.class),"missing frozen biome layout"));
+                    java.util.Objects.requireNonNull(LAYOUT_JSON.fromJson(root.get("biome_layout"),BiomeLayout.class),"missing frozen biome layout"),
+                    readRoads(root.get("roads")));
         } catch (PlanningFailure failure) {
             throw failure;
         } catch (RuntimeException malformed) {
@@ -413,6 +416,33 @@ public final class PlanV2Codec {
             result.add(decoded);
         }
         return List.copyOf(result);
+    }
+
+    private static io.github.luoyan.adventureworldgen.plan.RoadPlan readRoads(JsonElement raw) {
+        var root = exactRoadObject(raw, Set.of("nodes", "routes", "columns", "reservations", "skipped", "operations"));
+        integer(root, "operations");
+        for (var node : array(root,"nodes")) {
+            var o=exactRoadObject(node,Set.of("id","x","z","required"));string(o,"id");roadInt(o,"x");roadInt(o,"z");bool(o,"required");
+        }
+        for (var route : array(root,"routes")) {
+            var o=exactRoadObject(route,Set.of("id","from","to","points","length"));string(o,"id");string(o,"from");string(o,"to");positive(o,"length");
+            for(var point:array(o,"points")){var p=exactRoadObject(point,Set.of("x","z"));finite(p,"x");finite(p,"z");}
+        }
+        for(var column:array(root,"columns")) {
+            var o=exactRoadObject(column,Set.of("x","z","deckY","bottomY","clearTopY","bridge","shoulder"));
+            for(var key:List.of("x","z","deckY","bottomY","clearTopY"))roadInt(o,key);bool(o,"bridge");bool(o,"shoulder");
+        }
+        for(var reservation:array(root,"reservations")) {
+            var o=exactRoadObject(reservation,Set.of("instanceId","x","z","radius"));string(o,"instanceId");roadInt(o,"x");roadInt(o,"z");roadInt(o,"radius");
+        }
+        for(var skipped:array(root,"skipped")){var o=exactRoadObject(skipped,Set.of("id","reason"));string(o,"id");string(o,"reason");}
+        return LAYOUT_JSON.fromJson(root,io.github.luoyan.adventureworldgen.plan.RoadPlan.class);
+    }
+    private static void roadInt(JsonObject value,String key) {Math.toIntExact(integer(value,key));}
+    private static JsonObject exactRoadObject(JsonElement value,Set<String> keys) {
+        var object=object(value,"roads",keys);
+        if(!object.keySet().equals(keys))throw new IllegalArgumentException("incomplete road payload");
+        return object;
     }
 
     private static JsonObject object(JsonElement value, String path, Set<String> allowed) {

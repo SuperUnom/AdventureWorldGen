@@ -30,6 +30,7 @@ public final class CanonicalConfigJson {
                 json.name("adventure_level").value(required.adventureLevel());
                 writeArea(json, required.area());
                 json.name("id").value(required.id().value());
+                writeRoadConnection(json, required.road());
                 json.endObject();
             }
             json.endArray();
@@ -74,6 +75,9 @@ public final class CanonicalConfigJson {
             }
             json.endObject();
 
+            json.name("roads");
+            new com.google.gson.Gson().toJson(RoadConfigJson.write(config.roads()), json);
+
             json.name("spawn").beginObject();
             json.name("biome").value(config.spawn().biome().value());
             json.endObject();
@@ -90,6 +94,7 @@ public final class CanonicalConfigJson {
                 json.name("id").value(structure.id().value());
                 json.name("placement_mode").value("scattered");
                 writeSpacing(json, structure.spacing());
+                writeRoadConnection(json, structure.road());
                 json.endObject();
             }
             json.endArray();
@@ -114,6 +119,13 @@ public final class CanonicalConfigJson {
             throw new IllegalStateException("StringWriter unexpectedly failed", impossible);
         }
         return output.toString();
+    }
+
+    private static void writeRoadConnection(JsonWriter json, AdventureWorldConfig.RoadConnection road) throws IOException {
+        json.name("road").beginObject();
+        json.name("enabled").value(road.enabled());
+        json.name("required").value(road.required());
+        json.endObject();
     }
 
     private static void writeAllowedBiomes(JsonWriter json, AllowedBiomes allowed) throws IOException {

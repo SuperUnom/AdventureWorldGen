@@ -36,14 +36,14 @@ import io.github.luoyan.adventureworldgen.plan.ContentId;
 
 /** Strict parser for the first author configuration contract. */
 public final class AdventureWorldConfigParser {
-    private static final Set<String> TOP_FIELDS = Set.of("world", "spawn", "biomes", "structures");
+    private static final Set<String> TOP_FIELDS = Set.of("world", "spawn", "biomes", "structures", "roads");
     private static final Set<String> WORLD_FIELDS = Set.of("radius", "terrain");
     private static final Set<String> SPAWN_FIELDS = Set.of("biome");
     private static final Set<String> BIOME_FIELDS = Set.of("required", "filler", "terrain_rules", "blend_radius");
-    private static final Set<String> REQUIRED_BIOME_FIELDS = Set.of("id", "adventure_level", "area");
+    private static final Set<String> REQUIRED_BIOME_FIELDS = Set.of("id", "adventure_level", "area", "road");
     private static final Set<String> AREA_FIELDS = Set.of("min", "max", "target");
     private static final Set<String> STRUCTURE_FIELDS = Set.of(
-            "id", "adventure_level", "count", "allowed_biomes", "placement_mode", "spacing");
+            "id", "adventure_level", "count", "allowed_biomes", "placement_mode", "spacing", "road");
     private static final Set<String> COUNT_FIELDS = Set.of("min", "max");
     private static final Set<String> ALLOWED_BIOME_FIELDS = Set.of("id", "area");
     private static final Set<String> SPACING_FIELDS = Set.of("min", "max");
@@ -79,7 +79,8 @@ public final class AdventureWorldConfigParser {
                 ? parseStructures(nonNull(root.get("structures"), "$.structures"), "$.structures")
                 : List.of();
 
-        AdventureWorldConfig result = new AdventureWorldConfig(world, spawn, biomes, structures);
+        AdventureWorldConfig result = new AdventureWorldConfig(world, spawn, biomes, structures,
+                root.has("roads") ? RoadConfigJson.read(root.get("roads")) : RoadSettings.disabled());
         var enabled=result.world().terrain().enabled();
         for(var entry:result.biomes().terrainRules().entrySet()) {
             if(java.util.Collections.disjoint(enabled,entry.getValue().effectiveTemplates()))
@@ -166,7 +167,8 @@ public final class AdventureWorldConfigParser {
                         "required/" + index,
                         contentId(required(item, "id", itemPath), itemPath + ".id"),
                         adventureLevel(required(item, "adventure_level", itemPath), itemPath + ".adventure_level"),
-                        item.has("area") ? area(nonNull(item.get("area"), itemPath + ".area"), itemPath + ".area") : AreaRange.DEFAULT));
+                        item.has("area") ? area(nonNull(item.get("area"), itemPath + ".area"), itemPath + ".area") : AreaRange.DEFAULT,
+                        roadConnection(item, itemPath)));
             }
         }
 
@@ -283,10 +285,20 @@ public final class AdventureWorldConfigParser {
                     count,
                     allowedBiomes,
                     placementMode,
-                    spacing));
+                    spacing, roadConnection(item, itemPath)));
         }
         structures.sort(Comparator.comparing(StructureSettings::id));
         return List.copyOf(structures);
+    }
+
+    private AdventureWorldConfig.RoadConnection roadConnection(JsonObject item, String path) {
+        if (!item.has("road")) return AdventureWorldConfig.RoadConnection.DISABLED;
+        String roadPath = path + ".road";
+        var road = object(item.get("road"), roadPath, Set.of("enabled", "required"));
+        boolean enabled = booleanOr(road, "enabled", roadPath, false);
+        boolean required = booleanOr(road, "required", roadPath, false);
+        if (required && !enabled) throw conflict(roadPath, "required road connection must be enabled");
+        return new AdventureWorldConfig.RoadConnection(enabled, required);
     }
 
     private CountRange count(JsonElement element, String path) {

@@ -1,0 +1,6 @@
+{
+  "road_access": {
+    "exclusion_radius": 128,
+    "approach_distance": 152
+  }
+}

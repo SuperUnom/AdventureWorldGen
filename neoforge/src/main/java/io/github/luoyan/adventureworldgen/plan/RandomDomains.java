@@ -53,7 +53,7 @@ public final class RandomDomains {
             "indexed-structure", "structure-in-biome", "biome-seed",
             "region-center", "mountain-range", "filler-biome",
             // Query-time blending.
-            "query-blend");
+            "query-blend", "roads-v1", "road-bend");
 
     /**
      * The {@code field} argument of {@code DeterministicRandom.seed}: the salt that separates one

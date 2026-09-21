@@ -73,6 +73,15 @@ public final class PlannedStructureBridge {
                 ((ExecutionDataHolder) (Object) start).adventureworldgen$setExecutionData(
                         new StructureExecutionData(placement.instanceId(), terrain, supports));
                 validateEnvelope(start, chunk);
+                if(generator instanceof AdventureChunkGenerator adventure) {
+                    var plan=adventure.roadPlanView();
+                    for(var r:plan.roads().reservations())if(r.instanceId().equals(placement.instanceId())) {
+                        var box=start.getBoundingBox();
+                        if(box.minX()<r.x()-r.radius()||box.maxX()>r.x()+r.radius()||box.minZ()<r.z()-r.radius()||box.maxZ()>r.z()+r.radius())
+                            throw new IllegalStateException("structure violates declared road exclusion envelope: "+r.instanceId());
+                    }
+                    if(RoadWorldgen.intersects(plan,start.getBoundingBox(),StructureTerrain.NATIVE_MARGIN))throw new IllegalStateException("planned structure intersects frozen road");
+                }
                 manager.setStartForStructure(SectionPos.bottomOf(chunk), structure, start, chunk);
             } catch (RuntimeException failure) {
                 throw new IllegalStateException("structure execution failed: instance=" + placement.instanceId()

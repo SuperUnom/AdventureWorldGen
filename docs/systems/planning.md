@@ -130,6 +130,11 @@ carrier 只表达允许群系的 ownership，不预留任何假想结构 footpri
 “请求最小值与已取得 patch 面积二者的较小值”；不足请求的合法结果通过日志报告。
 `PlanDiagnostics` 保存操作计数，不是逐需求放宽事件表。
 
+## 道路阶段
+
+群系、结构锚点和出生确定后，道路阶段选择目的地、求解路网与施工高程，再进入发布前验证。
+它不反馈改写冒险等级或结构布局；细节见 [道路系统](roads.md)。
+
 ## 验证
 
 主要测试为 `RequirementExpanderTest`、`CostPlannerTest`、`CostPlannerBudgetTest`、
