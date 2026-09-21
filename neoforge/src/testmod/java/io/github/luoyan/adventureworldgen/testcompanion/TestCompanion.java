@@ -11,6 +11,7 @@ public final class TestCompanion {
     public static final String ID = "testcompanion";
 
     public TestCompanion(IEventBus modBus) {
+        StructureFixture.register(modBus);
         AdapterRegistrations.register(TestCompanionAdapters.ASHEN_GROVE);
         modBus.addListener(TestCompanion::registerGameTests);
     }

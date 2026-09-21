@@ -4,7 +4,7 @@
 
 AdventureWorldGen 在主世界区块生成前完成宏观编排。
 作者配置是输入，冻结计划向 worldgen 提供地形、群系和出生查询。
-结构规划只保留宏观元数据；Minecraft 原生结构系统独立负责实际结构生成。
+结构规划只保留宏观元数据；worldgen 将锚点转成结构起点，Minecraft 管线按区块放置结构。
 默认 [普通世界预设](../../neoforge/src/main/resources/data/minecraft/worldgen/world_preset/normal.json)
 将主世界接到自定义生成器；下界和末地仍使用各自的原版生成器。
 
@@ -23,7 +23,7 @@ flowchart TD
     I --> J[persistence 原子发布]
     J --> K[runtime READY 恢复与查询]
     I --> K
-    K --> L[worldgen 地形/群系/出生执行]
+    K --> L[worldgen 地形/群系/结构/出生执行]
     M[Minecraft 原生结构系统] --> L
 ```
 
@@ -60,7 +60,7 @@ flowchart TD
 ```
 `runtime` 是无 Minecraft 依赖的会话与组装层，并非只依赖 `plan` 的叶子查询包。
 它实际依赖规划、领域计算与持久化；`GeneratedAdventurePlan` 也保留对 filler 等查询实现的引用。
-各包完整职责见 [代理指南](../../AGENTS.md#包职责)，禁用方向见 [依赖约束](invariants.md#dependency)。
+各领域的职责与入口见下表及主题文档，禁用方向见 [依赖约束](invariants.md#dependency)。
 
 ## 关键入口
 
@@ -75,7 +75,8 @@ flowchart TD
 ## 能力范围
 
 系统编排宏观位置，不证明玩家路线、首次遇见顺序或每条道路的可达性。
-规划结构锚点不保证 Minecraft 会在该处生成同 ID 结构，也不会抑制其他原生结构。
+已接管结构在规划锚点对应的起点区块执行，并抑制同 ID 的随机候选；Java 结构自行决定最终原点。
+资源缺失、原生定位失败或超出引用范围会明确失败，规划锚点本身不证明所有第三方结构均可执行。
 冒险等级和面积的保证范围见 [规划约束分层](../systems/planning.md#constraints)。
 群系查询当前是水平归属；表层与地物使用 Minecraft 内容，不提供垂直群系规划。
 独立工具、测试伴随模组与生产资源的边界见 [测试指南](../development/testing.md)。

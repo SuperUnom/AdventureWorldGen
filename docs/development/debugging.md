@@ -66,10 +66,10 @@
 
 ## 原生结构与规划锚点
 
-先区分宏观锚点没有被规划，还是 Minecraft 原生结构没有生成。
-两者是独立系统：计划锚点不会被注入为结构起点，也不保证与原生结构重合。
-原生结构问题应检查活动结构/structure set、Minecraft 起点与区块引用；
-规划问题检查结构需求、planning info、carrier、锚点和间距。
+先区分锚点未规划、起点构造失败、区块尚未进入 FEATURES，或执行资源身份不匹配。
+执行错误携带 instance、structure 和 anchor；检查资源、原生群系/高度要求、同 ID 起点冲突及引用范围。
+用起点的 Children 与 adventureworldgen_execution 对照实际区块引用，不用重新加载已完成区块触发补建。
+未接管结构仍检查原生 structure set；规划问题检查需求、planning info、carrier、锚点和间距。
 
 ## 地形与群系视觉排查
 

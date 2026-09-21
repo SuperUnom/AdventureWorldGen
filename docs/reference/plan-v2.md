@@ -8,7 +8,7 @@
 
 首次规划决定大陆、侵蚀、水文、气候、群系归属、结构宏观锚点和出生。
 保存这些决策，使重启与区块访问恢复同一查询对象，而不按访问顺序重新求解。
-结构锚点只是一项规划结果，不是待恢复或待执行的 Minecraft 结构。
+结构锚点是执行层的输入，不是 Minecraft 对象或已经完成的结构几何。
 
 ## 逻辑内容
 
@@ -24,7 +24,8 @@
 | `instance_id`、`structure_id`、`anchor_x`、`anchor_z` | 恢复结构宏观规划元数据 |
 | 出生坐标 | 生命周期使用同一出生结果 |
 
-结构条目不含 Y、旋转、入口、范围、piece 类型或 NBT，也不能据此创建 Minecraft 结构起点。
+结构条目不含 Y、旋转、入口、范围、piece 类型或 NBT；执行层结合活动生成定义构造起点。
+已构造的 pieces 与地形适配元数据随 Minecraft 区块保存，不进入本格式。
 codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由源码与测试维护，不重复写入 payload。
 
 <a id="identity"></a>
@@ -51,6 +52,7 @@ codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由�
 
 v3 删除了结构执行数据，因此旧 `plan-v2` READY 明确不兼容并会被忽略/拒绝；系统不会尝试迁移其 pieces。
 新规划不会迁移已经生成的 Minecraft 区块，READY 失效也不是世界迁移机制。
+结构执行另外使用世界级资源身份保护半生成结构；其字段、范围及拒绝条件统一见 [结构执行](../systems/runtime-worldgen.md#structures)。
 
 <a id="repository"></a>
 ## 目录与原子发布

@@ -1,6 +1,7 @@
 package io.github.luoyan.adventureworldgen.worldgen;
 
 import com.mojang.serialization.MapCodec;
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import io.github.luoyan.adventureworldgen.api.AdventurePlanView;
 import io.github.luoyan.adventureworldgen.api.MacroSample;
@@ -10,11 +11,16 @@ import io.github.luoyan.adventureworldgen.api.WaterKind;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.RegistryOps;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.WorldGenRegion;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 import net.minecraft.world.level.LevelHeightAccessor;
 import net.minecraft.world.level.NoiseColumn;
 import net.minecraft.world.level.StructureManager;
@@ -24,6 +30,8 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.chunk.ChunkGeneratorStructureState;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplateManager;
 import net.minecraft.world.level.levelgen.GenerationStep;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
@@ -58,6 +66,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private final SurfaceRules.RuleSource surfaceRule;
     private final HolderLookup.RegistryLookup<NormalNoise.NoiseParameters> noises;
     private volatile RandomState oceanRandomState;
+    private volatile PlannedStructureBridge plannedStructureBridge;
 
     public AdventureChunkGenerator(ResourceLocation profile, HolderLookup.RegistryLookup<Biome> biomes,
                                    HolderLookup.RegistryLookup<NoiseGeneratorSettings> noiseSettings,
@@ -87,6 +96,60 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         return new io.github.luoyan.adventureworldgen.plan.ContentId(profile.toString());
     }
     @Override protected MapCodec<? extends ChunkGenerator> codec() { return ModWorldgen.CHUNK_GENERATOR.get(); }
+
+    /** Called inside the planning publication barrier, before any chunk sees the plan. */
+    public void prepareStructureExecution(StructureExecutionCatalog catalog, AdventurePlanView plan) {
+        if (plannedStructureBridge != null) throw new IllegalStateException("structure execution already initialized");
+        plannedStructureBridge = new PlannedStructureBridge(catalog, plan.plannedStructures());
+    }
+
+    @Override
+    public void createStructures(RegistryAccess registries, ChunkGeneratorStructureState state, StructureManager structures,
+                                 ChunkAccess chunk, StructureTemplateManager templates) {
+        RuntimePlanRegistry.await(planKey());
+        var bridge = plannedStructureBridge;
+        if (bridge == null) throw new IllegalStateException("structure execution was not initialized for " + profile);
+        if (!structures.shouldGenerateStructures()) return;
+        NativeStructureCandidates.create(registries, state, structures, chunk, templates, this, bridge);
+        bridge.createStarts(registries, state, structures, chunk, templates, this);
+    }
+
+    @Override
+    public Pair<BlockPos, Holder<Structure>> findNearestMapStructure(ServerLevel level, HolderSet<Structure> targets,
+                                                                    BlockPos origin, int radius, boolean skipKnown) {
+        RuntimePlanRegistry.await(planKey());
+        var bridge = plannedStructureBridge;
+        if (bridge == null) throw new IllegalStateException("structure execution was not initialized for " + profile);
+        if (!level.structureManager().shouldGenerateStructures()) return null;
+        var registry = level.registryAccess().registryOrThrow(Registries.STRUCTURE);
+        var requested = targets.stream().collect(java.util.stream.Collectors.toMap(h -> registry.getKey(h.value()), h -> h));
+        Pair<BlockPos, Holder<Structure>> planned = null;
+        StructureStart selectedStart = null;
+        double distance = Double.POSITIVE_INFINITY;
+        // The finite plan supplies all candidates; native random-spread rings must not invent managed starts.
+        for (var p : bridge.placements()) {
+            var holder = requested.get(ResourceLocation.parse(p.structureId().value()));
+            if (holder == null) continue;
+            double d = Math.pow((double) p.anchorX() - origin.getX(), 2) + Math.pow((double) p.anchorZ() - origin.getZ(), 2);
+            if (d >= distance) continue;
+            var owner = PlannedStructureBridge.owner(p);
+            var start = level.getChunk(owner.x, owner.z, ChunkStatus.STRUCTURE_STARTS).getStartForStructure(holder.value());
+            if (start == null || !start.isValid() || (skipKnown && !start.canBeReferenced())) continue;
+            distance = d; selectedStart = start;
+            planned = Pair.of(new BlockPos(p.anchorX(), start.getPieces().getFirst().getBoundingBox().minY(), p.anchorZ()), holder);
+        }
+        var nativeTargets = HolderSet.direct(targets.stream().filter(h -> !bridge.manages(registry.getKey(h.value()))).toList());
+        // Exploration maps prefer an unreferenced planned instance. Only the returned start is consumed.
+        if (skipKnown && planned != null) {
+            level.structureManager().addReference(selectedStart);
+            return planned;
+        }
+        var nativeResult = nativeTargets.size() == 0 ? null : super.findNearestMapStructure(level, nativeTargets, origin, radius, skipKnown);
+        if (nativeResult == null) return planned;
+        double nativeDistance = Math.pow((double) nativeResult.getFirst().getX() - origin.getX(), 2)
+                + Math.pow((double) nativeResult.getFirst().getZ() - origin.getZ(), 2);
+        return planned != null && distance <= nativeDistance ? planned : nativeResult;
+    }
 
     @Override
     public CompletableFuture<ChunkAccess> fillFromNoise(Blender blender, RandomState randomState,
@@ -134,6 +197,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 int adapted = clamp(foundations.surfaceAt(x, z, floor), MIN_Y + 1, MIN_Y + DEPTH);
                 for (int y = Math.min(floor, adapted); y < Math.max(floor, adapted); y++)
                     column.setBlock(y, y < adapted ? Blocks.STONE.defaultBlockState() : Blocks.AIR.defaultBlockState());
+                foundations.applyNativeDensity(column, x, z, floor, MIN_Y, MIN_Y + DEPTH);
             }
             for (int y = MIN_Y; y < MIN_Y + DEPTH; y++)
                 chunk.setBlockState(pos.set(x, y, z), column.getBlock(y), false);

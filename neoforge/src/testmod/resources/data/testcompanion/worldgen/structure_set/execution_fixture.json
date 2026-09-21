@@ -1,0 +1,14 @@
+{
+  "structures": [
+    {
+      "structure": "testcompanion:execution_java",
+      "weight": 1
+    }
+  ],
+  "placement": {
+    "type": "minecraft:random_spread",
+    "salt": 73091,
+    "spacing": 1,
+    "separation": 0
+  }
+}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Full GameTest acceptance: the four groups in sequence, each in its own world directory.
+# Full GameTest acceptance: the configured groups in sequence, each in its own world directory.
 #
 #   ./tools/run-full-gametest.sh                     # run id = timestamp
 #   RUN_ID=boundaries-a-01 ./tools/run-full-gametest.sh
@@ -14,7 +14,7 @@
 #
 # Coverage is checked against the method inventory in
 # src/test/java/io/github/luoyan/adventureworldgen/GameTestInventoryTest.java:
-#   default 10 + performance 6 + capacity 1 + planning 1 = 18 methods.
+#   The group sizes are listed once in GAMETEST_GROUPS below.
 #
 # A passing run means the methods were discovered and passed. It is not a performance verdict:
 # the performance group reports its own timings in the log, and the planning group must use a
@@ -41,6 +41,7 @@ GAMETEST_GROUPS=(
   "performance:6"
   "capacity:1"
   "planning:1"
+  "structure:3"
 )
 
 selected=()

@@ -50,7 +50,7 @@
 | `surface`（出现时生效） | `hydrology`、`planner`、`runtime`、`worldgen` |
 
 测试要求已声明的生产包存在且非空；`surface` 是唯一允许缺席的预留包。
-它还检查 planner 不引用结构执行模型，并检查共享生成器没有计划结构注入入口。
+它还检查 planner 不引用结构执行模型，并禁止 `worldgen.structure` 读取 planner、runtime、config、persistence 或 plan。
 没有列出的方向不等于鼓励添加依赖，仍应审查职责与环路。
 
 <a id="ownership"></a>
@@ -63,7 +63,7 @@
 | 侵蚀增量与高度滤波 | `erosion` | 查询时重新模拟水滴或选择材料 |
 | 河网、水位、湖湿地、切削和封岸量化 | `hydrology` | 决定河床方块与 Minecraft 群系 |
 | 气候准入与归属过渡 | `biome` | 重画地形或持有游戏生命周期 |
-| 最终方块和 surface rules | `worldgen` 与原版执行管线 | 重新规划地块或执行规划结构 |
+| 最终方块和 surface rules | `worldgen` 与原版执行管线 | 重新规划地块或改变冻结锚点 |
 
 连续采样使用同一组冻结输入；网格是用途相关的采样与归属表示，不是另一套低精度地形公式。
 原生结构地基是区块期显式适配，不能混同为已反馈到成本图的宏观高度。
@@ -86,9 +86,11 @@ Adventure level 是位置软偏好，不是互斥空间区间。
 - `StructureDemand` 是作者需求，不是结构自身属性。
 - `PlannedStructurePlacement` 是宏观锚点，不是 Minecraft 结构起点或最终原点。
 - planner 只产生纯规划数据，不产生 Minecraft 对象，也不得按具体 structure ID 写特例。
-- worldgen 当前不执行 planned structure placements；原生结构由 Minecraft 自身生成。
-- AdventureWorldGen 当前没有结构生成系统，不保留半实现的结构 adapter API。
-- 未来结构生成必须建立在 planner 输出之上，不能让 planner 调用生成实现。
+- worldgen 桥接层消费冻结锚点，三类执行器构造原生起点；planner 不调用生成实现。
+- 同 ID 同起点区块冲突必须失败；生成失败不得跳过或移动实例。
+- 原生起点是 pieces 和执行地基描述的存档权威，不在全局计划保存第二套执行几何。
+- 地基过渡带也必须建立区块引用；结构及适配范围必须通过原生引用半径校验。
+- 已完成 FEATURES 的区块不在加载时重放；Java 结构不做通用平移。
 - 当前 carrier 只表达群系 ownership；没有结构尺寸输入时，planner 不预留固定核心或检查固定半径平整度。
 - 如果 `StructurePlanningInfo` 新增会影响 planner 输出的字段，这些字段必须进入计划输入身份；同时审查算法版本、
   冻结格式和 READY 失效条件，不能让旧 READY 在结构规划输入已变化时继续命中。

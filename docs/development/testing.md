@@ -13,7 +13,7 @@
 | planner、容量、成本或气候准入 | JUnit + planning GameTest；容量规则加 capacity 组 |
 | codec、身份与冻结状态 | persistence/runtime JUnit + READY 对照 |
 | 结构需求、规划信息与锚点 | planner/codec JUnit + planning GameTest |
-| worldgen、surface、海洋资源、mixin | JUnit + 完整 GameTest；必要时实际客户端观察 |
+| worldgen、surface、海洋资源、mixin | 相关 JUnit + 对应 GameTest 组；结构管线用 structure，地形合成回归用 performance |
 | 性能 | 对应 performance 组和基准；固定 seed、配置、JVM 参数及 cold/READY 条件 |
 | 仅文档 | 文档检查、命令存在性与示例验证；不据此声称重新验证了游戏生成 |
 
@@ -69,6 +69,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 | performance | 完整规划或查询的耗时与运行约束 |
 | capacity | 容量回归和受限配置 |
 | planning | 新世界生产规划、冻结结果和完整约束 |
+| structure | 真实区块中三类结构、重载续接、地形策略、候选接管与资源身份 |
 
 [run-full-gametest.sh](../../neoforge/tools/run-full-gametest.sh) 顺序运行全部组，使用独立目录并核对发现、执行和通过清单：
 
@@ -77,6 +78,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 ./tools/run-full-gametest.sh --group planning
 ./tools/run-full-gametest.sh --group capacity
 ./tools/run-full-gametest.sh --group performance
+./tools/run-full-gametest.sh --group structure
 ```
 
 运行器需要 Bash 和名为 `timeout` 的命令；macOS 环境应先确认该命令在 PATH 中。
@@ -96,7 +98,8 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 
 纯数据往返运行 persistence 和 runtime 测试；`PlanningBaselineTest` 检查规范字节、恢复后重编码与采样字段。
 GameTest 中需要 fresh planning 的组必须使用全新目录，恢复对照必须复用同一目录、seed 与配置。
-结构计划只保存宏观锚点，因此 READY 验证不再包含 piece/NBT 重放或结构起点注入。
+READY 仍只恢复宏观锚点；pieces 与执行地基元数据在原生区块存档中恢复，由 structure 组独立覆盖。
+Mojang GameTest 服务器默认关闭结构；testmod 的专用 mixin 仅在 structure 组启用结构选项，不进入生产 JAR。
 不要删除用户存档来制造 cold 条件；使用运行器生成的独立目录。
 
 <a id="tools"></a>

@@ -1,0 +1,22 @@
+{
+  "biomes": "testcompanion:structure_fixture",
+  "spawn_overrides": {},
+  "step": "surface_structures",
+  "terrain_adaptation": "none",
+  "type": "adventureworldgen:template",
+  "template": "testcompanion:execution_template",
+  "processors": "minecraft:empty",
+  "support": {
+    "min_x": 0,
+    "min_z": 0,
+    "max_x": 31,
+    "max_z": 4,
+    "surface": 0
+  },
+  "height_offset": 12,
+  "rotation": "none",
+  "foundation": {
+    "mode": "flatten",
+    "margin": 12
+  }
+}

@@ -1,7 +1,7 @@
 # 修改指南
 
 这里按开发任务定位应读文档、主要实现和验证入口。
-源码路径链接用于进入职责边界，不是逐文件清单；完整包职责见 [AGENTS](../../AGENTS.md#包职责)。
+源码路径链接用于进入职责边界，不是逐文件清单；依赖方向见 [架构概览](../architecture/overview.md#依赖方向)。
 
 ## 按任务定位
 
@@ -22,7 +22,8 @@
 | 配置字段与缺省 | [profile](../reference/profile.md) | [config](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/)、[发布默认值](../../neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json) | parser 与 canonical 断言、冲突输入、planning 组 |
 | 计划格式与身份 | [计划 v3](../reference/plan-v2.md) | [plan](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/)、[persistence](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/)、[PlanIdentity](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) | codec、原子发布、身份、确定性与 READY |
 | 首次规划或会话加载 | [生命周期](../architecture/pipeline.md) | [runtime](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/)、[AdventureEvents](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/AdventureEvents.java) | planning 组、异常屏障、普通世界 cold/ready |
-| Minecraft 区块与材料 | [runtime/worldgen](../systems/runtime-worldgen.md) | [worldgen](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/)、[mixin](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/mixin/) | JUnit + 完整 GameTest，按需客户端观察 |
+| Minecraft 区块与材料 | [runtime/worldgen](../systems/runtime-worldgen.md) | [worldgen](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/)、[mixin](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/mixin/) | 相关 JUnit + 对应 GameTest 组，按需客户端观察 |
+| 结构执行、地基与区块存档 | [结构执行](../systems/runtime-worldgen.md#structures)、[生成定义](../reference/adapters.md#execution) | [PlannedStructureBridge](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/PlannedStructureBridge.java)、[structure](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/) | 包边界、执行身份、structure GameTest；地形合成变化补 performance 组 |
 | 第三方群系 adapter | [适配器契约](../reference/adapters.md) | [api](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/)、[compat](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/compat/)、[testcompanion](../../neoforge/src/testmod/java/io/github/luoyan/adventureworldgen/testcompanion/) | 注册冲突、版本身份、准入与实际群系查询 |
 | 进度界面 | [生命周期](../architecture/pipeline.md) | [client](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/client/)、[PlanningProgress](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanningProgress.java) | PlanningProgressTest、客户端；进度不得改变生成 |
 | 文档入口与契约 | [文档目录](../README.md) | 当前对应主题 + 真实来源 | check-docs.py、示例与命令核对 |

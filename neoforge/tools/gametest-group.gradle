@@ -4,7 +4,7 @@
 //
 // NeoForge enables the GameTest namespaces through a single system property, and every existing
 // per-group init script writes that same property. Stacking several -I scripts therefore cannot
-// express "all four groups": the last one wins. The full acceptance entry is
+// express "all groups": the last one wins. The full acceptance entry is
 // tools/run-full-gametest.sh, which starts this script once per group with a separate world
 // directory and aggregates the results.
 //
@@ -12,6 +12,7 @@
 //   performance  6 methods  namespace  testcompanion_performance
 //   capacity     1 method   namespace  testcompanion_capacity
 //   planning     1 method   namespace  testcompanion_planning
+//   structure    3 methods  namespace  testcompanion_structure
 //
 // The method lists live in GameTestInventoryTest; keep the two in step.
 def groups = [
@@ -19,6 +20,7 @@ def groups = [
         performance: ['testcompanion_performance'],
         capacity   : ['testcompanion_capacity'],
         planning   : ['testcompanion_planning'],
+        structure  : ['testcompanion_structure'],
 ]
 
 allprojects {

@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "io.github.luoyan.adventureworldgen.testcompanion.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["StructureTestServerMixin"],
+  "injectors": {"defaultRequire": 1}
+}

@@ -232,24 +232,19 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void plannedStructuresRemainPureDataAndWorldgenDoesNotExecuteThem() throws IOException {
-        Path generator = sourceRoot.resolve("worldgen").resolve("AdventureChunkGenerator.java");
-        Path planner = sourceRoot.resolve("planner").resolve("JointPlanner.java");
-        assertTrue(Files.isRegularFile(generator), () -> "missing " + generator);
-        assertTrue(Files.isRegularFile(planner), () -> "missing " + planner);
-        String generatorCode = stripComments(Files.readString(generator, StandardCharsets.UTF_8));
-        assertFalse(generatorCode.contains("createStructures("),
-                "worldgen must leave native structure generation untouched");
-        assertFalse(generatorCode.contains("plannedStructures("),
-                "worldgen must not consume planned structure anchors");
-        String plannerCode = stripComments(Files.readString(planner, StandardCharsets.UTF_8));
-        for (String forbidden : List.of("StructurePiece", "StructureStart", "CompoundTag",
-                "StructureAdapter", "canonicalNbt", "minecraft:desert_pyramid"))
-            assertFalse(plannerCode.contains(forbidden), () -> "planner contains structure execution detail: " + forbidden);
-        for (String removed : List.of("api/StructureAdapter.java", "api/FrozenPieceSupport.java",
-                "runtime/StructureAdapterBridge.java", "worldgen/FrozenPieceRestore.java",
-                "worldgen/RegisteredPieceSupport.java"))
-            assertFalse(Files.exists(sourceRoot.resolve(removed)), () -> "removed structure execution class returned: " + removed);
+    void plannedStructuresRemainPureDataAndExecutorsOnlyConsumeResolvedInputs() throws IOException {
+        assertNoImport("worldgen/structure", "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime", "io.github.luoyan.adventureworldgen.config",
+                "io.github.luoyan.adventureworldgen.persistence", "io.github.luoyan.adventureworldgen.plan.");
+        String plannerCode = stripComments(Files.readString(sourceRoot.resolve("planner/JointPlanner.java"), StandardCharsets.UTF_8));
+        for (String forbidden : List.of("StructurePiece", "StructureStart", "CompoundTag", "StructureExecutor", "canonicalNbt", "minecraft:desert_pyramid"))
+            assertFalse(plannerCode.contains(forbidden), () -> "planner contains execution detail: " + forbidden);
+        try (var files = Files.walk(sourceRoot.resolve("worldgen/structure"))) {
+            for (var file : files.filter(p -> p.toString().endsWith(".java")).toList()) {
+                String code = stripComments(Files.readString(file));
+                assertFalse(code.contains("minecraft:"), () -> "executor contains a concrete vanilla structure ID: " + file);
+            }
+        }
     }
 
     private static long countJavaFiles(Path directory) throws IOException {

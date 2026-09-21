@@ -6,7 +6,7 @@ AdventureWorldGen 将冒险意图编排为有限大陆的冻结计划，再由 M
 
 - 先检查工作区差异，保留与任务无关的用户修改。
 - 从 [文档目录](docs/README.md) 选择相关主题；修改前阅读 [架构概览](docs/architecture/overview.md) 和 [跨系统约束](docs/architecture/invariants.md)。
-- 用 [修改指南](docs/development/change-guide.md) 定位实现与验证入口；包职责见 [架构概览](docs/architecture/overview.md#包职责)。
+- 用 [修改指南](docs/development/change-guide.md) 定位实现与验证入口；包职责见 [架构概览](docs/architecture/overview.md#依赖方向)。
 - 以实际实现、测试断言、资源和持久化格式核实事实，不仅凭注释、文档或历史记录推断。
 
 ## 核心约束
@@ -16,7 +16,8 @@ AdventureWorldGen 将冒险意图编排为有限大陆的冻结计划，再由 M
 - 修改地形、随机键、遍历顺序或缓存时，保持同输入的确定性和查询一致性；缓存只能改变开销，不能改变结果。不得用更新黄金值掩盖未解释的变化。
 - planner 区分硬约束、软评分和有界失败；冒险等级不是位置硬门槛，面积放宽不能扩大环境准入集合。详见 [规划系统](docs/systems/planning.md)。
 - 结构规划只接收纯 `StructurePlanningInfo`、输出宏观锚点 `PlannedStructurePlacement`，不得按具体 structure ID 添加特例或依赖 pieces、NBT 与区块执行。
-- 原生结构由 Minecraft 生成；生成器不得消费规划结构来抑制候选、恢复 pieces 或注入起点。`worldgen.structure` 只接收调用方最终三维位置，不读取 planner、冻结计划或作者配置。
+- `worldgen` 桥接层将规划锚点接入 Minecraft 结构起点，并在候选选择前排除已接管 ID；结构方块仍由原生区块管线放置。`worldgen.structure` 只接收执行上下文与定位参数，不读取 planner、冻结计划或作者配置；Java 结构保留原生定位，禁止通用整体搬移。
+- pieces 与执行元数据随原生起点保存；地基影响范围必须进入区块引用包围盒，并处于原生引用半径内。不得用区块加载事件重放已完成结构，不得静默丢失失败实例。
 - 修改生成输入、预算、冻结格式或结构规划字段时，审查 [输入身份、算法版本与 READY 兼容性](docs/reference/plan-v2.md)。影响 planner 输出的新字段必须纳入规范输入摘要，不能假定改版本常量就会改变 `input_sha256`。
 
 ## 最小充分验证

@@ -12,7 +12,7 @@
 
 注册内容的验证发生在 `AdventureEvents.serverAboutToStart`：
 活动群系与结构注册表提供查询，`MinecraftAdapters` 冻结群系适配器集合，`ContentPreflight` 检查所需内容。
-预检成功只表示检查通过，不产生另一份“已解析内容”状态。
+结构执行目录在此时读取并冻结，验证模板和地形能力；执行资源身份保护已有区块兼容性，见 [执行契约](../systems/runtime-worldgen.md#structures)。
 
 服务器在 `ServerLevel` 创建前启动后台规划，因为世界生成构造过程可能提前查询群系。
 加载事件、出生事件及 worldgen 查询通过 `RuntimePlanRegistry` 等待同一个 future。
@@ -49,7 +49,7 @@ profile 资源重载只更新加载结果，不能使已有 future 自动失效�
 planning catalog -> StructurePlanningInfo /
 ```
 
-READY 恢复后，worldgen 只消费地形、群系、出生等执行数据；结构 placement 当前只保留为可查询元数据。
+READY 恢复后，worldgen 组装结构锚点到起点区块的只读索引，并消费地形、群系和出生查询。
 
 <a id="publish"></a>
 ## Freeze 与 publish
@@ -77,7 +77,7 @@ READY 恢复后，worldgen 只消费地形、群系、出生等执行数据；�
 
 `AdventureBiomeSource` 等待计划后将四分格查询映射为计划群系。
 `AdventureChunkGenerator` 消费计划高度和水面，写入方块列并执行原版表层和适用的地物流程。
-生成器不消费计划结构锚点；原版与数据包结构按 Minecraft 普通流程生成。
+生成器在 STRUCTURE_STARTS 执行规划锚点；引用、方块放置和 pieces 存档复用 Minecraft 管线。
 材料、海洋洞穴、结构地基和 carver 的具体边界见 [worldgen 执行](../systems/runtime-worldgen.md#chunk)。
 
 服务器停止清理运行时计划注册表和进度；磁盘上的 READY 保留用于下次启动。

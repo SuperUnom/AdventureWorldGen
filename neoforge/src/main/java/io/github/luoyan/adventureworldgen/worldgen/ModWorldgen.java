@@ -21,5 +21,6 @@ public final class ModWorldgen {
             BIOME_SOURCES.register("adventure", () -> AdventureBiomeSource.CODEC);
 
     private ModWorldgen() {}
-    public static void register(IEventBus bus) { CHUNK_GENERATORS.register(bus); BIOME_SOURCES.register(bus); }
+    public static void register(IEventBus bus) { CHUNK_GENERATORS.register(bus); BIOME_SOURCES.register(bus);
+        io.github.luoyan.adventureworldgen.worldgen.structure.StructureTypes.register(bus); }
 }

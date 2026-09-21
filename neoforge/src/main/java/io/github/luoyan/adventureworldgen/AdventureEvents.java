@@ -20,6 +20,11 @@ import net.minecraft.world.level.storage.LevelResource;
 import io.github.luoyan.adventureworldgen.config.ContentPreflight;
 import io.github.luoyan.adventureworldgen.plan.ContentId;
 import io.github.luoyan.adventureworldgen.worldgen.MinecraftAdapters;
+import io.github.luoyan.adventureworldgen.worldgen.StructureExecutionCatalog;
+import io.github.luoyan.adventureworldgen.worldgen.StructureExecutionIdentity;
+import io.github.luoyan.adventureworldgen.worldgen.GenerationIdentityFile;
+import io.github.luoyan.adventureworldgen.runtime.PlanIdentity;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import net.minecraft.resources.ResourceLocation;
 
 @EventBusSubscriber(modid = AdventureWorldGen.MOD_ID)
@@ -62,8 +67,24 @@ public final class AdventureEvents {
         // Do not join before Minecraft creates its ChunkProgressListener: the client spins until
         // that listener exists and cannot render a loading screen during this event. Biome/chunk
         // queries and levelLoaded retain the READY barrier while the loading screen renders.
-        RuntimePlanRegistry.start(planKey(generator), () -> RuntimePlanner.plan(seed, loaded, worldDirectory,
-                adapters));
+        var managed = loaded.config().structures().stream().map(s -> ResourceLocation.parse(s.id().value()))
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        var execution = StructureExecutionCatalog.load(managed, server.registryAccess(), server.getResourceManager(), server.getStructureManager());
+        String identity = !managed.isEmpty() || java.nio.file.Files.exists(worldDirectory.resolve("adventureworldgen/structure-generation.sha256"))
+                ? StructureExecutionIdentity.hash(server, execution, PlanIdentity.hash(seed, loaded, adapters, PlannerProfile.V2)) : null;
+        if (identity != null) {
+            try { GenerationIdentityFile.check(worldDirectory, identity); }
+            catch (java.io.IOException failure) { throw new IllegalStateException("could not pin structure generation identity", failure); }
+        }
+        RuntimePlanRegistry.start(planKey(generator), () -> {
+            var plan = RuntimePlanner.plan(seed, loaded, worldDirectory, adapters);
+            generator.prepareStructureExecution(execution, plan);
+            if (identity != null) {
+                try { GenerationIdentityFile.verifyOrCreate(worldDirectory, identity); }
+                catch (java.io.IOException failure) { throw new IllegalStateException("could not pin structure generation identity", failure); }
+            }
+            return plan;
+        });
     }
 
     @SubscribeEvent

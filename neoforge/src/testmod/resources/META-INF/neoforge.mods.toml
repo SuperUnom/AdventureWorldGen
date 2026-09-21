@@ -14,3 +14,6 @@ type="required"
 versionRange="[0.1.0,)"
 ordering="AFTER"
 side="BOTH"
+
+[[mixins]]
+config="testcompanion.mixins.json"
