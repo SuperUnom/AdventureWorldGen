@@ -1,128 +1,52 @@
 # 仓库开发指南
 
-这里回答修改 AdventureWorldGen 前应读什么、各包负责什么，以及如何维护开发契约。
-AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻结计划，再由 Minecraft worldgen 执行。
+AdventureWorldGen 将冒险意图编排为有限大陆的冻结计划，再由 Minecraft worldgen 执行。
 
 ## 开始工作
 
-1. 从 [开发文档目录](docs/README.md) 选择与任务相关的文档。
-2. 阅读 [架构概览](docs/architecture/overview.md) 和 [跨系统约束](docs/architecture/invariants.md)。
-3. 用 [修改指南](docs/development/change-guide.md) 定位代码与验证入口。
-4. 先检查工作区差异，保留与当前任务无关的用户修改。
-5. 用实际实现、测试断言、资源和持久化格式核实事实，不仅凭注释或文档推断行为。
+- 先检查工作区差异，保留与任务无关的用户修改。
+- 从 [文档目录](docs/README.md) 选择相关主题；修改前阅读 [架构概览](docs/architecture/overview.md) 和 [跨系统约束](docs/architecture/invariants.md)。
+- 用 [修改指南](docs/development/change-guide.md) 定位实现与验证入口；包职责见 [架构概览](docs/architecture/overview.md#包职责)。
+- 以实际实现、测试断言、资源和持久化格式核实事实，不仅凭注释、文档或历史记录推断。
 
-## 包职责
+## 核心约束
 
-生产源码根为 [Java 源码目录](neoforge/src/main/java/io/github/luoyan/adventureworldgen/)。
-下表包名均相对此目录。
+- 遵守 [依赖边界](docs/architecture/invariants.md#dependency) 与 `PackageBoundaryTest`；不通过反射或全限定名绕过检查，底层算法不得依赖游戏生命周期。
+- 配置、版本和冻结状态保持单一权威来源；不复制出另一套状态或配置。
+- 修改地形、随机键、遍历顺序或缓存时，保持同输入的确定性和查询一致性；缓存只能改变开销，不能改变结果。不得用更新黄金值掩盖未解释的变化。
+- planner 区分硬约束、软评分和有界失败；冒险等级不是位置硬门槛，面积放宽不能扩大环境准入集合。详见 [规划系统](docs/systems/planning.md)。
+- 结构规划只接收纯 `StructurePlanningInfo`、输出宏观锚点 `PlannedStructurePlacement`，不得按具体 structure ID 添加特例或依赖 pieces、NBT 与区块执行。
+- 原生结构由 Minecraft 生成；生成器不得消费规划结构来抑制候选、恢复 pieces 或注入起点。`worldgen.structure` 只接收调用方最终三维位置，不读取 planner、冻结计划或作者配置。
+- 修改生成输入、预算、冻结格式或结构规划字段时，审查 [输入身份、算法版本与 READY 兼容性](docs/reference/plan-v2.md)。影响 planner 输出的新字段必须纳入规范输入摘要，不能假定改版本常量就会改变 `input_sha256`。
 
-| 包 | 职责 |
+## 最小充分验证
+
+按实际行为和调用链选择检查，运行前简要说明范围；[测试指南](docs/development/testing.md) 提供覆盖点与命令，不是每次全部执行的清单。
+
+| 改动 | 默认验证 |
 |---|---|
-| `api` | 群系适配契约、计划查询视图和存储接口；不放内置适配实现 |
-| `config` | 作者模型、严格 JSON 解析、规范化与内容预检；注册表查询由外部注入 |
-| `plan` | ID、版本、规划参数、冻结环境状态、进度与失败词汇 |
-| `spatial` | 世界对齐网格、稀疏掩膜、坐标和查询缓存基础件 |
-| `noise` | 确定性随机键、连续噪声与坐标扰动 |
-| `climate` | 温度与湿度场、冻结场查询、湿度供给修正 |
-| `biome` | 环境准入、偏好评分、局部归属过渡与生长形状策略 |
-| `hydrology` | 河网、湖湿地、水位和切削几何 |
-| `erosion` | 规划期侵蚀增量场与查询期高度滤波 |
-| `terrain` | 海岸、区域配方、山脉包络、海床和最终地貌测量；消费容量结果 |
-| `cost` | 有向通行图、到达成本、冒险位置偏好和局部成本细化 |
-| `planner` | 需求展开、容量预留、群系竞争分配、结构落位与填充 |
-| `persistence` | 冻结快照、内部计划编解码、校验和及原子发布 |
-| `runtime` | 首次规划编排、READY 恢复、计划组装与会话查询屏障 |
-| `compat` | 原版群系兼容实现与水体群系规则 |
-| `worldgen` | 数据包读取、Minecraft 注册表接入与区块执行；不执行规划结构 |
-| `client` | 规划进度加载界面 |
-| `mixin` | 原版功能的受限接入钩子，目前用于泉口过滤 |
+| 仅文档 | 文档检查；仅注释或格式改动检查差异即可 |
+| 局部代码 | 用 `--tests` 选择直接相关的 JUnit 类或方法；无适用测试时做必要编译或针对性检查并说明缺口 |
+| 包依赖 | 补跑 `PackageBoundaryTest` |
+| 确定性、冻结格式、输入身份或 READY | 补充对应契约的回归检查 |
+| Minecraft 集成或 JUnit 无法覆盖的行为 | 补跑对应 GameTest 组 |
 
-根包的 `AdventureWorldGen` 注册模组，`AdventureEvents` 接入服务器与主世界生命周期。
-`surface` 是测试预留的职责名，当前没有该生产包；材料由原版 surface rules 执行。
+- 同轮相关修改完成后集中验证，通过即停止；仅因后续相关修改、失败或新的具体风险重跑或扩大，修复后优先重跑失败及受影响项。
+- 全量 JUnit、完整 GameTest、全套审计仅用于用户明确要求、既有 CI 要求，或有具体证据证明跨系统影响无法由定向检查覆盖；扩大前说明理由。
+- 性能基准、多种子审计、预览和客户端检查按需运行；新增测试应覆盖行为变化、缺陷回归或关键边界，不为凑数量镜像实现。
+- 不默认 `clean` 或 `--rerun-tasks`，不重复执行已被其他任务覆盖的检查；需要 `build` 时不预先单独跑同范围 `test`，仅打包时选择产物所需任务。
+- 首次规划验证使用新目录；READY 对照复用同目录、seed 和完全匹配的配置，不删除用户存档制造首次规划条件。
 
-## 架构约束
+## Gradle 缓存
 
-可执行依据是 [PackageBoundaryTest](neoforge/src/test/java/io/github/luoyan/adventureworldgen/PackageBoundaryTest.java)。
-完整禁用依赖表只维护在 [依赖边界](docs/architecture/invariants.md#dependency)。
+- 统一使用默认 `~/.gradle`；运行前检查 `GRADLE_USER_HOME`，取消非默认覆盖。
+- 不通过环境变量、`--gradle-user-home` 或 `-g` 创建独立缓存；沙箱不能写默认目录时申请权限，不以临时缓存绕过。
+- 仅用户明确授权或既有 CI 明确要求时可用非默认缓存，须复用稳定路径并说明磁盘占用与清理方式。
+- `neoforge/.gradle` 是项目状态目录，不是 Gradle User Home，不向其中重定向 Minecraft / NeoForge 下载缓存。
 
-- `config` 与 `runtime` 不依赖 Minecraft / NeoForge。
-- `planner` 不依赖 `runtime`；回调使用共享观察接口。
-- `plan` 不依赖规划器、运行时、作者配置或水文实现。
-- `terrain` 不依赖 `planner`、`runtime` 或作者 `config`；配置只传入地形词汇或策略接口。
-- `climate`、`biome` 不依赖规划器和运行时；需求统计通过接口注入。
-- `hydrology` 与 `erosion` 不选择 Minecraft 方块或群系。
-- `persistence` 只处理冻结数据，不依赖 `runtime` 查询对象。
-- `api` 不引用内部求解与执行实现，`compat` 通过公开契约实现具体内容。
-- planner 只接收纯 `StructurePlanningInfo`，只输出纯 `PlannedStructurePlacement`；不得依赖结构部件、NBT 或区块执行。
-- 生成器不得消费规划结构来抑制原生候选、恢复 pieces 或注入 Minecraft 结构起点。
-- planner 不得按具体 structure ID 添加特例；未来结构差异只能通过纯 `StructurePlanningInfo` 输入。
+## 文档与交付
 
-护栏按源码中的包引用检查，不是对所有运行时行为的证明。
-增加依赖前同时核对实际数据流和测试约束，不通过反射或全限定名绕过检查。
-
-## Source of truth
-
-| 事实 | 真实来源 |
-|---|---|
-| 配置字段与校验 | [AdventureWorldConfigParser](neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/AdventureWorldConfigParser.java)、[AdventureWorldConfig](neoforge/src/main/java/io/github/luoyan/adventureworldgen/config/AdventureWorldConfig.java) |
-| 随包默认 profile | [default.json](neoforge/src/main/resources/data/adventureworldgen/adventureworldgen/profiles/default.json) |
-| 作者结构需求 | `AdventureWorldConfig.StructureSettings` 与 `RequirementExpander.StructureDemand` |
-| 结构固有规划信息 | [StructurePlanningInfo](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/StructurePlanningInfo.java) 与 `StructurePlanningCatalog` |
-| 结构规划位置 | [PlannedStructurePlacement](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannedStructurePlacement.java) |
-| Minecraft 实际结构 | Minecraft 原生/数据包 worldgen；AdventureWorldGen 当前没有结构生成器 |
-| 缺省地形参数 | [TerrainSettings](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainSettings.java)、[TerrainTemplate](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainTemplate.java) |
-| 算法与格式身份 | [PlanVersions](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlanVersions.java)、[PlannerProfile](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannerProfile.java)、[PlanIdentity](neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) |
-| 架构边界 | 上述 `PackageBoundaryTest` |
-| 构建与运行任务 | [build.gradle](neoforge/build.gradle)、[gradle.properties](neoforge/gradle.properties) |
-| GameTest 分组 | [GameTestInventoryTest](neoforge/src/test/java/io/github/luoyan/adventureworldgen/GameTestInventoryTest.java)、[分组脚本](neoforge/tools/gametest-group.gradle)、[全量入口](neoforge/tools/run-full-gametest.sh) |
-| 冻结数据与磁盘协议 | [PlanSnapshot](neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/PlanSnapshot.java)、[PlanV2Codec](neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/PlanV2Codec.java)、[AtomicPlanRepository](neoforge/src/main/java/io/github/luoyan/adventureworldgen/persistence/AtomicPlanRepository.java) |
-
-## 修改规则
-
-不要让底层算法为获取方块、注册表或服务器状态而依赖游戏生命周期。
-不要复制配置、版本或冻结状态构造第二份权威数据。
-
-修改地形、随机键、集合遍历顺序或缓存时，检查同输入的确定性和查询一致性。
-缓存命中与淘汰只能改变开销，不能改变结果；发现现有缺口应明确报告。
-不要用修改黄金值的方式掩盖尚未解释的行为变化。
-
-修改 planner 时，先区分硬约束、软评分和有界失败。
-冒险等级不得变成位置硬门槛；面积放宽不能扩大环境准入集合。
-具体分配语义以 [规划系统](docs/systems/planning.md) 为准。
-
-修改冻结格式或影响生成的输入时，检查 [计划身份与 READY 兼容性](docs/reference/plan-v2.md)。
-不要假定修改任意版本常量都会自动改变 `input_sha256`。
-改变预算也可能改变规划结果，需要审查身份标记与持久化约束。
-
-结构配置是作者的 `StructureDemand`，结构目录提供 `StructurePlanningInfo`，冻结结果是宏观锚点。
-三者都不是 Minecraft 生成指令；第三方 Java 扩展目前只开放 [群系适配契约](docs/reference/adapters.md)。
-如果 `StructurePlanningInfo` 以后增加任何会影响 planner 输出的字段，必须把规范值纳入计划输入身份，
-并同步审查算法版本、冻结格式和 READY 失效条件；不能只扩展 catalog 而继续复用旧摘要。
-
-## 验证与交付
-
-按 [测试指南](docs/development/testing.md) 选择验证层级。
-纯算法改动运行 JUnit；worldgen、注册与生命周期改动补跑对应 GameTest。
-首次规划用新目录，READY 对照复用同一目录和完全匹配的配置。
-
-### Gradle 缓存约束
-
-- 本机开发与验证统一使用系统默认 Gradle User Home：`${user.home}/.gradle`（即 `~/.gradle`）。
-- 运行 Gradle 前检查 `GRADLE_USER_HOME`；如果它指向其他位置，应取消该覆盖并使用默认目录。
-- 不得通过 `GRADLE_USER_HOME`、`--gradle-user-home` 或 `-g` 在 `/tmp`、`/private/tmp`、仓库内或其他位置创建独立缓存。
-- 如果沙箱不能写入 `~/.gradle`，应申请相应权限，不得通过新建临时缓存绕过限制。
-- 只有用户明确授权或既有 CI 配置明确要求时才可使用非默认 Gradle User Home，并应复用一个稳定路径、说明磁盘占用与清理方式。
-- `neoforge/.gradle` 是 Gradle 自动维护的项目状态目录，不是另一个 Gradle User Home；不要将 Minecraft 与 NeoForge 下载缓存重定向到其中。
-
-报告实际执行的命令、输入、结果和未验证范围。
-工具编译、纯 Java 查询、Minecraft 区块测试与客户端视觉检查是不同证据。
-不要把已有日志或 Git 提交中的通过记录当作本次运行结果。
-
-## 文档维护
-
-文档使用中文，代码标识保持英文。
-每个事实在一个主题中完整定义，其他页面使用摘要和链接。
-默认 profile、版本字符串和测试数量不在长期文档中重复登记。
-不要创建逐文件源码全景图、逐提交实施记录或 Markdown backlog。
-设计来源通过 `git log`、`git blame`、`git show` 查询。
-文档改动运行 [文档自动检查](docs/development/testing.md#docs-check)。
+- 文档用中文，代码标识保持英文；每个事实只在一个主题完整定义，其他页面摘要并链接。
+- 不重复登记默认 profile、版本字符串或测试数量，不创建逐文件源码全景图、逐提交实施记录或 Markdown backlog；设计来源用 Git 历史查询。
+- 文档修改从仓库根运行 `python3 neoforge/tools/check-docs.py`，交付前检查 `git diff --check`。
+- 报告实际执行的命令、输入、结果和未验证范围；区分静态检查、编译、JUnit、游戏测试与客户端观察，不把历史通过记录当作本次结果。
