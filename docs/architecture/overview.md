@@ -4,7 +4,8 @@
 
 AdventureWorldGen 在主世界区块生成前完成宏观编排。
 作者配置是输入，冻结计划向 worldgen 提供地形、群系和出生查询。
-结构规划只保留宏观元数据；Minecraft 原生结构系统独立负责实际结构生成。
+结构规划只保留宏观元数据；Minecraft 原生结构系统独立负责正常结构生成。
+另有一个不接入规划或区块生成器的显式执行入口，可在调用方已经给出最终三维位置时放置 NBT 模板。
 默认 [普通世界预设](../../neoforge/src/main/resources/data/minecraft/worldgen/world_preset/normal.json)
 将主世界接到自定义生成器；下界和末地仍使用各自的原版生成器。
 
@@ -71,6 +72,7 @@ flowchart TD
 | 哪一步构造什么 | [RuntimePlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/RuntimePlanner.java) | [首次规划](pipeline.md#initial) |
 | 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v3](../reference/plan-v2.md) |
 | 如何写入区块 | [AdventureChunkGenerator](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/AdventureChunkGenerator.java) | [区块执行](../systems/runtime-worldgen.md#chunk) |
+| 如何显式放置结构模板 | [StructureAdapterManager](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/StructureAdapterManager.java) | [结构边界](../systems/runtime-worldgen.md#structures) |
 
 ## 能力范围
 

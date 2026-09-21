@@ -62,15 +62,27 @@ carver 在原生结构地基或周围湿列处避让；其他干燥区域才委�
 `AdventurePlanView.plannedStructures()` 返回纯宏观元数据：实例 ID、结构 ID、锚点 X/Z。
 运行时允许查询或展示这些信息，但 worldgen 不消费它们。计划也不保存 Y、旋转、footprint、入口或 pieces。
 
+[StructureAdapterManager](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/StructureAdapterManager.java)
+提供另一条显式调用路径。它接收独立的 `StructurePlacement`（资源 ID、最终 `BlockPos`、旋转），先让
+`StructureResolver` 查询 Minecraft 模板管理器，再查询活动 `STRUCTURE` 注册表；因此类型优先级为
+NBT 模板、`JigsawStructure`、其他 `Structure`、未知。检测不依赖资源名称。
+
+`TemplateAdapter` 使用模板的 `placeInWorld` 在给定原点放置内容并应用旋转，随机源由世界种子、
+位置与资源 ID 稳定派生。Jigsaw 和普通 Java Structure adapter 当前只验证取到的注册表对象类型，随后抛出
+明确的未支持操作异常；代码没有猜测 1.21.1 的定点原生结构起点语义。
+管理器没有被服务器生命周期或区块生成器自动调用，也不会把计划锚点转换为这个输入。
+
 因此必须区分：
 
 - “结构需求已规划”只表示数量、承载区域、锚点和间距通过 planner 校验；
-- “Minecraft 中出现某个结构”只由 Minecraft 原生/数据包结构系统决定；
+- “Minecraft 中自然出现某个结构”只由 Minecraft 原生/数据包结构系统决定；
+- “显式放置模板”表示某个外部调用方已经提供最终三维位置，与 planner 没有自动绑定；
 - 两者可能使用相同内容 ID，但位置和数量没有绑定关系。
 
 ## 验证
 
 纯 Java 测试覆盖计划查询、codec、READY、确定性和规划结构元数据。
-`AdventureWorldGameTests`、`SurfaceGameTests`、`ChunkQueryGameTests` 与 `WorldgenFixGameTests`
-覆盖实际列、表层、缓存、原生结构地基与其他生成修正。worldgen 变更必须运行完整 GameTest；
+`AdventureWorldGameTests`、`SurfaceGameTests`、`ChunkQueryGameTests`、`StructureExecutionGameTests` 与
+`WorldgenFixGameTests` 覆盖实际列、表层、缓存、模板识别与旋转放置、原生结构地基及其他生成修正。
+worldgen 变更必须运行完整 GameTest；
 命令见 [测试指南](../development/testing.md#gametest)。

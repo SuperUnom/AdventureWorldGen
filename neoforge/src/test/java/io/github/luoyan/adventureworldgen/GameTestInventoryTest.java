@@ -58,6 +58,7 @@ class GameTestInventoryTest {
             "ChunkQueryGameTests#nativeMaterialsStillMatchPlan",
             "ChunkQueryGameTests#allRecipesStillMatchPlan",
             "ChunkQueryGameTests#cachedQueriesPreserveColumnsAndSurfaces",
+            "StructureExecutionGameTests#templateAdapterResolvesAndPlacesRotatedTemplate",
             "WorldgenFixGameTests#villageFoundationsCrossChunkEdges",
             "WorldgenFixGameTests#snowSpringsAreFilteredBeforeFluidTicks");
 
@@ -116,13 +117,13 @@ class GameTestInventoryTest {
     @Test
     void everyAcceptanceGroupHasTheDocumentedSize() throws IOException {
         Map<String, List<String>> found = scanTestmodSources();
-        // The four sizes quoted by tools/run-full-gametest.sh. 10 + 6 + 1 + 1 = 18.
+        // The four sizes quoted by tools/run-full-gametest.sh. 10 + 7 + 1 + 1 = 19.
         assertEquals(10, found.getOrDefault("testcompanion", List.of()).size(), "default group size");
-        assertEquals(6, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
+        assertEquals(7, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
         assertEquals(1, found.getOrDefault("testcompanion_capacity", List.of()).size(), "capacity group size");
         assertEquals(1, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
         int total = GROUPS.values().stream().mapToInt(List::size).sum();
-        assertEquals(18, total, "the full acceptance entry covers every registered method exactly once");
+        assertEquals(19, total, "the full acceptance entry covers every registered method exactly once");
     }
 
     private Map<String, List<String>> scanTestmodSources() throws IOException {

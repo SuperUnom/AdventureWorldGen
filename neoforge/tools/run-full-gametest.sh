@@ -14,7 +14,7 @@
 #
 # Coverage is checked against the method inventory in
 # src/test/java/io/github/luoyan/adventureworldgen/GameTestInventoryTest.java:
-#   default 10 + performance 6 + capacity 1 + planning 1 = 18 methods.
+#   default 10 + performance 7 + capacity 1 + planning 1 = 19 methods.
 #
 # A passing run means the methods were discovered and passed. It is not a performance verdict:
 # the performance group reports its own timings in the log, and the planning group must use a
@@ -38,7 +38,7 @@ GROUP_TIMEOUT="${GROUP_TIMEOUT:-2700}"
 # assignment to it is silently ignored, which made this loop iterate over the user's gids instead.
 GAMETEST_GROUPS=(
   "default:10"
-  "performance:6"
+  "performance:7"
   "capacity:1"
   "planning:1"
 )

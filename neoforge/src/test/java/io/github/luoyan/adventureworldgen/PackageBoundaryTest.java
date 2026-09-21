@@ -232,7 +232,7 @@ class PackageBoundaryTest {
     }
 
     @Test
-    void plannedStructuresRemainPureDataAndWorldgenDoesNotExecuteThem() throws IOException {
+    void plannedStructuresRemainPureDataAndChunkGeneratorDoesNotExecuteThem() throws IOException {
         Path generator = sourceRoot.resolve("worldgen").resolve("AdventureChunkGenerator.java");
         Path planner = sourceRoot.resolve("planner").resolve("JointPlanner.java");
         assertTrue(Files.isRegularFile(generator), () -> "missing " + generator);
@@ -250,6 +250,16 @@ class PackageBoundaryTest {
                 "runtime/StructureAdapterBridge.java", "worldgen/FrozenPieceRestore.java",
                 "worldgen/RegisteredPieceSupport.java"))
             assertFalse(Files.exists(sourceRoot.resolve(removed)), () -> "removed structure execution class returned: " + removed);
+    }
+
+    @Test
+    void explicitStructureExecutionDoesNotReadPlanningState() throws IOException {
+        assertNoImport("worldgen/structure",
+                "io.github.luoyan.adventureworldgen.config",
+                "io.github.luoyan.adventureworldgen.persistence",
+                "io.github.luoyan.adventureworldgen.plan",
+                "io.github.luoyan.adventureworldgen.planner",
+                "io.github.luoyan.adventureworldgen.runtime");
     }
 
     private static long countJavaFiles(Path directory) throws IOException {

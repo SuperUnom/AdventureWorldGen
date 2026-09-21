@@ -33,7 +33,7 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 | `persistence` | 冻结快照、内部计划编解码、校验和及原子发布 |
 | `runtime` | 首次规划编排、READY 恢复、计划组装与会话查询屏障 |
 | `compat` | 原版群系兼容实现与水体群系规则 |
-| `worldgen` | 数据包读取、Minecraft 注册表接入与区块执行；不执行规划结构 |
+| `worldgen` | 数据包读取、Minecraft 注册表接入、区块执行与显式模板放置；不执行规划结构 |
 | `client` | 规划进度加载界面 |
 | `mixin` | 原版功能的受限接入钩子，目前用于泉口过滤 |
 
@@ -55,6 +55,7 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 - `api` 不引用内部求解与执行实现，`compat` 通过公开契约实现具体内容。
 - planner 只接收纯 `StructurePlanningInfo`，只输出纯 `PlannedStructurePlacement`；不得依赖结构部件、NBT 或区块执行。
 - 生成器不得消费规划结构来抑制原生候选、恢复 pieces 或注入 Minecraft 结构起点。
+- `worldgen.structure` 只接收调用方给出的最终三维位置，不得读取 planner、冻结计划或作者配置。
 - planner 不得按具体 structure ID 添加特例；未来结构差异只能通过纯 `StructurePlanningInfo` 输入。
 
 护栏按源码中的包引用检查，不是对所有运行时行为的证明。
@@ -69,7 +70,8 @@ AdventureWorldGen 将整合包作者的冒险意图编排为有限大陆的冻�
 | 作者结构需求 | `AdventureWorldConfig.StructureSettings` 与 `RequirementExpander.StructureDemand` |
 | 结构固有规划信息 | [StructurePlanningInfo](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/StructurePlanningInfo.java) 与 `StructurePlanningCatalog` |
 | 结构规划位置 | [PlannedStructurePlacement](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannedStructurePlacement.java) |
-| Minecraft 实际结构 | Minecraft 原生/数据包 worldgen；AdventureWorldGen 当前没有结构生成器 |
+| 显式结构执行 | [StructureAdapterManager](neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/StructureAdapterManager.java)；当前仅模板 adapter 会实际放置 |
+| Minecraft 原生结构 | Minecraft 原生/数据包 worldgen；Jigsaw 与普通 `Structure` 的显式定点执行尚未实现 |
 | 缺省地形参数 | [TerrainSettings](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainSettings.java)、[TerrainTemplate](neoforge/src/main/java/io/github/luoyan/adventureworldgen/terrain/TerrainTemplate.java) |
 | 算法与格式身份 | [PlanVersions](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlanVersions.java)、[PlannerProfile](neoforge/src/main/java/io/github/luoyan/adventureworldgen/plan/PlannerProfile.java)、[PlanIdentity](neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java) |
 | 架构边界 | 上述 `PackageBoundaryTest` |
