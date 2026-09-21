@@ -86,4 +86,87 @@ class StructureBiomePlanningTest {
         double east=uneven.sample(placement.anchorX()+16.5,placement.anchorZ()+.5).groundSurface();
         assertTrue(east-west>8,"regression terrain must reject the anchor under the removed ±16 flatness check");
     }
+
+    private AdventureWorldConfig sharedConfig(int maximum, int spacing) {
+        return new AdventureWorldConfigParser().parse("""
+          {"world":{"radius":256},"spawn":{"biome":"test:plains"},"biomes":{
+           "required":[{"id":"test:plains","adventure_level":0,"area":{"min":1024,"max":4096}},
+                       {"id":"test:forest","adventure_level":4,"area":{"min":4096,"max":16384,"target":8192}}],
+           "filler":["test:plains"]},
+           "structures":[{"id":"test:keep","adventure_level":6,"count":{"min":2,"max":%d},
+           "spacing":{"min":%d},"allowed_biomes":{"id":["test:forest"],
+           "area":{"min":4096,"max":65536,"target":8192}}}]}
+          """.formatted(maximum, spacing));
+    }
+
+    @Test
+    void requiredAndOptionalInstancesShareOneBiomeWhileKeepingSpacingAndOriginalLevels() {
+        var config = sharedConfig(3, 24);
+        var levelsSeen = new java.util.HashSet<Integer>();
+        var levels = JointPlanner.preferenceOnly((level, x, z) -> {
+            levelsSeen.add(level);
+            return 0;
+        });
+        var first = new JointPlanner(PlannerProfile.V2).plan(7331, config, FLAT, catalog(config), levels);
+        var second = new JointPlanner(PlannerProfile.V2).plan(7331, config, FLAT, catalog(config));
+        assertEquals(first, second);
+        assertEquals(3, first.structures().size());
+        assertEquals(2, first.patches().stream().filter(p -> !p.patchId().startsWith("filler/")).count());
+        var carrier = first.patches().stream().filter(p -> p.biomeId().value().equals("test:forest")).findFirst().orElseThrow();
+        assertEquals(5, carrier.adventureLevel());
+        assertTrue(levelsSeen.contains(5), "shared biome uses the rounded member average");
+        assertTrue(levelsSeen.contains(6), "structure anchors keep their own author level");
+        for (var structure : first.structures()) assertTrue(carrier.contains(structure.anchorX(), structure.anchorZ()));
+        for (int i = 0; i < first.structures().size(); i++) for (int j = 0; j < i; j++) {
+            var a = first.structures().get(i); var b = first.structures().get(j);
+            assertTrue(Math.hypot(a.anchorX() - b.anchorX(), a.anchorZ() - b.anchorZ()) >= 24);
+        }
+        assertTrue(first.patches().getFirst().contains(0, 0));
+        var relaxations = new ArrayList<MinimumAreaPolicy.Relaxation>();
+        MinimumAreaPolicy.checkAchievedAreas(config, first.patches(), p -> p.area(), relaxations::add);
+        assertTrue(relaxations.isEmpty(), "merged minimum must be counted only once");
+    }
+
+    @Test
+    void mergedRequiredCarrierCannotDisappearWithAnOrdinaryBiomeIdentity() {
+        var config = sharedConfig(2, 24);
+        var failure = assertThrows(PlanningFailure.class, () -> new JointPlanner(PlannerProfile.V2)
+                .plan(7331, config, FLAT, catalog(config), (level,x,z) -> true,
+                        (biome,x,z) -> !biome.value().equals("test:forest")));
+        assertEquals("required structure carrier", failure.diagnostics().get("role"));
+    }
+
+    @Test
+    void sharedAlternativeListFallsBackToALegalCommonBiome() {
+        var config = new AdventureWorldConfigParser().parse("""
+          {"world":{"radius":256},"spawn":{"biome":"test:plains"},"biomes":{
+           "required":[{"id":"test:plains","adventure_level":0,"area":{"min":1024,"max":4096}}],
+           "filler":["test:plains"]},"structures":[{"id":"test:keep","adventure_level":4,
+           "count":{"min":2,"max":2},"allowed_biomes":{"id":["test:forbidden","test:desert"],
+           "area":{"min":1024,"target":4096,"max":8192}}}]}
+          """);
+        var plan = new JointPlanner(PlannerProfile.V2).plan(7331, config, FLAT, catalog(config),
+                (level,x,z) -> true, (biome,x,z) -> !biome.value().equals("test:forbidden"));
+        var carriers = plan.patches().stream().filter(p -> p.biomeId().value().equals("test:desert")).toList();
+        assertEquals(1, carriers.size());
+        assertEquals(2, plan.structures().size());
+        for (var structure : plan.structures()) assertTrue(carriers.getFirst().contains(structure.anchorX(), structure.anchorZ()));
+    }
+
+    @Test
+    void failedOptionalSharingDoesNotChangeTheMinimumLayout() {
+        String json = """
+          {"world":{"radius":128},"spawn":{"biome":"test:plains"},"biomes":{
+           "required":[{"id":"test:plains","adventure_level":0,"area":{"min":4096,"max":16384}}],
+           "filler":["test:plains"]},"structures":[{"id":"test:keep","adventure_level":2,
+           "spacing":{"min":1000},"count":{"min":1,"max":%d},"allowed_biomes":{"id":["test:plains"],
+           "area":{"min":1024,"max":16384}}}]}
+          """;
+        var one = new AdventureWorldConfigParser().parse(json.formatted(1));
+        var two = new AdventureWorldConfigParser().parse(json.formatted(2));
+        var baseline = new JointPlanner(PlannerProfile.V2).plan(7331, one, FLAT, catalog(one));
+        var attempted = new JointPlanner(PlannerProfile.V2).plan(7331, two, FLAT, catalog(two));
+        assertEquals(baseline, attempted);
+        assertEquals(1, attempted.structures().size());
+    }
 }

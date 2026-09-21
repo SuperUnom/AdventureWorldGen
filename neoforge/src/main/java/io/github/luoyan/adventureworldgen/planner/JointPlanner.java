@@ -69,6 +69,12 @@ public final class JointPlanner {
         for (var settings : config.structures()) requirePlanningInfo(planningCatalog, settings.id());
         List<PlannedBiomePatch> patches = new ArrayList<>();
         List<PlannedStructurePlacement> structures = new ArrayList<>();
+        Map<String, String> carriers = new HashMap<>();
+        Map<String, LevelSpan> carrierLevels = new HashMap<>();
+        for (var patch : demands.patches()) {
+            carrierLevels.put(patch.patchId(), new LevelSpan(patch.minimumLevel(), patch.maximumLevel()));
+            for (var instance : patch.structureInstances()) carriers.put(instance, patch.patchId());
+        }
         long operations = 0;
         long indexStart = System.nanoTime();
         placementIndex = new PlacementIndex(config, terrain, levelConstraint, adapterConstraint, profile,
@@ -104,8 +110,8 @@ public final class JointPlanner {
         structureOrder.sort(java.util.Comparator.comparingInt(RequirementExpander.StructureDemand::adventureLevel)
                 .thenComparing(RequirementExpander.StructureDemand::instanceId));
         for(var demand:structureOrder) {
-            var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(demand.instanceId()))).findFirst().orElseThrow();
-            placeRequiredStructure(seed,terrain,planningCatalog,levelConstraint,carrier,structures,demand);
+            var carrier=patches.stream().filter(p->p.patchId().equals(carriers.get(demand.instanceId()))).findFirst().orElseThrow();
+            placeInCarrier(seed,terrain,planningCatalog,levelConstraint,carrier,structures,demand,true);
             operations++;
             observer.within(PlanningStage.STRUCTURES)
                     .accept(structures.size()/(double)structureOrder.size());
@@ -122,28 +128,35 @@ public final class JointPlanner {
                         StableIds.structureInstance(settings.id(), sequence), settings.id(), Math.toIntExact(sequence),
                         settings.adventureLevel(), settings.allowedBiomes().ids(), settings.allowedBiomes().area(),
                         settings.spacing(), false);
-                if (!placeStructure(seed, config, terrain, planningCatalog, levelConstraint, biomeConstraint, patches, structures,
-                        demand, 100_000 + Math.toIntExact(sequence), false)) break;
+                if (!reuseCarrier(seed, config, terrain, planningCatalog, levelConstraint, patches, structures,
+                        demand, carriers, carrierLevels)) {
+                    if (!placeStructure(seed, config, terrain, planningCatalog, levelConstraint, biomeConstraint, patches, structures,
+                            demand, 100_000 + Math.toIntExact(sequence), false)) break;
+                    String patchId = StableIds.carrierPatch(demand.instanceId());
+                    carriers.put(demand.instanceId(), patchId);
+                    carrierLevels.put(patchId, new LevelSpan(demand.adventureLevel(), demand.adventureLevel()));
+                }
                 operations++;
             }
         }
 
         AdventurePlanView.SpawnPosition spawn = resolveSpawn(terrain);
-        validate(config, demands, patches, structures, spawn, terrain, levelConstraint, biomeConstraint);
+        validate(config, demands, patches, structures, spawn, terrain, levelConstraint, biomeConstraint, carriers);
         checkpoint.accept("area_assignment");
         return new Result(patches, structures, spawn, operations);
     }
 
-    private void placeRequiredStructure(long seed, MacroTerrain terrain, StructurePlanningCatalog planningCatalog,
+    private boolean placeInCarrier(long seed, MacroTerrain terrain, StructurePlanningCatalog planningCatalog,
             LevelConstraint levels, PlannedBiomePatch carrier, List<PlannedStructurePlacement> structures,
-            RequirementExpander.StructureDemand demand) {
+            RequirementExpander.StructureDemand demand, boolean required) {
         requirePlanningInfo(planningCatalog, demand);
         long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure-in-biome",demand.instanceId(),0);
         long visited=0, budget=Math.min(4096,profile.search().requiredCandidatePreparations());
         var attempted=new HashSet<Long>();
+        long[] cells = carrierCells(carrier);
         for(int step:new int[]{16,8,4}) {
             var candidates=new ArrayList<PlacementIndex.Point>();
-            for(long cell:carrier.mask().cells()) {
+            for(long cell:cells) {
                 int x=CellMask.x(cell),z=CellMask.z(cell);
                 if(Math.floorMod(x,step)!=0||Math.floorMod(z,step)!=0||attempted.contains(cell))continue;
                 if(!levels.accepts(demand.adventureLevel(),x,z))continue;
@@ -161,13 +174,53 @@ public final class JointPlanner {
                 var sample=terrain.sample(x+.5,z+.5);
                 if(sample.wet()||sample.hazardous()||!carrier.contains(x,z))continue;
                 structures.add(new PlannedStructurePlacement(demand.instanceId(),demand.structureId(),x,z));
-                return;
+                return true;
             }
             if(visited>budget)break;
         }
-        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
+        if (!required) return false;
+        throw new PlanningFailure(visited > budget ? PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED
+                : PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
                 "no legal structure anchor in its planned required biome",
                 Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"visited",visited,"budget",budget));
+    }
+
+    private record LevelSpan(int minimum, int maximum) {
+        boolean accepts(int level) {
+            return Math.max(maximum, level) - Math.min(minimum, level) <= RequirementExpander.MAX_MERGED_LEVEL_SPAN;
+        }
+        LevelSpan include(int level) { return new LevelSpan(Math.min(minimum, level), Math.max(maximum, level)); }
+    }
+
+    private static long[] carrierCells(PlannedBiomePatch carrier) {
+        if (carrier.mask() != null) return carrier.mask().cells();
+        var cells = new it.unimi.dsi.fastutil.longs.LongArrayList();
+        for (int z = carrier.minZ(); z < carrier.maxZExclusive(); z += 4)
+            for (int x = carrier.minX(); x < carrier.maxXExclusive(); x += 4)
+                if (carrier.contains(x, z)) cells.add(CellMask.key(x, z));
+        return cells.toLongArray();
+    }
+
+    private boolean reuseCarrier(long seed, AdventureWorldConfig config, MacroTerrain terrain,
+                                 StructurePlanningCatalog catalog, LevelConstraint levels,
+                                 List<PlannedBiomePatch> patches, List<PlannedStructurePlacement> structures,
+                                 RequirementExpander.StructureDemand demand, Map<String, String> carriers,
+                                 Map<String, LevelSpan> carrierLevels) {
+        var allowed = demand.allowedBiomes().isEmpty() ? config.biomes().filler() : demand.allowedBiomes();
+        var candidates = patches.stream().filter(patch -> carrierLevels.containsKey(patch.patchId())
+                        && carrierLevels.get(patch.patchId()).accepts(demand.adventureLevel())
+                        && allowed.contains(patch.biomeId())
+                        && patch.area() >= demand.carrierArea().min() && patch.area() <= demand.carrierArea().max())
+                .sorted(java.util.Comparator.comparing(PlannedBiomePatch::patchId)).toList();
+        long attempts = 0;
+        for (var carrier : candidates) {
+            if (++attempts > profile.search().spawnCandidateAttempts()) break;
+            if (!placeInCarrier(seed, terrain, catalog, levels, carrier, structures, demand, false)) continue;
+            carriers.put(demand.instanceId(), carrier.patchId());
+            carrierLevels.put(carrier.patchId(), carrierLevels.get(carrier.patchId()).include(demand.adventureLevel()));
+            return true;
+        }
+        return false;
     }
 
     private boolean placeStructure(long seed, AdventureWorldConfig config, MacroTerrain terrain,
@@ -260,7 +313,7 @@ public final class JointPlanner {
                                  List<PlannedBiomePatch> patches,
                                  List<PlannedStructurePlacement> structures,
                                  AdventurePlanView.SpawnPosition spawn,
-                                 MacroTerrain terrain, LevelConstraint levels, BiomeConstraint biomes) {
+                                 MacroTerrain terrain, LevelConstraint levels, BiomeConstraint biomes, Map<String, String> carriers) {
         long visits = 0;
         Set<String> patchIds = new HashSet<>(), instanceIds = new HashSet<>();
         Map<String, RequirementExpander.PatchDemand> patchDemands = new HashMap<>();
@@ -315,7 +368,9 @@ public final class JointPlanner {
             if (sample.wet() || sample.hazardous()) fail("structure anchor is not safe dry terrain", structure.instanceId());
             if (!levels.accepts(settings.adventureLevel(), structure.anchorX(), structure.anchorZ()))
                 fail("structure violates the shared adventure level", structure.instanceId());
-            var carrier=patches.stream().filter(p->p.patchId().equals(StableIds.carrierPatch(structure.instanceId()))).findFirst().orElseThrow();
+            var carrier=patches.stream().filter(p->p.patchId().equals(carriers.get(structure.instanceId()))).findFirst().orElseThrow();
+            var allowed = settings.allowedBiomes().ids().isEmpty() ? config.biomes().filler() : settings.allowedBiomes().ids();
+            if (!allowed.contains(carrier.biomeId())) fail("shared carrier biome is not allowed", structure.instanceId());
             if(!carrier.contains(structure.anchorX(),structure.anchorZ()))
                 fail("structure anchor lost carrier ownership",structure.instanceId());
             counts.merge(structure.structureId(), 1L, Long::sum);

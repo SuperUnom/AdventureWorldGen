@@ -82,6 +82,26 @@ class PlanningBaselineTest {
                 "recorded planning baseline changed");
     }
 
+    @Test
+    void sharedBiomeAndStructureAnchorsSurviveReadyRoundTrip() throws Exception {
+        // Keep the old non-merging golden fixture above; exercise new behavior independently.
+        var config = new AdventureWorldConfigParser().parse(CONFIG.replace(
+                "\"id\":[\"test:desert\"]", "\"id\":[\"test:forest\"]"));
+        var plan = buildPlan(config);
+        var demands = new io.github.luoyan.adventureworldgen.planner.RequirementExpander().expandMinimum(config);
+        assertEquals(2, demands.patches().size());
+        var placement = plan.plannedStructures().getFirst();
+        String sharedId = demands.carrierPatchId(placement.instanceId());
+        var shared = plan.snapshot().biomePatches().stream().filter(p -> p.patchId().equals(sharedId)).findFirst().orElseThrow();
+        org.junit.jupiter.api.Assertions.assertTrue(shared.contains(placement.anchorX(), placement.anchorZ()));
+        var codec = new PlanV2Codec();
+        byte[] encoded = codec.encode(PROFILE, INPUT_HASH, plan.snapshot());
+        var restored = GeneratedAdventurePlan.restore(config, codec.decode(encoded, PROFILE, INPUT_HASH));
+        assertArrayEquals(encoded, codec.encode(PROFILE, INPUT_HASH, restored.snapshot()));
+        assertEquals(plan.plannedStructures(), restored.plannedStructures());
+        assertEquals(sampleFields(plan), sampleFields(restored));
+    }
+
     /** Mirrors RuntimePlanner's stage order and object reuse without its Minecraft adapters. */
     private static GeneratedAdventurePlan buildPlan(AdventureWorldConfig config) {
         double radius = config.world().radius();

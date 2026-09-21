@@ -74,7 +74,7 @@ parse 成功不等于内容预检或规划成功。
 
 | 字段 | 类型与必填性 | 缺省与语义 |
 |---|---|---|
-| `required` | 可选数组 | 缺省空；每项拥有独立需求身份 |
+| `required` | 可选数组 | 缺省空；每项拥有来源身份，可按[规划合并规则](../systems/planning.md#demands)共享地块 |
 | `required[].id` | 必填 ID | 需求群系；相同 ID 可重复 |
 | `required[].adventure_level` | 必填整数 [0,10] | 位置软偏好 |
 | `required[].area` | 可选面积对象 | 缺省取 AreaRange.DEFAULT |
@@ -140,7 +140,7 @@ min、target、max 在容量阶段和最终分配中的不同强度，统一定�
 | `count` | 必填对象 | min、max 均为必填非负整数，max ≥ min |
 | `allowed_biomes` | 必填对象 | 必须含 id 数组；可含 area 对象 |
 | `allowed_biomes.id` | ID 数组，可为空 | 排序去重；空列表从 filler 池展开候选，不代表任意注册群系 |
-| `allowed_biomes.area` | 可选面积对象 | 每个承载需求的面积设置，省略取 AreaRange.DEFAULT |
+| `allowed_biomes.area` | 可选面积对象 | 每个原始承载需求的面积设置；合并规则见[需求池](../systems/planning.md#demands)，省略取 AreaRange.DEFAULT |
 | `placement_mode` | 可选字符串 | 缺省且仅支持 scattered |
 | `spacing` | 可选对象 | min 缺省 0，max 缺省不限制 |
 | `spacing.min` | 有限数值 ≥ 0 | 方块距离 |

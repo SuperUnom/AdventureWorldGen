@@ -67,7 +67,8 @@ class GameTestInventoryTest {
 
     /** {@code testcompanion_planning}: fresh planning plus reload on a production profile. */
     private static final List<String> PLANNING_GROUP = List.of(
-            "PlanningPerformanceGameTests#productionPlanningAndReload");
+            "PlanningPerformanceGameTests#productionPlanningAndReload",
+            "PlanningPerformanceGameTests#sharedStructureCarriersPlanAndReload");
 
     /** Namespace -> the group that enables it. */
     private static final Map<String, List<String>> GROUPS = new LinkedHashMap<>();
@@ -125,10 +126,10 @@ class GameTestInventoryTest {
         assertEquals(10, found.getOrDefault("testcompanion", List.of()).size(), "default group size");
         assertEquals(6, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
         assertEquals(1, found.getOrDefault("testcompanion_capacity", List.of()).size(), "capacity group size");
-        assertEquals(1, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
+        assertEquals(2, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
         assertEquals(4, found.getOrDefault("testcompanion_structure", List.of()).size(), "structure group size");
         int total = GROUPS.values().stream().mapToInt(List::size).sum();
-        assertEquals(22, total, "the full acceptance entry covers every registered method exactly once");
+        assertEquals(23, total, "the full acceptance entry covers every registered method exactly once");
     }
 
     private Map<String, List<String>> scanTestmodSources() throws IOException {

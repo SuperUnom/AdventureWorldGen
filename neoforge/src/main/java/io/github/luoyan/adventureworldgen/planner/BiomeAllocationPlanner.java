@@ -83,7 +83,7 @@ public final class BiomeAllocationPlanner {
         this.config=config;this.index=index;this.reservations=reservations;this.rules=rules;this.progress=progress;
         this.observer=observer;
         operations=0;environments.clear();owner.clear();owner.defaultReturnValue(-1);regions.clear();
-        String spawn=demands.stream().filter(d->d.adventureLevel()==0&&d.allowedBiomes().contains(config.spawn().biome()))
+        String spawn=demands.stream().filter(RequirementExpander.PatchDemand::spawn)
                 .map(RequirementExpander.PatchDemand::patchId).findFirst().orElse(null);
         final String spawnId=spawn;
         var ordered=new ArrayList<>(demands);
@@ -210,8 +210,7 @@ public final class BiomeAllocationPlanner {
         // A missing ordinary biome is reported as zero supply. Spawn and required-structure
         // carriers still need one legal ownership seed, but the carrier does not reserve a core or
         // imply any structure footprint around that seed.
-        boolean carrier=r.demand.patchId().startsWith("patch/carrier/");
-        if(!central&&!carrier)return null;
+        if(!r.demand.requiresSeed())return null;
         String role=central?"spawn":"required structure carrier";
         throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.BIOME_SEED,"no legal biome seed for "+role,
                 Map.of("role",role,"biome",r.biome,"minimum",r.demand.area().min(),"target",r.demand.area().target(),"retry",r.retries,"competing_biomes",regions.stream().filter(other->!other.filler).map(other->other.biome.toString()).distinct().toList()));

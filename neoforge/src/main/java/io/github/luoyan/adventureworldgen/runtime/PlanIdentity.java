@@ -25,7 +25,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanVersions;
  */
 public final class PlanIdentity {
     /** Internal cache key revision; the public planner remains v2 while the payload is plan-v3. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-chunk-structures-r36";
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-shared-biome-demands-r37";
 
     private PlanIdentity() {}
 

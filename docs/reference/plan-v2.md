@@ -51,6 +51,8 @@ codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由�
 | 预算、网格或其他 profile 参数 | 不会整体自动入 hash；改变输出时必须审查版本身份 |
 
 v3 删除了结构执行数据，因此旧 `plan-v2` READY 明确不兼容并会被忽略/拒绝；系统不会尝试迁移其 pieces。
+群系需求合并规则改变布局与容量承诺，通过 `PlanIdentity.IMPLEMENTATION_REVISION` 纳入输入身份。
+共享需求成员和承载关联是规划期数据；READY 直接恢复已冻结地块与锚点，无需更改 payload 格式。
 新规划不会迁移已经生成的 Minecraft 区块，READY 失效也不是世界迁移机制。
 结构执行另外使用世界级资源身份保护半生成结构；其字段、范围及拒绝条件统一见 [结构执行](../systems/runtime-worldgen.md#structures)。
 
