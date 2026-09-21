@@ -1,6 +1,4 @@
 {
-  "road_access": {
-    "exclusion_radius": 128,
-    "approach_distance": 152
-  }
+  "footprint": {"min_x": -128, "min_z": -128, "max_x": 128, "max_z": 128},
+  "road_access": {"margin": 4, "connector_length": 16}
 }

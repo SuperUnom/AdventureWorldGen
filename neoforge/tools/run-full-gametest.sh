@@ -40,8 +40,8 @@ GAMETEST_GROUPS=(
   "default:10"
   "performance:6"
   "capacity:1"
-  "planning:2"
-  "structure:4"
+  "planning:6"
+  "structure:5"
   "roads:3"
 )
 

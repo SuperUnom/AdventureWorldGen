@@ -69,6 +69,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     private final HolderLookup.RegistryLookup<NormalNoise.NoiseParameters> noises;
     private volatile RandomState oceanRandomState;
     private volatile PlannedStructureBridge plannedStructureBridge;
+    private GeneratedAdventurePlan naturalView;
 
     public AdventureChunkGenerator(ResourceLocation profile, HolderLookup.RegistryLookup<Biome> biomes,
                                    HolderLookup.RegistryLookup<NoiseGeneratorSettings> noiseSettings,
@@ -89,6 +90,16 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 Registries.NOISE_SETTINGS, ResourceLocation.fromNamespaceAndPath("adventureworldgen", "ocean")));
         this.oceanSettings = ocean.value();
         this.oceanDelegate = new NoiseBasedChunkGenerator(biomeSource, ocean);
+    }
+
+    /** Isolated query-only generator: never waits for the plan being prepared, and never reads roads. */
+    public static AdventureChunkGenerator naturalQueries(RegistryAccess registries, ResourceLocation profile,
+                                                         GeneratedAdventurePlan view) {
+        var result = new AdventureChunkGenerator(profile,
+                new AdventureBiomeSource(profile, registries.lookupOrThrow(Registries.BIOME), view),
+                registries.lookupOrThrow(Registries.NOISE_SETTINGS), registries.lookupOrThrow(Registries.NOISE));
+        result.naturalView = view;
+        return result;
     }
 
     public ResourceLocation profile() { return profile; }
@@ -295,9 +306,9 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
     @Override
     public int getBaseHeight(int x, int z, Heightmap.Types type, LevelHeightAccessor level,
                              RandomState randomState) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
+        var plan = naturalView != null ? naturalView : (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
-        var road = plan.roadAt(x,z);
+        var road = naturalView == null ? plan.roadAt(x,z) : null;
         if (road != null) return road.deckY()+1;
         int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
         int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
@@ -308,7 +319,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
 
     @Override
     public NoiseColumn getBaseColumn(int x, int z, LevelHeightAccessor level, RandomState randomState) {
-        var plan = (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
+        var plan = naturalView != null ? naturalView : (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
         NoiseColumn nativeOcean = sample.waterKind() == WaterKind.OCEAN
                 ? oceanDelegate.getBaseColumn(x, z, level, oceanState(plan)) : null;
@@ -333,7 +344,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 states[y - MIN_Y] = nativeOcean.getBlock(y);
         }
         var column = new NoiseColumn(MIN_Y, states);
-        var road = plan.roadAt(x,z);
+        var road = naturalView == null ? plan.roadAt(x,z) : null;
         if(road!=null)RoadWorldgen.column(column,road,roadPalette(plan),plan);
         return column;
     }

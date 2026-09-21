@@ -1,6 +1,6 @@
-# 冻结计划 v4 与 READY
+# 冻结计划 v5 与 READY
 
-这里定义当前 `plan-v4` 的逻辑内容、身份、发布和恢复边界。
+这里定义当前 `plan-v5` 的逻辑内容、身份、发布和恢复边界。
 文件路径和 Java 类型 `PlanV2Codec` 暂时保留历史名称，但 codec 只接受活动格式版本；它们不是 v2 兼容承诺。
 格式是项目内部持久化协议，不是第三方稳定交换协议。
 
@@ -22,7 +22,7 @@
 | 地形设置、区域清单、容量与侵蚀增量 | 重建连续地形而不重跑侵蚀模拟 |
 | 群系 patch、气候、filler 与保护掩膜 | 恢复群系归属和过渡 |
 | `instance_id`、`structure_id`、`anchor_x`、`anchor_z` | 恢复结构宏观规划元数据 |
-| 道路节点、中心线、施工列、结构避让声明和失败诊断 | 恢复道路几何与索引，不重新寻路 |
+| 道路节点、中心线、施工列、矩形结构避让范围和失败诊断 | 恢复道路几何与索引，不重新寻路 |
 | 出生坐标 | 生命周期使用同一出生结果 |
 
 结构条目不含 Y、旋转、入口、范围、piece 类型或 NBT；执行层结合活动生成定义构造起点。
@@ -34,11 +34,15 @@ codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由�
 
 [PlanIdentity.hash](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/PlanIdentity.java)
 对固定顺序的规范化配置、世界 seed、算法/水文版本、实现修订、地形版本、排序后的 biome adapter 版本键，
-以及显式成本/侵蚀标记计算 SHA-256。profile ID 还会在 manifest 与 payload 中独立检查。
+以及显式成本/侵蚀标记、结构预检输入身份计算 SHA-256。profile ID 还会在 manifest 与 payload 中独立检查。
 
 `PlannerProfile.V2` 是保留的 Java 常量名，其活动 `planFormatVersion` 由该常量统一提供。
 不要在文档或工具中另维护“当前格式”字符串。
-`StructurePlanningInfo` 的结构 ID 与可选道路接入声明通过结构规划目录的规范表示进入摘要。
+`StructurePlanningInfo` 的结构 ID、显式禁入范围、接入 margin、局部连接长度、排序后的入口与朝向，
+以及资源导出的 Template 几何/影响范围和旋转选项，通过结构规划目录的规范表示进入摘要。
+生产结构预检输入身份包含活动执行资源摘要；它在查询 READY 前确定，动态实例范围是该输入下的派生结果。
+纯算法工具使用显式的 declared 模式，与生产原生实例计划不共用身份。
+资源导出发生在查询 READY 前；局部段与宏观道路共用冻结中心线和施工列，恢复不重新选择入口。
 作者全局道路字段与必须群系/结构条目的 `road` 均由 canonical 配置覆盖；新增任何影响输出的字段仍须同步审查摘要、算法版本、格式与 READY。
 
 <a id="compatibility"></a>
@@ -51,7 +55,7 @@ codec 使用规范化 JSON、UTF-8 和 gzip。随机 domain 的真实清单由�
 | 地形设置、区域规则 | 恢复时核对设置与区域清单；算法变化仍须提升身份版本 |
 | 预算、网格或其他 profile 参数 | 不会整体自动入 hash；改变输出时必须审查版本身份 |
 
-当前格式增加道路节点、路段和施工列，旧 `plan-v3` 及更早 READY 不兼容。
+当前格式将道路结构避让声明改为世界坐标矩形，旧 `plan-v4` 及更早 READY 不兼容。
 结构 pieces 继续保存在原生区块中；新格式不迁移已有结构或道路。
 群系需求合并规则改变布局与容量承诺，通过 `PlanIdentity.IMPLEMENTATION_REVISION` 纳入输入身份。
 道路目的地改由必须群系和结构条目声明，通过规范配置与实现修订使旧 READY 失效；冻结道路数据结构不变。

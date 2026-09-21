@@ -433,7 +433,9 @@ public final class PlanV2Codec {
             for(var key:List.of("x","z","deckY","bottomY","clearTopY"))roadInt(o,key);bool(o,"bridge");bool(o,"shoulder");
         }
         for(var reservation:array(root,"reservations")) {
-            var o=exactRoadObject(reservation,Set.of("instanceId","x","z","radius"));string(o,"instanceId");roadInt(o,"x");roadInt(o,"z");roadInt(o,"radius");
+            var o=exactRoadObject(reservation,Set.of("instanceId","bounds"));string(o,"instanceId");
+            var bounds=exactRoadObject(o.get("bounds"),Set.of("minX","minZ","maxX","maxZ"));
+            for(var key:List.of("minX","minZ","maxX","maxZ"))roadInt(bounds,key);
         }
         for(var skipped:array(root,"skipped")){var o=exactRoadObject(skipped,Set.of("id","reason"));string(o,"id");string(o,"reason");}
         return LAYOUT_JSON.fromJson(root,io.github.luoyan.adventureworldgen.plan.RoadPlan.class);

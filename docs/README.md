@@ -21,7 +21,7 @@
 | 道路路网、缓弯、短桥与区块铺设 | [道路系统](systems/roads.md) |
 | 服务器生命周期、计划查询、Minecraft 区块与原生结构边界 | [运行时与 worldgen](systems/runtime-worldgen.md) |
 | 作者 JSON、缺省行为与验证 | [Profile 参考](reference/profile.md) |
-| 冻结格式、身份或 READY 恢复 | [计划 v4 参考](reference/plan-v2.md) |
+| 冻结格式、身份或 READY 恢复 | [计划 v5 参考](reference/plan-v2.md) |
 | 数据包覆盖、第三方群系与结构规划信息 | [适配器参考](reference/adapters.md) |
 | 派生算法、上游归属和许可记录 | [FTF 来源说明](reference/ftf-provenance.md) |
 

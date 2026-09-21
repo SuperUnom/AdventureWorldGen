@@ -30,9 +30,14 @@ public final class RuntimePlanner {
 
     public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                               AdapterRegistry adapters) {
+        return plan(seed, loaded, worldDirectory, adapters, "declared", StructurePreparation.DECLARED);
+    }
+
+    public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
+            AdapterRegistry adapters, String structureInputs, StructurePreparation preparation) {
         var progress = PlanningProgress.begin(loaded.id().toString());
         try {
-            var result = plan(seed, loaded, worldDirectory, adapters, progress);
+            var result = plan(seed, loaded, worldDirectory, adapters, progress, structureInputs, preparation);
             progress.complete();
             return result;
         } catch (RuntimeException | Error failure) {
@@ -43,12 +48,12 @@ public final class RuntimePlanner {
 
     private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                                AdapterRegistry adapters,
-                                               PlanningProgress.Run progress) {
+                                               PlanningProgress.Run progress, String structureInputs, StructurePreparation preparation) {
         // The one place the production profile is chosen. Everything below receives it instead of
         // reaching for PlannerProfile.V2 on its own, so a re-versioned or re-budgeted profile
         // reaches every sub-stage and the recorded identity describes the run that actually ran.
         var profile = PlannerProfile.V2;
-        String inputHash = PlanIdentity.hash(seed, loaded, adapters, profile);
+        String inputHash = PlanIdentity.hash(seed, loaded, adapters, profile, structureInputs);
         AtomicPlanRepository repository = new AtomicPlanRepository();
         PlanV2Codec codec = new PlanV2Codec();
         try {
@@ -116,7 +121,7 @@ public final class RuntimePlanner {
                         costs.normalizedPreferenceAt(x, z, loaded.config().world().radius()))),
                 (biome, x, z) -> adapters.biome(biome)
                         .compatibility(erodedTerrain.sample(x + 0.5, z + 0.5)).allowed(), progress, progress.within(PlanningStage.PLACEMENT), metrics::finish);
-        GeneratedAdventurePlan plan = GeneratedAdventurePlan.fromPlanning(profile, seed, loaded.config(), coast.coastline(), rivers,
+        GeneratedAdventurePlan natural = GeneratedAdventurePlan.fromPlanning(profile, seed, loaded.config(), coast.coastline(), rivers,
                 64.0, coast.landBand(), coast.seaBand(), PlanVersions.TERRAIN, joint.spawn(),
                 joint.patches(), joint.structures(), new io.github.luoyan.adventureworldgen.plan.PlanDiagnostics(
                 coast.vertexCount(), rivers.channels().size(),
@@ -124,7 +129,10 @@ public final class RuntimePlanner {
                 (long) erosion.width() * erosion.height(), erosion.operationCount(),
                 costs.nodeCount(), costs.edgeStats().computedPairs(), joint.operationCount(),
                 PlanVersions.TERRAIN + "+" + profile.hydrologyVersion() + "+" + PlanVersions.EROSION), erosion,capacities,
-                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate(),structurePlanning), progress);
+                new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate(),structurePlanning), progress,
+                io.github.luoyan.adventureworldgen.plan.RoadPlan.EMPTY);
+        var preparedStructures = preparation.prepare(natural, structurePlanning);
+        GeneratedAdventurePlan plan = natural.completeStructures(preparedStructures, progress);
         metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
         LOGGER.info("Frozen roads: {} routes, {} columns, {} operations", plan.roads().routes().size(), plan.roads().columns().size(), plan.roads().operations());
         for (var skipped : plan.roads().skipped()) LOGGER.warn("Road destination {}: {}", skipped.id(), skipped.reason());

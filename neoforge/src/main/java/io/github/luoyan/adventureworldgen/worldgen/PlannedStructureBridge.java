@@ -58,29 +58,22 @@ public final class PlannedStructureBridge {
                 continue;
             }
             try {
-                var context = new Structure.GenerationContext(registries, generator, generator.getBiomeSource(), state.randomState(),
+                var queryGenerator = generator instanceof AdventureChunkGenerator adventure
+                        ? AdventureChunkGenerator.naturalQueries(registries, adventure.profile(),
+                            (io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan) adventure.roadPlanView()) : generator;
+                var context = new Structure.GenerationContext(registries, queryGenerator, queryGenerator.getBiomeSource(), state.randomState(),
                         templates, state.getLevelSeed(), chunk.getPos(), chunk, structure.biomes()::contains);
-                StructureExecutor executor = structure instanceof TemplateStructure ? new TemplateStructureExecutor()
-                        : structure instanceof JigsawStructure ? new JigsawStructureExecutor() : new JavaStructureExecutor();
-                var start = executor.generate(structure, context, new BlockPos(placement.anchorX(), 0, placement.anchorZ()));
+                var start = generateStart(structure, context, placement, catalog.terrain(id));
                 if (!start.isValid()) throw new IllegalStateException("no valid generation point/pieces (check biome and structure requirements)");
-                var terrain = catalog.terrain(id);
-                List<Foundation> supports = List.of();
-                if (terrain.mode() == TerrainSettings.Mode.FILL || terrain.mode() == TerrainSettings.Mode.FLATTEN) {
-                    supports = structure instanceof JigsawStructure ? JigsawTerrain.supports(start)
-                            : ((TerrainSupportProvider) structure).terrainSupports(start);
-                }
-                ((ExecutionDataHolder) (Object) start).adventureworldgen$setExecutionData(
-                        new StructureExecutionData(placement.instanceId(), terrain, supports));
                 validateEnvelope(start, chunk);
                 if(generator instanceof AdventureChunkGenerator adventure) {
                     var plan=adventure.roadPlanView();
                     for(var r:plan.roads().reservations())if(r.instanceId().equals(placement.instanceId())) {
                         var box=start.getBoundingBox();
-                        if(box.minX()<r.x()-r.radius()||box.maxX()>r.x()+r.radius()||box.minZ()<r.z()-r.radius()||box.maxZ()>r.z()+r.radius())
+                        if(!r.bounds().contains(new io.github.luoyan.adventureworldgen.plan.BoundsXZ(box.minX(),box.minZ(),box.maxX(),box.maxZ())))
                             throw new IllegalStateException("structure violates declared road exclusion envelope: "+r.instanceId());
                     }
-                    if(RoadWorldgen.intersects(plan,start.getBoundingBox(),StructureTerrain.NATIVE_MARGIN))throw new IllegalStateException("planned structure intersects frozen road");
+                    if(RoadWorldgen.intersects(plan,start.getBoundingBox(),0))throw new IllegalStateException("planned structure intersects frozen road");
                 }
                 manager.setStartForStructure(SectionPos.bottomOf(chunk), structure, start, chunk);
             } catch (RuntimeException failure) {
@@ -90,13 +83,31 @@ public final class PlannedStructureBridge {
         }
     }
 
+    /** Shared construction path for startup validation and native chunk execution. No starts are cached. */
+    public static StructureStart generateStart(Structure structure, Structure.GenerationContext context,
+                                               PlannedStructurePlacement placement, TerrainSettings terrain) {
+        StructureExecutor executor = structure instanceof TemplateStructure ? new TemplateStructureExecutor()
+                : structure instanceof JigsawStructure ? new JigsawStructureExecutor() : new JavaStructureExecutor();
+        var start = executor.generate(structure, context, new BlockPos(placement.anchorX(), 0, placement.anchorZ()));
+        if (!start.isValid()) return start;
+        List<Foundation> supports = List.of();
+        if (terrain.mode() == TerrainSettings.Mode.FILL || terrain.mode() == TerrainSettings.Mode.FLATTEN)
+            supports = structure instanceof JigsawStructure ? JigsawTerrain.supports(start)
+                    : ((TerrainSupportProvider) structure).terrainSupports(start);
+        ((ExecutionDataHolder) (Object) start).adventureworldgen$setExecutionData(
+                new StructureExecutionData(placement.instanceId(), terrain, supports));
+        return start;
+    }
+
     public static void validateEnvelope(StructureStart start, ChunkAccess chunk) {
+        validateEnvelope(start, chunk.getPos(), chunk);
+    }
+    public static void validateEnvelope(StructureStart start, ChunkPos owner, net.minecraft.world.level.LevelHeightAccessor height) {
         var box = start.getBoundingBox();
-        var owner = chunk.getPos();
         if ((box.minX() >> 4) < owner.x - 8 || (box.maxX() >> 4) > owner.x + 8
                 || (box.minZ() >> 4) < owner.z - 8 || (box.maxZ() >> 4) > owner.z + 8)
             throw new IllegalStateException("structure/terrain exceeds native 8-chunk reference radius: " + box);
-        if (box.minY() < chunk.getMinBuildHeight() || box.maxY() >= chunk.getMaxBuildHeight())
+        if (box.minY() < height.getMinBuildHeight() || box.maxY() >= height.getMaxBuildHeight())
             throw new IllegalStateException("structure/terrain exceeds build height: " + box);
     }
 }

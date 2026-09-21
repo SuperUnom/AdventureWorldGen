@@ -21,8 +21,8 @@ class RoadConfigTest {
         assertNotEquals(CanonicalConfigJson.write(config),CanonicalConfigJson.write(changed));
         assertEquals(CanonicalConfigJson.write(changed),CanonicalConfigJson.write(parser.parse(CanonicalConfigJson.write(changed))));
         var id=new ContentId("test:profile");var structure=new ContentId("test:keep");
-        var first=new LoadedProfile(id,changed,CanonicalConfigJson.write(changed),"test",StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(structure,new StructurePlanningInfo.RoadAccess(24,48)))));
-        var second=new LoadedProfile(id,changed,CanonicalConfigJson.write(changed),"test",StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(structure,new StructurePlanningInfo.RoadAccess(32,48)))));
+        var first=new LoadedProfile(id,changed,CanonicalConfigJson.write(changed),"test",StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(structure,new BoundsXZ(-24,-24,24,24),new StructurePlanningInfo.RoadAccess(24)))));
+        var second=new LoadedProfile(id,changed,CanonicalConfigJson.write(changed),"test",StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(structure,new BoundsXZ(-32,-32,32,32),new StructurePlanningInfo.RoadAccess(16)))));
         var adapters=AdapterRegistry.builder(new BiomeAdapter(){
             public ContentId biomeId(){return new ContentId("test:plains");}
             public String adapterVersion(){return "test";}
@@ -82,7 +82,7 @@ class RoadConfigTest {
                 assertEquals(1,village.count().min());assertEquals(1,village.count().max());assertTrue(village.road().enabled());assertTrue(village.road().required());
                 try(var access=getClass().getResourceAsStream("/data/minecraft/adventureworldgen/structure_planning/"+village.id().value().split(":")[1]+".json")) {
                     assertNotNull(access);var json=JsonParser.parseString(new String(access.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonObject("road_access");
-                    assertDoesNotThrow(()->new StructurePlanningInfo.RoadAccess(json.get("exclusion_radius").getAsInt(),json.get("approach_distance").getAsInt()));
+                    assertDoesNotThrow(()->new StructurePlanningInfo.RoadAccess(json.get("margin").getAsInt()));
                 }
             }
         }

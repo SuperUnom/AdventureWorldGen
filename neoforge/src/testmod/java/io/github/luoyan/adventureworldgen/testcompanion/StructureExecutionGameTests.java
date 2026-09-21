@@ -30,6 +30,7 @@ import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.Structure;
 import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceSerializationContext;
 import net.minecraft.world.level.storage.DerivedLevelData;
 import net.minecraft.world.level.storage.LevelStorageSource;
@@ -241,6 +242,51 @@ public final class StructureExecutionGameTests {
         try { GenerationIdentityFile.verifyOrCreate(file, "changed"); }
         catch (IllegalStateException expected) { failed = true; }
         helper.assertTrue(failed, "changed resources accepted in existing structure world");
+        helper.succeed();
+    }
+
+    @GameTest(templateNamespace = "testcompanion_structure", template = "empty", timeoutTicks = 1200)
+    public static void templateFootprintsMatchNativeStartsAndRotation(GameTestHelper helper) throws Exception {
+        var level=helper.getLevel();var registries=level.registryAccess();
+        var templates=level.getStructureManager();var generator=level.getChunkSource().getGenerator();
+        var original=(TemplateStructure)registries.registryOrThrow(Registries.STRUCTURE).get(ResourceLocation.parse("testcompanion:execution_template"));
+        var config=new AdventureWorldConfigParser().parse("""
+            {"world":{"radius":512},"spawn":{"biome":"minecraft:plains"},"biomes":{"filler":["minecraft:plains"]},
+             "structures":[{"id":"testcompanion:execution_template","adventure_level":1,"count":{"min":1,"max":1},"allowed_biomes":{"id":["minecraft:plains"]}}]}
+            """);
+        var profile=new io.github.luoyan.adventureworldgen.config.LoadedProfile(new ContentId("testcompanion:template-metadata"),config,
+                io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config),"fixture");
+        var execution=StructureExecutionCatalog.load(Set.of(ResourceLocation.parse("testcompanion:execution_template")),registries,
+                level.getServer().getResourceManager(),templates);
+        var resolved=StructureFootprintResources.resolve(profile,registries,templates,execution);
+        helper.assertTrue(resolved.structurePlanning().find(new ContentId("testcompanion:execution_template")).orElseThrow().templateFootprint()!=null,
+                "startup resource enrichment lost template geometry");
+        var adapters=MinecraftAdapters.builtIn();
+        helper.assertTrue(!io.github.luoyan.adventureworldgen.runtime.PlanIdentity.hash(17,profile,adapters,io.github.luoyan.adventureworldgen.plan.PlannerProfile.V2)
+                .equals(io.github.luoyan.adventureworldgen.runtime.PlanIdentity.hash(17,resolved,adapters,io.github.luoyan.adventureworldgen.plan.PlannerProfile.V2)),
+                "resource-derived footprint did not enter the READY identity");
+        var ops=net.minecraft.resources.RegistryOps.create(com.mojang.serialization.JsonOps.INSTANCE,registries);
+        for(int orientation:List.of(0,1,2,3,-1)) {
+            var json=TemplateStructure.CODEC.codec().encodeStart(ops,original).getOrThrow().getAsJsonObject();
+            if(orientation<0)json.remove("rotation");else json.addProperty("rotation",net.minecraft.world.level.block.Rotation.values()[orientation].getSerializedName());
+            var template=TemplateStructure.CODEC.codec().parse(ops,json).getOrThrow();
+            for(var mode:List.of(TerrainSettings.Mode.NONE,TerrainSettings.Mode.FLATTEN)) {
+                var settings=new TerrainSettings(mode,8);var predictions=template.planningBounds(templates,settings);
+                for(long seed:List.of(0L,17L,91823L))for(int x:List.of(-33,21)) {
+                    var anchor=new BlockPos(x,0,-17);var chunk=new ChunkPos(anchor);
+                    var context=new Structure.GenerationContext(registries,generator,generator.getBiomeSource(),level.getChunkSource().randomState(),
+                            templates,seed,chunk,level,biome->true);
+                    int selected=predictions.size()==1?0:io.github.luoyan.adventureworldgen.spatial.TemplateRotation.index(seed,chunk.x,chunk.z);
+                    if(predictions.size()==4)helper.assertTrue(selected==net.minecraft.world.level.block.Rotation.getRandom(context.random()).ordinal(),"rotation differs from native first draw");
+                    var start=new TemplateStructureExecutor().generate(template,context,anchor);
+                    var foundations=mode==TerrainSettings.Mode.FLATTEN?template.terrainSupports(start):List.<Foundation>of();
+                    ((ExecutionDataHolder)(Object)start).adventureworldgen$setExecutionData(new StructureExecutionData("test",settings,foundations));
+                    var actual=start.getBoundingBox();var expected=predictions.get(selected).exclusion();
+                    helper.assertTrue(actual.minX()==expected.minX()+x&&actual.maxX()==expected.maxX()+x
+                            &&actual.minZ()==expected.minZ()-17&&actual.maxZ()==expected.maxZ()-17,"predicted template influence differs from native start");
+                }
+            }
+        }
         helper.succeed();
     }
 

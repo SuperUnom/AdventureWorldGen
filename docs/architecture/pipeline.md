@@ -34,6 +34,8 @@ profile 资源重载只更新加载结果，不能使已有 future 自动失效�
 | 成本 | `CostPlanner` 从中心参考点构图 | 全局成本与冒险偏好信号 |
 | 群系与结构 | `JointPlanner` 展开需求、建立索引与气候、竞争分配群系，再放必需和可选结构锚点 | 地块、宏观结构锚点、实际出生点 |
 | 计划组装 | `GeneratedAdventurePlan.fromPlanning` 复用地形和气候；`PlanAssembly` 构造剩余填充与过渡 | 可查询计划及冻结布局 |
+| 原生实例预检 | worldgen 通过自然查询验证候选并导出纯范围，丢弃临时 pieces | 经验证的锚点与实例范围 |
+| 道路 | `RoadPlanner` 消费纯实例信息，构造并验证完整施工列 | 冻结路网 |
 | 终检 | 有效面积、锚点承载、数量与间距检查 | 可发布快照 |
 | 保存 | 编码、原子发布，随后输出性能诊断 | READY 和查询对象 |
 
@@ -59,7 +61,7 @@ READY 恢复后，worldgen 组装结构锚点到起点区块的只读索引，�
 `PlanV2Codec` 只编码和解码快照；`AtomicPlanRepository` 只负责磁盘包和完整性。
 发布完成后，规划 future 返回计划，等待者才能继续。
 
-冻结对象关系、输入身份、READY 目录及损坏处理的唯一契约见 [计划 v4](../reference/plan-v2.md)。
+冻结对象关系、输入身份、READY 目录及损坏处理的唯一契约见 [计划 v5](../reference/plan-v2.md)。
 
 <a id="ready"></a>
 ## READY reload

@@ -101,9 +101,9 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 
 纯数据往返运行 persistence 和 runtime 测试；`PlanningBaselineTest` 检查规范字节、恢复后重编码与采样字段。
 GameTest 中需要 fresh planning 的组必须使用全新目录，恢复对照必须复用同一目录、seed 与配置。
-READY 仍只恢复宏观锚点；pieces 与执行地基元数据在原生区块存档中恢复，由 structure 组独立覆盖。
+READY 恢复宏观锚点、矩形道路禁入范围与完整道路施工列；pieces 与执行地基元数据在原生区块存档中恢复，由 structure 组独立覆盖。
 Mojang GameTest 服务器默认关闭结构；testmod 的专用 mixin 仅在 structure 组启用结构选项，不进入生产 JAR。
-planning 组的默认村庄起点检查使用显式启用结构的 `StructureManager` 调用生产生成入口；不等同于客户端方块外观验收。
+planning 组的村庄起点检查使用显式启用结构的 `StructureManager` 调用生产生成入口；报告种子回归还覆盖原生实例预检、真实部件接入距离、逆序生成和 READY pieces 重放。不等同于客户端方块外观验收。
 不要删除用户存档来制造 cold 条件；使用运行器生成的独立目录。
 
 <a id="tools"></a>

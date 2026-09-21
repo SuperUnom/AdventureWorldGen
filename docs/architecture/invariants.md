@@ -87,12 +87,13 @@ Adventure level 是位置软偏好，不是互斥空间区间。
 - `StructureDemand` 是作者需求，不是结构自身属性。
 - `PlannedStructurePlacement` 是宏观锚点，不是 Minecraft 结构起点或最终原点。
 - planner 只产生纯规划数据，不产生 Minecraft 对象，也不得按具体 structure ID 写特例。
-- worldgen 桥接层消费冻结锚点，三类执行器构造原生起点；planner 不调用生成实现。
+- worldgen 在 READY 前按有界契约验证候选、导出纯实例范围；区块桥接层消费冻结锚点，三类执行器重建原生起点。planner 不调用生成实现。
 - 同 ID 同起点区块冲突必须失败；生成失败不得跳过或移动实例。
 - 原生起点是 pieces 和执行地基描述的存档权威，不在全局计划保存第二套执行几何。
 - 地基过渡带也必须建立区块引用；结构及适配范围必须通过原生引用半径校验。
 - 已完成 FEATURES 的区块不在加载时重放；Java 结构不做通用平移。
-- 当前 carrier 只表达群系 ownership；没有结构尺寸输入时，planner 不预留固定核心或检查固定半径平整度。
+- 当前 carrier 只表达群系 ownership；结构范围是道路避让输入，不自动改变 carrier 或承诺平整度。
+- 结构禁入范围与是否连接道路独立；资源预检与原生实例验证只向规划层提供纯水平范围；启动临时构造的 pieces 不进入全局计划。
 - 如果 `StructurePlanningInfo` 新增会影响 planner 输出的字段，这些字段必须进入计划输入身份；同时审查算法版本、
   冻结格式和 READY 失效条件，不能让旧 READY 在结构规划输入已变化时继续命中。
 

@@ -61,6 +61,26 @@ public final class TemplateStructure extends Structure implements TerrainSupport
 
     public TerrainSettings foundationSettings() { return terrain; }
 
+    public record PlanningBounds(BoundingBox geometry,BoundingBox exclusion,int rotation) {}
+    /** No height/biome query or piece construction: horizontal geometry is resource-defined. */
+    public List<PlanningBounds> planningBounds(StructureTemplateManager manager,TerrainSettings effectiveTerrain) {
+        validateTemplate(manager);
+        var value=manager.get(template).orElseThrow();
+        var rotations=rotation.map(List::of).orElseGet(()->List.of(Rotation.values()));
+        return rotations.stream().map(selected->{
+            var geometry=value.getBoundingBox(new StructurePlaceSettings().setRotation(selected),BlockPos.ZERO);
+            var exclusion=adjustBoundingBox(geometry);
+            if(effectiveTerrain.mode()==TerrainSettings.Mode.FILL||effectiveTerrain.mode()==TerrainSettings.Mode.FLATTEN) {
+                var a=StructureTemplate.transform(new BlockPos(support.minX(),0,support.minZ()),Mirror.NONE,selected,BlockPos.ZERO);
+                var b=StructureTemplate.transform(new BlockPos(support.maxX(),0,support.maxZ()),Mirror.NONE,selected,BlockPos.ZERO);
+                var area=new Foundation(Math.min(a.getX(),b.getX()),Math.min(a.getZ(),b.getZ()),
+                        Math.max(a.getX(),b.getX()),Math.max(a.getZ(),b.getZ()),0);
+                exclusion=BoundingBox.encapsulatingBoxes(List.of(exclusion,area.influence(effectiveTerrain.margin()))).orElseThrow();
+            }
+            return new PlanningBounds(geometry,exclusion,selected.ordinal());
+        }).toList();
+    }
+
     public void validateTemplate(StructureTemplateManager manager) {
         var value = manager.get(template).orElseThrow(() -> new IllegalStateException("missing template " + template));
         var size = value.getSize();
@@ -80,7 +100,8 @@ public final class TemplateStructure extends Structure implements TerrainSupport
 
     public GenerationStub assemble(GenerationContext context, BlockPos anchor) {
         validateTemplate(context.structureTemplateManager());
-        Rotation selected = rotation.orElseGet(() -> Rotation.getRandom(context.random()));
+        Rotation selected = rotation.orElseGet(() -> Rotation.values()[
+                io.github.luoyan.adventureworldgen.spatial.TemplateRotation.index(context.seed(),context.chunkPos().x,context.chunkPos().z)]);
         int surface = context.chunkGenerator().getFirstFreeHeight(anchor.getX(), anchor.getZ(), heightmap,
                 context.heightAccessor(), context.randomState()) + heightOffset;
         BlockPos origin = new BlockPos(anchor.getX(), surface - support.surface(), anchor.getZ());

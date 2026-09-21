@@ -71,14 +71,19 @@ public final class AdventureEvents {
         var managed = loaded.config().structures().stream().map(s -> ResourceLocation.parse(s.id().value()))
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
         var execution = StructureExecutionCatalog.load(managed, server.registryAccess(), server.getResourceManager(), server.getStructureManager());
+        var planningProfile = io.github.luoyan.adventureworldgen.worldgen.StructureFootprintResources.resolve(
+                loaded,server.registryAccess(),server.getStructureManager(),execution);
         String identity = loaded.config().roads().enabled() || !managed.isEmpty() || java.nio.file.Files.exists(worldDirectory.resolve("adventureworldgen/structure-generation.sha256"))
-                ? StructureExecutionIdentity.hash(server, execution, PlanIdentity.hash(seed, loaded, adapters, PlannerProfile.V2)) : null;
+                ? StructureExecutionIdentity.hash(server, execution, PlanIdentity.hash(seed, planningProfile, adapters, PlannerProfile.V2)) : null;
         if (identity != null) {
             try { GenerationIdentityFile.check(worldDirectory, identity); }
             catch (java.io.IOException failure) { throw new IllegalStateException("could not pin structure generation identity", failure); }
         }
         RuntimePlanRegistry.start(planKey(generator), () -> {
-            var plan = RuntimePlanner.plan(seed, loaded, worldDirectory, adapters);
+            var plan = RuntimePlanner.plan(seed, planningProfile, worldDirectory, adapters,
+                    identity == null ? "declared" : identity,
+                    new io.github.luoyan.adventureworldgen.worldgen.StructureInstancePreparation(server.registryAccess(),
+                            server.getStructureManager(), execution, loaded.config(), generator.profile()));
             generator.prepareStructureExecution(execution, plan);
             if (identity != null) {
                 try { GenerationIdentityFile.verifyOrCreate(worldDirectory, identity); }

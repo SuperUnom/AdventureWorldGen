@@ -35,6 +35,9 @@ class PlanIdentityTest {
         String baseline = PlanIdentity.hash(7L, loaded, adapters, PlannerProfile.V2);
 
         assertEquals(baseline, PlanIdentity.hash(7L, loaded, adapters, PlannerProfile.V2), "identical inputs must be identical");
+        assertNotEquals(baseline, PlanIdentity.hash(7L, loaded, adapters, PlannerProfile.V2, "native-resources-v1"));
+        assertNotEquals(PlanIdentity.hash(7L, loaded, adapters, PlannerProfile.V2, "native-resources-v1"),
+                PlanIdentity.hash(7L, loaded, adapters, PlannerProfile.V2, "native-resources-v2"));
         assertTrue(baseline.matches("[0-9a-f]{64}"), "identity is a sha-256 hex digest");
         assertNotEquals(baseline, PlanIdentity.hash(8L, loaded, adapters, PlannerProfile.V2), "the seed is part of the identity");
         assertNotEquals(baseline, PlanIdentity.hash(7L, profile("{\"canonical\":2}"), adapters, PlannerProfile.V2),
@@ -50,6 +53,7 @@ class PlanIdentityTest {
         var loaded = profile("{\"canonical\":1}");
         var adapters = registry("v1");
         String expectedInput = loaded.canonicalJson() + "\nseed=7\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
+                + "\nstructure_inputs=declared"
                 + "\nstructure_planning=" + loaded.structurePlanning().canonicalIdentity()
                 + "\nimplementation=" + PlanIdentity.IMPLEMENTATION_REVISION
                 + "\nhydrology=" + PlannerProfile.V2.hydrologyVersion() + "\nterrain=" + PlanVersions.TERRAIN + "\nadapters="

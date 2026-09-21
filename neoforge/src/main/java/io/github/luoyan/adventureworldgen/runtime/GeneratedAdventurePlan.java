@@ -48,6 +48,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final java.util.Set<String> blendProtectedPatches=new java.util.HashSet<>();
     private final AdventureWorldConfig config;
     private final MacroTerrain terrain;
+    private final PlanTerrain terrainStack;
     private final HydrologyTerrain waterTerrain;
     private final RegionTerrain regions;
     private final MacroTerrain islandTerrain;
@@ -122,9 +123,18 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                                               PlanDiagnostics diagnostics, ErosionDeltaField erosion,
                                               io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities,
                                               PlanningInputs prepared, PlanningObserver observer) {
+        return fromPlanning(profile, seed, config, coastline, riverNetwork, seaSurface, landBand, seaBand, terrainVersion,
+                spawn, biomePatches, structures, diagnostics, erosion, capacities, prepared, observer, null);
+    }
+    static GeneratedAdventurePlan fromPlanning(PlannerProfile profile, long seed, AdventureWorldConfig config,
+            Coastline coastline, RiverNetwork riverNetwork, double seaSurface, double landBand, double seaBand,
+            String terrainVersion, SpawnPosition spawn, List<PlannedBiomePatch> biomePatches,
+            List<PlannedStructurePlacement> structures, PlanDiagnostics diagnostics, ErosionDeltaField erosion,
+            io.github.luoyan.adventureworldgen.terrain.TerrainCapacityPlan capacities, PlanningInputs prepared,
+            PlanningObserver observer, io.github.luoyan.adventureworldgen.plan.RoadPlan frozenRoads) {
         return new GeneratedAdventurePlan(profile, seed, config, coastline, riverNetwork, seaSurface, landBand,
                 seaBand, terrainVersion, spawn, biomePatches, structures, diagnostics, erosion, capacities, null,
-                java.util.Objects.requireNonNull(prepared, "prepared"), observer, null);
+                java.util.Objects.requireNonNull(prepared, "prepared"), observer, frozenRoads);
     }
 
     /**
@@ -160,7 +170,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         this.erosion = erosion;
         // Terrain assembly lives in PlanTerrain: the first planning run hands over the objects it
         // already built, a decoded plan rebuilds the same stack from frozen data.
-        PlanTerrain terrainStack = prepared == null
+        terrainStack = prepared == null
                 ? PlanTerrain.assemble(profile, seed, config, capacities, coastline, riverNetwork, seaSurface,
                         landBand, seaBand, terrainVersion, erosion)
                 : prepared.terrain();
@@ -193,6 +203,12 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
                         this.structures.stream().map(PlannedStructurePlacement::structureId).toList()) : prepared.structurePlanning(),
                 (x,z) -> biomeAt(x,64,z));
         roadIndex = new RoadIndex(roads);
+    }
+
+    GeneratedAdventurePlan completeStructures(StructurePreparation.Result prepared, PlanningObserver observer) {
+        return new GeneratedAdventurePlan(profile, seed, config, coastline, riverNetwork, seaSurface, landBand,
+                seaBand, terrainVersion, spawn, biomePatches, prepared.placements(), diagnostics, erosion,
+                capacities, biomeLayout(), new PlanningInputs(terrainStack, climate, prepared.catalog()), observer, null);
     }
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,

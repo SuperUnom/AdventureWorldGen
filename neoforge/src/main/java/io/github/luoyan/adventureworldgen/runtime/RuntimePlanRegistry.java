@@ -38,5 +38,11 @@ public final class RuntimePlanRegistry {
         return plan.join();
     }
 
+    /** Release a closed consumer's plan without removing another profile or a newer publication. */
+    public static void release(ContentId profile, AdventurePlanView expected) {
+        PLANS.computeIfPresent(profile, (key, future) -> future.isDone() && !future.isCompletedExceptionally()
+                && future.getNow(null) == expected ? null : future);
+    }
+
     public static void clear() { PLANS.clear(); PlanningProgress.clear(); }
 }

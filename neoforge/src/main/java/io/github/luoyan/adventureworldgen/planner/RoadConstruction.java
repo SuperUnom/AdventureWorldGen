@@ -32,6 +32,21 @@ final class RoadConstruction {
         var cells = new TreeMap<Long, Cell>();
         double coreHalf = settings.width() / 2.0;
         double half = coreHalf + 1;
+        // Previously accepted routes are still tentative, not published frozen columns. Re-solve
+        // their shared elevation envelope with the new edge: pinning already-rounded Y values
+        // can make an otherwise feasible junction fail at the earthwork boundary.
+        for(var old:existing.values()) {
+            var sample=sampler.sample(old.x()+.5,old.z()+.5);
+            double ground=StrictMath.floor(sample.groundSurface())-1;
+            double lower=sample.wet()?StrictMath.ceil(sample.waterSurface())+2:ground-settings.maximumEarthwork();
+            double upper=sample.wet()?lower+settings.maximumEarthwork():ground+settings.maximumEarthwork();
+            boolean fixed=Math.abs(old.x()-spawnX)<=2&&Math.abs(old.z()-spawnZ)<=2;
+            double desired=Math.clamp(old.deckY(),lower,upper);
+            if(fixed){desired=spawnDeck;lower=spawnDeck;upper=spawnDeck;}
+            cells.put(RoadPlan.key(old.x(),old.z()),new Cell(old.x(),old.z(),sample,desired,lower,upper,
+                    old.shoulder()?half:0,fixed));
+        }
+        var pathCells=new HashSet<Long>();
         long addedColumns=0;
         for (int i=1;i<path.size();i++) {
             Vec2 a=path.get(i-1), b=path.get(i);
@@ -44,11 +59,11 @@ final class RoadConstruction {
                 double t=Math.clamp(((x+.5-a.x())*dx+(z+.5-a.z())*dz)/length2,0,1);
                 double distance=StrictMath.hypot(x+.5-a.x()-t*dx,z+.5-a.z()-t*dz);
                 if(distance>half)continue;
-                long key=RoadPlan.key(x,z); Cell prior=cells.get(key);
+                long key=RoadPlan.key(x,z); pathCells.add(key); Cell prior=cells.get(key);
                 if(prior!=null && prior.distance<=distance)continue;
-                for(var r:reservations)if(Math.abs(x-r.x())<=r.radius() && Math.abs(z-r.z())<=r.radius())return fail("STRUCTURE_RESERVATION");
+                for(var r:reservations)if(r.bounds().contains(x+.5,z+.5,0))return fail("STRUCTURE_RESERVATION");
                 MacroSample sample=sampler.sample(x+.5,z+.5);
-                if(distance>coreHalf && sample.wet())continue;
+                if(distance>coreHalf && sample.wet()){pathCells.remove(key);continue;}
                 if(sample.hazardous() || sample.wet() && sample.waterKind()!=WaterKind.RIVER)return fail("FORBIDDEN_TERRAIN");
                 double ground=StrictMath.floor(sample.groundSurface())-1;
                 double lower=sample.wet()?StrictMath.ceil(sample.waterSurface())+2:ground-settings.maximumEarthwork();
@@ -56,13 +71,29 @@ final class RoadConstruction {
                 double desired=Math.clamp(ah+(bh-ah)*t,lower,upper);
                 boolean fixed=false;
                 var old=existing.get(key);
-                if(old!=null) { desired=old.deckY(); lower=desired; upper=desired; fixed=true; }
                 if(Math.abs(x-spawnX)<=2 && Math.abs(z-spawnZ)<=2) { desired=spawnDeck; lower=desired; upper=desired; fixed=true; }
                 if(desired<lower || desired>upper || upper>=316 || lower< -61)return fail("HEIGHT_LIMIT");
                 if(prior==null && old==null)addedColumns++;
                 cells.put(key,new Cell(x,z,sample,desired,lower,upper,distance,fixed));
                 if((long)existing.size()+addedColumns>settings.maximumColumns())return fail("COLUMN_BUDGET");
             }
+        }
+        // A short rock/ridge must not seed a raised pyramid in the grade solver. Use a
+        // median of natural dry ground in a 9x9 window of the constructed corridor.
+        // Recompute from terrain (not previously rounded decks), so repeated candidate
+        // evaluations cannot progressively erode the accepted network. Bridges stay pinned
+        // to their water clearance, and the earthwork bounds still limit cuts and fills.
+        int[] neighborhood=new int[81];
+        for(var c:cells.values()) {
+            if(c.fixed||c.terrain.wet())continue;
+            int count=0;
+            for(int dx=-4;dx<=4;dx++)for(int dz=-4;dz<=4;dz++) {
+                var neighbor=cells.get(RoadPlan.key(c.x+dx,c.z+dz));
+                if(neighbor!=null&&!neighbor.terrain.wet())
+                    neighborhood[count++]=(int)StrictMath.floor(neighbor.terrain.groundSurface())-1;
+            }
+            Arrays.sort(neighborhood,0,count);
+            c.height=Math.clamp(neighborhood[count/2],c.lower,c.upper);
         }
         // First propagate upper bounds downward. This leaves room to lower a ramp near a pinned
         // spawn/junction, instead of incorrectly declaring failure because a preferred height
@@ -102,8 +133,6 @@ final class RoadConstruction {
         }
         var result=new ArrayList<RoadPlan.Column>();
         for(var c:cells.values()) {
-            var old=existing.get(RoadPlan.key(c.x,c.z));
-            if(old!=null) {result.add(old);continue;}
             int deck=(int)StrictMath.floor(c.height+1e-8);
             int ground=(int)StrictMath.floor(c.terrain.groundSurface())-1;
             boolean bridge=c.terrain.wet();
@@ -114,12 +143,14 @@ final class RoadConstruction {
         }
         // Four-neighbour block connectivity catches diagonal narrow gaps introduced by rasterizing.
         if(!result.isEmpty()) {
-            var seen=new HashSet<Long>(); var todo=new ArrayDeque<Long>(); todo.add(cells.firstKey()); seen.add(cells.firstKey());
+            var seen=new HashSet<Long>(); var todo=new ArrayDeque<Long>();
+            long first=pathCells.stream().filter(cells::containsKey).min(Long::compare).orElseThrow();
+            todo.add(first);seen.add(first);
             while(!todo.isEmpty()) {
                 Cell c=cells.get(todo.remove());
                 for(var d:NEIGHBORS) {long k=RoadPlan.key(c.x+d[0],c.z+d[1]); if(cells.containsKey(k)&&seen.add(k))todo.add(k);}
             }
-            if(seen.size()!=cells.size())return fail("DISCONNECTED_RASTER");
+            if(!seen.containsAll(pathCells))return fail("DISCONNECTED_RASTER");
         }
         return new Result(List.copyOf(result),null);
     }

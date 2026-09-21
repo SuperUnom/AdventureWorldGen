@@ -19,24 +19,30 @@ final class RoadSearch {
     record Found(List<Vec2> points,double cost,String failure) { boolean valid(){return failure==null;} }
     Found find(Vec2 from,Vec2 to,boolean allowDirect) {
         if(!dry(from)||!dry(to))return new Found(List.of(),0,"INVALID_ENDPOINT");
-        double direct=edge(from,to,false);
-        if(allowDirect&&Double.isFinite(direct)) {
-            var path=new ArrayList<Vec2>();path.add(from);int steps=Math.max(1,(int)Math.ceil(RoadShape.distance(from,to)/8));
-            for(int i=1;i<=steps;i++){double t=i/(double)steps;path.add(new Vec2(from.x()+(to.x()-from.x())*t,from.z()+(to.z()-from.z())*t));}
-            return new Found(List.copyOf(path),direct,null);
+        if(allowDirect) {
+            var direct=findDirect(from,to);
+            if(direct.valid())return direct;
         }
-        for(int spacing:new int[]{8,4})for(int pad:new int[]{64,256}) {
+        for(int spacing:new int[]{16,8,4})for(int pad:new int[]{64,256}) {
             Found result=search(from,to,spacing,pad);
             if(result.valid())return result;
         }
         return new Found(List.of(),0,"SEARCH_DOMAIN_OR_EDGE_BUDGET");
     }
+    Found findDirect(Vec2 from,Vec2 to) {
+        if(!dry(from)||!dry(to))return new Found(List.of(),0,"INVALID_ENDPOINT");
+        double direct=edge(from,to,false);
+        if(!Double.isFinite(direct))return new Found(List.of(),0,"NO_DIRECT_ROUTE");
+        var path=new ArrayList<Vec2>();path.add(from);
+        int steps=Math.max(1,(int)Math.ceil(RoadShape.distance(from,to)/8));
+        for(int i=1;i<=steps;i++){double t=i/(double)steps;path.add(new Vec2(from.x()+(to.x()-from.x())*t,from.z()+(to.z()-from.z())*t));}
+        return new Found(List.copyOf(path),direct,null);
+    }
     boolean dryLegal(Vec2 a,Vec2 b){return Double.isFinite(edge(a,b,true));}
     private boolean dry(Vec2 p){var s=terrain.sample(p.x(),p.z());return !s.wet()&&!s.hazardous()&&inside(p.x(),p.z());}
     private boolean inside(double x,double z) {
         if(Math.abs(x)>radius||Math.abs(z)>radius)return false;
-        for(var r:reservations)if(Math.abs(x-r.x())<=r.radius()+settings.width()/2.+1
-                &&Math.abs(z-r.z())<=r.radius()+settings.width()/2.+1)return false;
+        for(var r:reservations)if(r.bounds().contains(x,z,settings.width()/2.+1))return false;
         return true;
     }
     double edge(Vec2 a,Vec2 b,boolean dryOnly) {
@@ -76,12 +82,13 @@ final class RoadSearch {
             Visit current=queue.remove();State s=current.state();
             if(current.cost()!=best.get(s))continue;
             Vec2 p=point(from,s,spacing);
-            if(RoadShape.distance(p,to)<=spacing*1.5&&Double.isFinite(edge(p,to,false))) {
+            double terminal = RoadShape.distance(p,to)<=spacing*1.5 ? edge(p,to,false) : Double.POSITIVE_INFINITY;
+            if(Double.isFinite(terminal)) {
                 var path=new ArrayList<Vec2>();path.add(to);
                 for(State cursor=s;cursor!=null;cursor=parent.get(cursor))path.add(point(from,cursor,spacing));
                 Collections.reverse(path);
                 if(path.size()>1&&RoadShape.distance(path.get(path.size()-2),path.getLast())<1e-8)path.removeLast();
-                return new Found(List.copyOf(path),current.cost()+RoadShape.distance(p,to),null);
+                return new Found(List.copyOf(path),current.cost()+terminal,null);
             }
             for(int direction=0;direction<8;direction++) {
                 if(s.heading()!=8 && Math.min(Math.abs(s.heading()-direction),8-Math.abs(s.heading()-direction))>2)continue;
@@ -100,7 +107,7 @@ final class RoadSearch {
                 if(score>=best.getOrDefault(next,Double.POSITIVE_INFINITY))continue;
                 if(best.size()>=100_000)return new Found(List.of(),0,"SEARCH_STATE_BUDGET");
                 best.put(next,score);parent.put(next,s);
-                queue.add(new Visit(next,score,score+RoadShape.distance(q,to),sequence++));
+                queue.add(new Visit(next,score,score+RoadShape.distance(q,to)*1.15,sequence++));
             }
         }
         return new Found(List.of(),0,"SEARCH_DOMAIN_OR_EDGE_BUDGET");

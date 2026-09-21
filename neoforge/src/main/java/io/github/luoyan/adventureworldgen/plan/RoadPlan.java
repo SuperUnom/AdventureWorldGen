@@ -63,8 +63,10 @@ public record RoadPlan(List<Node> nodes, List<Route> routes, List<Column> column
         }
         public boolean protects(int y) { return y >= bottomY && y <= clearTopY; }
     }
-    public record Reservation(String instanceId, int x, int z, int radius) {
-        public Reservation { if (instanceId == null || radius < 1 || radius > 128) throw new IllegalArgumentException("invalid road reservation"); }
+    public record Reservation(String instanceId, BoundsXZ bounds) {
+        public Reservation {
+            if (instanceId == null || instanceId.isBlank() || bounds == null) throw new IllegalArgumentException("invalid road reservation");
+        }
     }
     public record Skipped(String id, String reason) {
         public Skipped { Objects.requireNonNull(id); Objects.requireNonNull(reason); }

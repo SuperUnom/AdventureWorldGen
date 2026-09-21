@@ -24,10 +24,15 @@ public final class AdventureBiomeSource extends BiomeSource {
     ).apply(instance, AdventureBiomeSource::new));
 
     private final ResourceLocation profile;
+    private final io.github.luoyan.adventureworldgen.api.AdventurePlanView fixedView;
     private final HolderLookup.RegistryLookup<Biome> biomes;
 
     public AdventureBiomeSource(ResourceLocation profile, HolderLookup.RegistryLookup<Biome> biomes) {
-        this.profile = profile; this.biomes = biomes;
+        this(profile, biomes, null);
+    }
+    AdventureBiomeSource(ResourceLocation profile, HolderLookup.RegistryLookup<Biome> biomes,
+                         io.github.luoyan.adventureworldgen.api.AdventurePlanView fixedView) {
+        this.profile = profile; this.biomes = biomes; this.fixedView = fixedView;
     }
 
     public ResourceLocation profile() { return profile; }
@@ -35,7 +40,8 @@ public final class AdventureBiomeSource extends BiomeSource {
     @Override protected Stream<Holder<Biome>> collectPossibleBiomes() { return biomes.listElements().map(holder -> holder); }
 
     @Override public Holder<Biome> getNoiseBiome(int quartX, int quartY, int quartZ, Climate.Sampler sampler) {
-        ContentId id = RuntimePlanRegistry.await(new ContentId(profile.toString())).biomeAt(QuartPos.toBlock(quartX), QuartPos.toBlock(quartY), QuartPos.toBlock(quartZ));
+        var view = fixedView == null ? RuntimePlanRegistry.await(new ContentId(profile.toString())) : fixedView;
+        ContentId id = view.biomeAt(QuartPos.toBlock(quartX), QuartPos.toBlock(quartY), QuartPos.toBlock(quartZ));
         ResourceLocation location = ResourceLocation.parse(id.value());
         return biomes.getOrThrow(ResourceKey.create(Registries.BIOME, location));
     }

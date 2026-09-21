@@ -24,8 +24,8 @@ import io.github.luoyan.adventureworldgen.plan.PlanVersions;
  * version marker - the two travel together by design.
  */
 public final class PlanIdentity {
-    /** Internal cache key revision; the public planner remains v2 while the payload is plan-v3. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-nested-road-connections-r39";
+    /** Internal cache key revision; the public planner remains v2 while the payload format follows PlannerProfile. */
+    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-smooth-junction-roads-r42";
 
     private PlanIdentity() {}
 
@@ -36,7 +36,11 @@ public final class PlanIdentity {
      * Adapter versions are sorted by the registry before they are joined.
      */
     public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters, PlannerProfile profile) {
+        return hash(seed, loaded, adapters, profile, "declared");
+    }
+    public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters, PlannerProfile profile, String structureInputs) {
         String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + profile.algorithmVersion()
+                + "\nstructure_inputs=" + structureInputs
                 + "\nstructure_planning=" + loaded.structurePlanning().canonicalIdentity()
                 + "\nimplementation=" + IMPLEMENTATION_REVISION
                 + "\nhydrology=" + profile.hydrologyVersion() + "\nterrain=" + PlanVersions.TERRAIN + "\nadapters="

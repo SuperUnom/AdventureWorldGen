@@ -8,9 +8,25 @@ import java.util.TreeMap;
 /** Immutable lookup of structure-type planning facts; it contains no generation behavior. */
 public final class StructurePlanningCatalog {
     private final Map<ContentId, StructurePlanningInfo> entries;
+    private final Map<String, StructurePlanningInfo> instances;
 
     private StructurePlanningCatalog(Map<ContentId, StructurePlanningInfo> entries) {
+        this(entries, Map.of());
+    }
+    private StructurePlanningCatalog(Map<ContentId, StructurePlanningInfo> entries, Map<String, StructurePlanningInfo> instances) {
         this.entries = Map.copyOf(entries);
+        this.instances = Map.copyOf(instances);
+    }
+
+    /** Derived facts for this run, never another source of author configuration. */
+    public StructurePlanningCatalog withInstances(Map<String, StructurePlanningInfo> resolved) {
+        return new StructurePlanningCatalog(entries, resolved);
+    }
+    public Optional<StructurePlanningInfo> find(PlannedStructurePlacement placement) {
+        var resolved = instances.get(placement.instanceId());
+        if (resolved != null && !resolved.structureId().equals(placement.structureId()))
+            throw new IllegalArgumentException("instance structure ID mismatch");
+        return resolved == null ? find(placement.structureId()) : Optional.of(resolved);
     }
 
     public static StructurePlanningCatalog fromIds(Collection<ContentId> structureIds) {
@@ -28,7 +44,7 @@ public final class StructurePlanningCatalog {
     public String canonicalIdentity() {
         var result = new StringBuilder();
         new TreeMap<>(entries).forEach((id, info) -> result.append(id.value()).append('=')
-                .append(info.roadAccess() == null ? "none" : info.roadAccess().exclusionRadius() + "," + info.roadAccess().approachDistance()).append('\n'));
+                .append(info.footprint()).append(';').append(info.roadAccess()).append(';').append(info.templateFootprint()).append('\n'));
         return result.toString();
     }
     public Optional<StructurePlanningInfo> find(ContentId structureId) {

@@ -70,6 +70,12 @@ class PlanningBaselineTest {
 
         byte[] encoded = codec.encode(PROFILE, INPUT_HASH, plan.snapshot());
         String planHash = sha256(encoded);
+        // Roads are disabled in this fixture: v5 changes only the format marker. Keep the v4
+        // payload hash as evidence that no terrain, layout, spawn or empty-road field changed.
+        var previous=com.google.gson.JsonParser.parseString(new String(encoded,StandardCharsets.UTF_8)).getAsJsonObject();
+        previous.addProperty("format","plan-v4");
+        assertEquals("ea1edcf95ac6998135434c36a920d277b3dd52c954829b039df15df3fa1f8186",
+                sha256(previous.toString().getBytes(StandardCharsets.UTF_8)),"unexpected change beyond the v5 format marker");
         // The format adds only an empty roads object for this roads-disabled fixture. Prove the
         // previous canonical payload is byte-identical after removing that reviewed envelope change.
         var legacy = com.google.gson.JsonParser.parseString(new String(encoded, StandardCharsets.UTF_8)).getAsJsonObject();
@@ -224,7 +230,7 @@ class PlanningBaselineTest {
     // reviewed contract changes under test, while repeated planning, READY round trips and the
     // unchanged spawn signature remain independently checked above.
     private static final String EXPECTED_PLAN_SHA256 =
-            "ea1edcf95ac6998135434c36a920d277b3dd52c954829b039df15df3fa1f8186";
+            "cad9e41238f4f827cb77d47038978b070d0638fe7081108484be8c2d6451794b";
     private static final String EXPECTED_FIELD_SHA256 =
             "d104c30bc2cf264e0f617e628d2fa76c2e19514122c719e9dbadc397ebb789e5";
     private static final String EXPECTED_SPAWN = "0.5/0.5/0.0";
