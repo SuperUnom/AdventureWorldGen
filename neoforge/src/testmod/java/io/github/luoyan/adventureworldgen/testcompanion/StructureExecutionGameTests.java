@@ -20,7 +20,7 @@ import net.neoforged.neoforge.gametest.PrefixGameTestTemplate;
 @PrefixGameTestTemplate(false)
 public final class StructureExecutionGameTests {
     @GameTest(templateNamespace = "testcompanion_performance", template = "empty", timeoutTicks = 1200)
-    public static void templateAdapterResolvesAndPlacesRotatedTemplate(GameTestHelper helper) {
+    public static void adaptersResolveAndPlaceSupportedStructures(GameTestHelper helper) {
         var level = helper.getLevel();
         var resolver = new StructureResolver();
         var templateId = ResourceLocation.fromNamespaceAndPath(
@@ -58,16 +58,34 @@ public final class StructureExecutionGameTests {
         assertUnsupported(helper, () -> manager.generate(level, new StructurePlacement(
                 ResourceLocation.parse("minecraft:village_plains"), target, Rotation.NONE)), "jigsaw");
         assertUnsupported(helper, () -> manager.generate(level, new StructurePlacement(
-                ResourceLocation.parse("minecraft:stronghold"), target, Rotation.NONE)), "Java structure");
+                ResourceLocation.parse("minecraft:stronghold"), target, Rotation.CLOCKWISE_90)),
+                "rotated Java structure");
+
+        var hutOrigin = helper.absolutePos(new BlockPos(8, 2, 8));
+        manager.generate(level, new StructurePlacement(
+                ResourceLocation.parse("minecraft:swamp_hut"), hutOrigin, Rotation.NONE));
+        boolean foundHutBlock = false;
+        for (int x = hutOrigin.getX(); x <= hutOrigin.getX() + 8 && !foundHutBlock; x++) {
+            for (int z = hutOrigin.getZ(); z <= hutOrigin.getZ() + 8 && !foundHutBlock; z++) {
+                for (int y = level.getMinBuildHeight(); y < level.getMaxBuildHeight(); y++) {
+                    if (level.getBlockState(new BlockPos(x, y, z)).is(Blocks.SPRUCE_PLANKS)) {
+                        foundHutBlock = true;
+                        break;
+                    }
+                }
+            }
+        }
+        helper.assertTrue(foundHutBlock, "ordinary registered Structure did not place its pieces");
         helper.succeed();
     }
 
     private static void assertUnsupported(GameTestHelper helper, Runnable action, String kind) {
         try {
             action.run();
-            helper.fail(kind + " generation should report that exact-position execution is not implemented");
+            helper.fail(kind + " generation should report an unsupported operation");
         } catch (UnsupportedOperationException expected) {
-            helper.assertTrue(expected.getMessage().contains("not implemented"),
+            helper.assertTrue(expected.getMessage().contains("not implemented")
+                            || expected.getMessage().contains("does not support"),
                     kind + " failure did not explain the unsupported operation");
         }
     }

@@ -89,8 +89,8 @@ Adventure level 是位置软偏好，不是互斥空间区间。
 - planner 只产生纯规划数据，不产生 Minecraft 对象，也不得按具体 structure ID 写特例。
 - worldgen 当前不执行 planned structure placements；原生结构由 Minecraft 自身生成。
 - `worldgen.structure` 是独立的显式执行入口：调用方必须直接提供最终 `BlockPos` 与旋转；它不读取计划锚点。
-- 该入口按模板、Jigsaw、普通 `Structure` 的顺序做运行时类型识别；当前只有 NBT 模板会实际放置，
-  后两类在验证注册表类型后明确报告未实现。
+- 该入口按模板、Jigsaw、普通 `Structure` 的顺序做运行时类型识别；NBT 模板和不要求外部旋转的普通
+  `Structure` 可以实际放置，Jigsaw 仍在验证注册表类型后明确报告未实现。
 - 若未来把计划锚点接到结构执行，转换和执行必须位于 Minecraft 集成层，不能让 planner 调用生成实现，
   也不能把当前只有 X/Z 的宏观锚点冒充最终三维原点。
 - 当前 carrier 只表达群系 ownership；没有结构尺寸输入时，planner 不预留固定核心或检查固定半径平整度。

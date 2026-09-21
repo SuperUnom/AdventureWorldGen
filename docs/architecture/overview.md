@@ -61,7 +61,36 @@ flowchart TD
 ```
 `runtime` 是无 Minecraft 依赖的会话与组装层，并非只依赖 `plan` 的叶子查询包。
 它实际依赖规划、领域计算与持久化；`GeneratedAdventurePlan` 也保留对 filler 等查询实现的引用。
-各包完整职责见 [代理指南](../../AGENTS.md#包职责)，禁用方向见 [依赖约束](invariants.md#dependency)。
+禁用方向见 [依赖约束](invariants.md#dependency)。
+
+## 包职责
+
+生产源码根为 [Java 源码目录](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/)。
+下表包名均相对此目录。
+
+| 包 | 职责 |
+|---|---|
+| `api` | 群系适配契约、计划查询视图和存储接口；不放内置适配实现 |
+| `config` | 作者模型、严格 JSON 解析、规范化与内容预检；注册表查询由外部注入 |
+| `plan` | ID、版本、规划参数、冻结环境状态、进度与失败词汇 |
+| `spatial` | 世界对齐网格、稀疏掩膜、坐标和查询缓存基础件 |
+| `noise` | 确定性随机键、连续噪声与坐标扰动 |
+| `climate` | 温度与湿度场、冻结场查询、湿度供给修正 |
+| `biome` | 环境准入、偏好评分、局部归属过渡与生长形状策略 |
+| `hydrology` | 河网、湖湿地、水位和切削几何 |
+| `erosion` | 规划期侵蚀增量场与查询期高度滤波 |
+| `terrain` | 海岸、区域配方、山脉包络、海床和最终地貌测量；消费容量结果 |
+| `cost` | 有向通行图、到达成本、冒险位置偏好和局部成本细化 |
+| `planner` | 需求展开、容量预留、群系竞争分配、结构落位与填充 |
+| `persistence` | 冻结快照、内部计划编解码、校验和及原子发布 |
+| `runtime` | 首次规划编排、READY 恢复、计划组装与会话查询屏障 |
+| `compat` | 原版群系兼容实现与水体群系规则 |
+| `worldgen` | 数据包读取、Minecraft 注册表接入、区块执行与独立的显式结构放置；不执行规划结构 |
+| `client` | 规划进度加载界面 |
+| `mixin` | 原版功能的受限接入钩子，目前用于泉口过滤 |
+
+根包的 `AdventureWorldGen` 注册模组，`AdventureEvents` 接入服务器与主世界生命周期。
+`surface` 是测试预留的职责名，当前没有该生产包；材料由原版 surface rules 执行。
 
 ## 关键入口
 
@@ -72,7 +101,7 @@ flowchart TD
 | 哪一步构造什么 | [RuntimePlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/RuntimePlanner.java) | [首次规划](pipeline.md#initial) |
 | 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v3](../reference/plan-v2.md) |
 | 如何写入区块 | [AdventureChunkGenerator](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/AdventureChunkGenerator.java) | [区块执行](../systems/runtime-worldgen.md#chunk) |
-| 如何显式放置结构模板 | [StructureAdapterManager](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/StructureAdapterManager.java) | [结构边界](../systems/runtime-worldgen.md#structures) |
+| 如何显式放置结构 | [StructureAdapterManager](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/structure/StructureAdapterManager.java) | [结构边界](../systems/runtime-worldgen.md#structures) |
 
 ## 能力范围
 

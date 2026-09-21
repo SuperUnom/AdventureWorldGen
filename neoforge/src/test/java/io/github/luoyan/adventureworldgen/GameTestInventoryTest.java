@@ -58,7 +58,7 @@ class GameTestInventoryTest {
             "ChunkQueryGameTests#nativeMaterialsStillMatchPlan",
             "ChunkQueryGameTests#allRecipesStillMatchPlan",
             "ChunkQueryGameTests#cachedQueriesPreserveColumnsAndSurfaces",
-            "StructureExecutionGameTests#templateAdapterResolvesAndPlacesRotatedTemplate",
+            "StructureExecutionGameTests#adaptersResolveAndPlaceSupportedStructures",
             "WorldgenFixGameTests#villageFoundationsCrossChunkEdges",
             "WorldgenFixGameTests#snowSpringsAreFilteredBeforeFluidTicks");
 

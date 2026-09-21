@@ -7,13 +7,15 @@
 <a id="selection"></a>
 ## 按修改选择验证
 
-| 修改 | 必须覆盖的层 |
+日常执行遵循 [最小充分验证](../../AGENTS.md#最小充分验证)；下表用于定位相关覆盖点，按实际影响选择，不逐项全跑。
+
+| 修改 | 相关覆盖点 |
 |---|---|
-| 纯算法、配置或包依赖 | JUnit，包括 PackageBoundaryTest；算法变化加相关数值/预览检查 |
+| 纯算法、配置或包依赖 | 定向 JUnit；包依赖变化加 PackageBoundaryTest，算法变化按需加数值/预览检查 |
 | planner、容量、成本或气候准入 | JUnit + planning GameTest；容量规则加 capacity 组 |
 | codec、身份与冻结状态 | persistence/runtime JUnit + READY 对照 |
 | 结构需求、规划信息与锚点 | planner/codec JUnit + planning GameTest |
-| worldgen、surface、海洋资源、mixin | JUnit + 完整 GameTest；必要时实际客户端观察 |
+| worldgen、surface、海洋资源、mixin | 相关 JUnit 与对应 GameTest 组；必要时实际客户端观察 |
 | 性能 | 对应 performance 组和基准；固定 seed、配置、JVM 参数及 cold/READY 条件 |
 | 仅文档 | 文档检查、命令存在性与示例验证；不据此声称重新验证了游戏生成 |
 
