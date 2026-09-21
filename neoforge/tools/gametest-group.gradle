@@ -12,7 +12,7 @@
 //   performance  6 methods  namespace  testcompanion_performance
 //   capacity     1 method   namespace  testcompanion_capacity
 //   planning     1 method   namespace  testcompanion_planning
-//   structure    3 methods  namespace  testcompanion_structure
+//   structure    4 methods  namespace  testcompanion_structure
 //
 // The method lists live in GameTestInventoryTest; keep the two in step.
 def groups = [

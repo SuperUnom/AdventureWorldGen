@@ -12,6 +12,7 @@ import io.github.luoyan.adventureworldgen.worldgen.*;
 import io.github.luoyan.adventureworldgen.worldgen.structure.*;
 import net.minecraft.Util;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderSet;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -46,6 +47,69 @@ public final class StructureExecutionGameTests {
             new PlannedStructurePlacement("template", new ContentId("testcompanion:execution_template"), 15, 15),
             new PlannedStructurePlacement("jigsaw", new ContentId("testcompanion:execution_jigsaw"), -193, 15),
             new PlannedStructurePlacement("java", new ContentId("testcompanion:execution_java"), 15, -193));
+
+    @GameTest(templateNamespace = "testcompanion_structure", template = "empty", timeoutTicks = 6000)
+    public static void locateChecksNearestStartsOnlyAndConsumesReturnedReferences(GameTestHelper helper) throws Exception {
+        var id = PLACEMENTS.getFirst().structureId();
+        // ID order deliberately visits farthest first; the nearest two anchors tie across zero.
+        var far = new PlannedStructurePlacement("a_far", id, 769, 15);
+        var middle = new PlannedStructurePlacement("b_middle", id, 385, 15);
+        var positive = new PlannedStructurePlacement("c_positive", id, 129, 15);
+        var negative = new PlannedStructurePlacement("d_negative", id, -129, 15);
+        var unrelated = new PlannedStructurePlacement("e_other_type", PLACEMENTS.getLast().structureId(), 1, 1);
+        var placements = List.of(far, middle, positive, negative, unrelated);
+        var expectedOrder = List.of(positive, negative, middle, far);
+        for (boolean coldSkipKnown : List.of(false, true)) {
+            var fixture = new Fixture(helper, "locate_" + coldSkipKnown, placements);
+            try (var world = fixture.open()) {
+                var level = world.level;
+                var generator = level.getChunkSource().getGenerator();
+                var holder = level.registryAccess().registryOrThrow(Registries.STRUCTURE).getHolderOrThrow(
+                        ResourceKey.create(Registries.STRUCTURE, ResourceLocation.parse(id.value())));
+                var targets = HolderSet.direct(holder);
+                if (!coldSkipKnown) {
+                    // Finite-plan lookup is independent of native random-spread ring radius.
+                    for (int radius : List.of(0, 100)) {
+                        var found = generator.findNearestMapStructure(level, targets, BlockPos.ZERO, radius, false);
+                        helper.assertTrue(found != null && found.getFirst().getX() == positive.anchorX()
+                                && found.getFirst().getZ() == positive.anchorZ() && found.getSecond().equals(holder),
+                                "ordinary locate changed nearest/tie selection");
+                        helper.assertTrue(start(level, positive).getReferences() == 0, "ordinary locate consumed a reference");
+                        for (var untouched : List.of(negative, middle, far, unrelated)) assertStartNotLoaded(helper, level, untouched);
+                    }
+                }
+                for (int i = 0; i < expectedOrder.size(); i++) {
+                    var expected = expectedOrder.get(i);
+                    var found = generator.findNearestMapStructure(level, targets, BlockPos.ZERO, 100, true);
+                    helper.assertTrue(found != null && found.getFirst().getX() == expected.anchorX()
+                            && found.getFirst().getZ() == expected.anchorZ() && found.getSecond().equals(holder),
+                            "skipKnown did not select the nearest unreferenced start: " + expected.instanceId());
+                    for (int consumed = 0; consumed <= i; consumed++)
+                        helper.assertTrue(start(level, expectedOrder.get(consumed)).getReferences() == 1,
+                                "skipKnown consumed a start more than once");
+                    for (int untouched = i + 1; untouched < expectedOrder.size(); untouched++)
+                        assertStartNotLoaded(helper, level, expectedOrder.get(untouched));
+                    assertStartNotLoaded(helper, level, unrelated);
+                }
+                helper.assertTrue(generator.findNearestMapStructure(level, targets, BlockPos.ZERO, 100, true) == null,
+                        "skipKnown returned an exhausted planned start");
+                var known = generator.findNearestMapStructure(level, targets, BlockPos.ZERO, 100, false);
+                helper.assertTrue(known != null && known.getFirst().getX() == positive.anchorX(),
+                        "ordinary locate incorrectly skipped a referenced start");
+                for (var p : expectedOrder)
+                    helper.assertTrue(start(level, p).getReferences() == 1, "exhausted/ordinary lookup changed references");
+                assertStartNotLoaded(helper, level, unrelated);
+            }
+        }
+        helper.succeed();
+    }
+
+    private static void assertStartNotLoaded(GameTestHelper helper, ServerLevel level, PlannedStructurePlacement placement) {
+        var owner = PlannedStructureBridge.owner(placement);
+        var chunk = level.getChunkSource().getChunk(owner.x, owner.z, ChunkStatus.STRUCTURE_STARTS, false);
+        helper.assertTrue(chunk == null || !chunk.getPersistedStatus().isOrAfter(ChunkStatus.STRUCTURE_STARTS),
+                "locate eagerly loaded an unnecessary start: " + placement.instanceId());
+    }
 
     @GameTest(templateNamespace = "testcompanion_structure", template = "empty", timeoutTicks = 6000)
     public static void realChunksGenerateInEitherOrderAndResumeAfterReload(GameTestHelper helper) throws Exception {
@@ -198,6 +262,9 @@ public final class StructureExecutionGameTests {
         final GeneratedAdventurePlan plan;
         final StructureExecutionCatalog catalog;
         Fixture(GameTestHelper helper, String name) throws Exception {
+            this(helper, name, PLACEMENTS);
+        }
+        Fixture(GameTestHelper helper, String name, List<PlannedStructurePlacement> placements) throws Exception {
             this.helper = helper;
             directory = Files.createTempDirectory(helper.getLevel().getServer().getWorldPath(LevelResource.ROOT), "structure-" + name + "-");
             profile = ResourceLocation.fromNamespaceAndPath("testcompanion_structure", name + "_" + directory.getFileName());
@@ -208,10 +275,10 @@ public final class StructureExecutionGameTests {
             long seed = helper.getLevel().getSeed();
             plan = new GeneratedAdventurePlan(seed, config, new Coastline(List.of(new Vec2(-1024,-1024), new Vec2(1024,-1024),
                     new Vec2(1024,1024), new Vec2(-1024,1024))), new RiverNetwork(List.of(), List.of(), "structure-test"),
-                    64, 128, 256, "structure-test", null, List.of(), PLACEMENTS, null, null);
+                    64, 128, 256, "structure-test", null, List.of(), placements, null, null);
             RuntimePlanRegistry.start(new ContentId(profile.toString()), () -> plan).join();
             var server = helper.getLevel().getServer();
-            catalog = StructureExecutionCatalog.load(PLACEMENTS.stream().map(p -> ResourceLocation.parse(p.structureId().value()))
+            catalog = StructureExecutionCatalog.load(placements.stream().map(p -> ResourceLocation.parse(p.structureId().value()))
                     .collect(java.util.stream.Collectors.toSet()), server.registryAccess(), server.getResourceManager(), server.getStructureManager());
         }
         OpenWorld open() throws Exception {

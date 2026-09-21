@@ -78,6 +78,7 @@ class GameTestInventoryTest {
         GROUPS.put("testcompanion_capacity", CAPACITY_GROUP);
         GROUPS.put("testcompanion_planning", PLANNING_GROUP);
         GROUPS.put("testcompanion_structure", List.of(
+                "StructureExecutionGameTests#locateChecksNearestStartsOnlyAndConsumesReturnedReferences",
                 "StructureExecutionGameTests#realChunksGenerateInEitherOrderAndResumeAfterReload",
                 "StructureExecutionGameTests#invalidInputsFailBeforeSilentStructureLoss",
                 "StructureTerrainGameTests#fillFlattenNoneAndNativeDensityStayDistinct"));
@@ -125,9 +126,9 @@ class GameTestInventoryTest {
         assertEquals(6, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
         assertEquals(1, found.getOrDefault("testcompanion_capacity", List.of()).size(), "capacity group size");
         assertEquals(1, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
-        assertEquals(3, found.getOrDefault("testcompanion_structure", List.of()).size(), "structure group size");
+        assertEquals(4, found.getOrDefault("testcompanion_structure", List.of()).size(), "structure group size");
         int total = GROUPS.values().stream().mapToInt(List::size).sum();
-        assertEquals(21, total, "the full acceptance entry covers every registered method exactly once");
+        assertEquals(22, total, "the full acceptance entry covers every registered method exactly once");
     }
 
     private Map<String, List<String>> scanTestmodSources() throws IOException {

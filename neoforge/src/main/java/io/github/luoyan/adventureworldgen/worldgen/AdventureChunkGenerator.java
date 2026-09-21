@@ -8,6 +8,7 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanRegistry;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.api.WaterKind;
+import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import net.minecraft.world.level.levelgen.synth.NormalNoise;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
@@ -43,6 +44,7 @@ import net.minecraft.world.level.levelgen.blending.Blender;
 import net.minecraft.core.RegistryAccess;
 
 import java.util.EnumSet;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
@@ -126,17 +128,21 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         Pair<BlockPos, Holder<Structure>> planned = null;
         StructureStart selectedStart = null;
         double distance = Double.POSITIVE_INFINITY;
-        // The finite plan supplies all candidates; native random-spread rings must not invent managed starts.
-        for (var p : bridge.placements()) {
+        // A finite plan has no random-spread ring radius. Sort before requesting any owner chunks;
+        // instance ID preserves the previous winner when anchors are equally distant.
+        var candidates = bridge.placements().stream()
+                .filter(p -> requested.containsKey(ResourceLocation.parse(p.structureId().value())))
+                .sorted(Comparator.comparingDouble((PlannedStructurePlacement p) -> horizontalDistanceSquared(p.anchorX(), p.anchorZ(), origin))
+                        .thenComparing(PlannedStructurePlacement::instanceId))
+                .toList();
+        for (var p : candidates) {
             var holder = requested.get(ResourceLocation.parse(p.structureId().value()));
-            if (holder == null) continue;
-            double d = Math.pow((double) p.anchorX() - origin.getX(), 2) + Math.pow((double) p.anchorZ() - origin.getZ(), 2);
-            if (d >= distance) continue;
             var owner = PlannedStructureBridge.owner(p);
             var start = level.getChunk(owner.x, owner.z, ChunkStatus.STRUCTURE_STARTS).getStartForStructure(holder.value());
             if (start == null || !start.isValid() || (skipKnown && !start.canBeReferenced())) continue;
-            distance = d; selectedStart = start;
+            distance = horizontalDistanceSquared(p.anchorX(), p.anchorZ(), origin); selectedStart = start;
             planned = Pair.of(new BlockPos(p.anchorX(), start.getPieces().getFirst().getBoundingBox().minY(), p.anchorZ()), holder);
+            break;
         }
         var nativeTargets = HolderSet.direct(targets.stream().filter(h -> !bridge.manages(registry.getKey(h.value()))).toList());
         // Exploration maps prefer an unreferenced planned instance. Only the returned start is consumed.
@@ -146,9 +152,14 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         }
         var nativeResult = nativeTargets.size() == 0 ? null : super.findNearestMapStructure(level, nativeTargets, origin, radius, skipKnown);
         if (nativeResult == null) return planned;
-        double nativeDistance = Math.pow((double) nativeResult.getFirst().getX() - origin.getX(), 2)
-                + Math.pow((double) nativeResult.getFirst().getZ() - origin.getZ(), 2);
+        double nativeDistance = horizontalDistanceSquared(nativeResult.getFirst().getX(), nativeResult.getFirst().getZ(), origin);
         return planned != null && distance <= nativeDistance ? planned : nativeResult;
+    }
+
+    private static double horizontalDistanceSquared(int x, int z, BlockPos origin) {
+        double dx = (double) x - origin.getX();
+        double dz = (double) z - origin.getZ();
+        return dx * dx + dz * dz;
     }
 
     @Override
