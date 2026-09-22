@@ -167,7 +167,7 @@ spacing 检查同 ID 规划锚点的两两水平距离；只有一个实例时�
 
 顶层可选 `roads` 只描述总开关与全局施工参数，省略时关闭。
 目的地配置与生成需求放在同一条目：`biomes.required[].road` 和 `structures[].road`。
-下面是可解析的示例；结构接入还需对应资源声明：
+下面是可解析的示例；游戏内原生实例预检会自动取得结构范围，接路不要求额外资源声明：
 
 ```json
 {
@@ -195,7 +195,7 @@ spacing 检查同 ID 规划锚点的两两水平距离；只有一个实例时�
 群系按 ID 合并为一个探索节点，多条同 ID 需求中任一启用且要求必连就按必连处理。
 未选择的群系不会自动成为目的地，filler 不提供单独的道路选择。
 结构的 `road` 适用于该条目所有已规划实例；`count.min` 决定必须生成的数量，
-与道路必连含义独立。结构须提供纯规划接入声明，见 [道路结构契约](../systems/roads.md#结构接入契约)。
+与道路必连含义独立。结构使用默认接路参数；作者可按需覆盖，见 [道路结构契约](../systems/roads.md#结构接入契约)。
 旧的 `roads.points`、`roads.biomes`、`roads.structures` 已删除，解析时按未知字段拒绝。
 发布默认配置的具体群系、村庄类型和数量以资源文件为准。
 
@@ -204,12 +204,13 @@ spacing 检查同 ID 规划锚点的两两水平距离；只有一个实例时�
 | 字段 | 作用 |
 |---|---|
 | `width`、`clearance` | 奇数核心路宽和路面上方净空；陆路另铺窄路肩 |
-| `maximum_grade`、`maximum_earthwork` | 连续施工坡度和相对自然地面的挖填范围 |
+| `maximum_grade`、`maximum_earthwork` | 高差／水平行程（最大 1.0）和相对自然地面的挖填范围 |
 | `maximum_bridge_length` | 河流短桥最大跨度；零表示不允许跨河 |
 | `bend_spacing`、`bend_amplitude` | 平原长缓弯的特征间距和最大横向偏移 |
 | `maximum_bend_detour` | 缓弯相对对应直段的长度倍率上限 |
 | `loop_budget_fraction` | 相对骨架长度允许添加的环路长度比例 |
-| `maximum_nodes`、`maximum_operations`、`maximum_columns` | 节点、地形采样次数及冻结施工列预算 |
+| `maximum_nodes`、`maximum_columns` | 整张路网的节点数与冻结列容量；必需工作触顶时报告资源不足，不越限发布 |
+| `maximum_operations` | 调度检查点之间的一批采样次数；继续计算仍受累计算法硬预算限制，详见 [道路预算](../systems/roads.md#计算预算容量和暂停) |
 | `surface`、`bridge`、`foundation` | 陆路路面、桥体、路基的方块 ID；须为无流体、无方块实体的实心方块 |
 
 完整缺省值和数值范围由 `RoadSettings` 单独定义；parser 拒绝未知字段、错误类型和非整数预算。

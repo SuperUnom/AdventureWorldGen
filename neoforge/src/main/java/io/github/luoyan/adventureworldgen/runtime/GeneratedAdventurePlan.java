@@ -40,6 +40,8 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     private final RoadIndex roadIndex;
     @Override public io.github.luoyan.adventureworldgen.plan.RoadPlan roads() { return roads; }
     @Override public io.github.luoyan.adventureworldgen.plan.RoadPlan.Column roadAt(int x,int z) { return roadIndex.at(x,z); }
+    @Override public List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsAt(int x,int z){return roadIndex.layers(x,z);}
+    @Override public List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Support> roadSupportsInChunk(int x,int z){return roadIndex.supports(x,z);}
     @Override public List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsInChunk(int x,int z) { return roadIndex.chunk(x,z); }
     public io.github.luoyan.adventureworldgen.config.RoadSettings roadSettings() { return config.roads(); }
     private final io.github.luoyan.adventureworldgen.climate.ClimatePlan climate;
@@ -94,7 +96,17 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     public BiomeLayout biomeLayout(){return new BiomeLayout(climate.snapshot(),filler.snapshot(),blendProtectedPatches.stream().sorted().toList());}
     /** Frozen planning objects can be reused on first publication; decoded plans rebuild them. */
     record PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate,
-                          io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog structurePlanning) {
+                          io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog structurePlanning,
+                          io.github.luoyan.adventureworldgen.plan.RoadWorkControl roadWork,
+                          io.github.luoyan.adventureworldgen.plan.PlanningExecution execution) {
+        PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate,
+                       io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog catalog,io.github.luoyan.adventureworldgen.plan.RoadWorkControl control) {
+            this(terrain,climate,catalog,control,io.github.luoyan.adventureworldgen.plan.PlanningExecution.SERIAL);
+        }
+        PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate,
+                       io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog catalog) {
+            this(terrain,climate,catalog,io.github.luoyan.adventureworldgen.plan.RoadWorkControl.AUTOMATIC);
+        }
         PlanningInputs(PlanTerrain terrain,io.github.luoyan.adventureworldgen.climate.ClimatePlan climate) {
             this(terrain,climate,io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(List.of()));
         }
@@ -198,7 +210,7 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
         columnBiomes = new ColumnQueryCache<>(16384);
         if (frozenRoads == null && config.roads().enabled()) observer.stage(io.github.luoyan.adventureworldgen.plan.PlanningStage.ROADS);
         roads = frozenRoads != null ? frozenRoads : new io.github.luoyan.adventureworldgen.planner.RoadPlanner(
-                seed, config, terrain).plan(spawn, this.biomePatches, this.structures,
+                seed, config, terrain,prepared==null?io.github.luoyan.adventureworldgen.plan.RoadWorkControl.AUTOMATIC:prepared.roadWork(),prepared==null?io.github.luoyan.adventureworldgen.plan.PlanningExecution.SERIAL:prepared.execution()).plan(spawn, this.biomePatches, this.structures,
                 prepared == null ? io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog.fromIds(
                         this.structures.stream().map(PlannedStructurePlacement::structureId).toList()) : prepared.structurePlanning(),
                 (x,z) -> biomeAt(x,64,z));
@@ -206,9 +218,17 @@ public final class GeneratedAdventurePlan implements AdventurePlanView {
     }
 
     GeneratedAdventurePlan completeStructures(StructurePreparation.Result prepared, PlanningObserver observer) {
+        return completeStructures(prepared,observer,io.github.luoyan.adventureworldgen.plan.RoadWorkControl.AUTOMATIC);
+    }
+    GeneratedAdventurePlan completeStructures(StructurePreparation.Result prepared, PlanningObserver observer,
+            io.github.luoyan.adventureworldgen.plan.RoadWorkControl roadWork) {
+        return completeStructures(prepared,observer,roadWork,io.github.luoyan.adventureworldgen.plan.PlanningExecution.SERIAL);
+    }
+    GeneratedAdventurePlan completeStructures(StructurePreparation.Result prepared,PlanningObserver observer,
+            io.github.luoyan.adventureworldgen.plan.RoadWorkControl roadWork,io.github.luoyan.adventureworldgen.plan.PlanningExecution execution) {
         return new GeneratedAdventurePlan(profile, seed, config, coastline, riverNetwork, seaSurface, landBand,
                 seaBand, terrainVersion, spawn, biomePatches, prepared.placements(), diagnostics, erosion,
-                capacities, biomeLayout(), new PlanningInputs(terrainStack, climate, prepared.catalog()), observer, null);
+                capacities, biomeLayout(), new PlanningInputs(terrainStack, climate, prepared.catalog(),roadWork,execution), observer, null);
     }
 
     public GeneratedAdventurePlan(long seed, AdventureWorldConfig config, Coastline coastline,

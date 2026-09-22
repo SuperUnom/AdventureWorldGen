@@ -31,7 +31,8 @@ public record StructurePlanningInfo(ContentId structureId, BoundsXZ footprint, R
         }
     }
     public record RoadAccess(int margin,int connectorLength,List<AccessPoint> entrances) {
-        public RoadAccess(int margin) {this(margin,16,List.of());}
+        public static final RoadAccess DEFAULT = new RoadAccess(4,16,List.of());
+        public RoadAccess(int margin) {this(margin,DEFAULT.connectorLength(),List.of());}
         public RoadAccess {
             if (margin < 2 || margin > 256) throw new IllegalArgumentException("invalid structure road margin");
             if(connectorLength<8||connectorLength>64||entrances.size()>8)throw new IllegalArgumentException("invalid local connector budget");
@@ -42,6 +43,8 @@ public record StructurePlanningInfo(ContentId structureId, BoundsXZ footprint, R
     }
     public StructurePlanningInfo {
         Objects.requireNonNull(structureId, "structureId");
+        // Connection selection belongs to the profile, not the presence of a resource file.
+        if (roadAccess == null) roadAccess = RoadAccess.DEFAULT;
         if (footprint != null && (Math.abs((long)footprint.minX()) > 256 || Math.abs((long)footprint.minZ()) > 256
                 || Math.abs((long)footprint.maxX()) > 256 || Math.abs((long)footprint.maxZ()) > 256))
             throw new IllegalArgumentException("structure footprint exceeds planning envelope");

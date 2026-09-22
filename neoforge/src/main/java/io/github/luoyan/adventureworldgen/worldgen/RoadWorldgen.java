@@ -34,29 +34,48 @@ public final class RoadWorldgen {
     }
     public static void surface(ChunkAccess chunk,AdventurePlanView plan,Palette palette) {
         var pos=new BlockPos.MutableBlockPos();
+        for(var support:plan.roadSupportsInChunk(chunk.getPos().x,chunk.getPos().z))
+            for(int z=Math.max(support.minZ(),chunk.getPos().getMinBlockZ());z<=Math.min(support.maxZ(),chunk.getPos().getMaxBlockZ());z++)
+                for(int x=Math.max(support.minX(),chunk.getPos().getMinBlockX());x<=Math.min(support.maxX(),chunk.getPos().getMaxBlockX());x++)
+                    for(int y=support.minY();y<=support.maxY();y++)chunk.setBlockState(pos.set(x,y,z),supportState(support),false);
         for(var road:plan.roadsInChunk(chunk.getPos().x,chunk.getPos().z)) {
             for(int y=road.bottomY();y<=road.clearTopY();y++)chunk.setBlockState(pos.set(road.x(),y,road.z()),state(road,y,palette),false);
             chunk.setBlockState(pos.set(road.x(),road.deckY(),road.z()),top(road,plan,palette),false);
         }
     }
+    public static BlockState supportState(RoadPlan.Support support) {
+        return support.kind()==RoadPlan.SupportKind.RAIL?Blocks.OAK_FENCE.defaultBlockState():Blocks.OAK_LOG.defaultBlockState();
+    }
+    public static void supports(NoiseColumn column,int x,int z,AdventurePlanView plan) {
+        for(var support:plan.roadSupportsInChunk(x>>4,z>>4))if(x>=support.minX()&&x<=support.maxX()&&z>=support.minZ()&&z<=support.maxZ())
+            for(int y=support.minY();y<=support.maxY();y++)column.setBlock(y,supportState(support));
+    }
     private static BlockState top(RoadPlan.Column road,AdventurePlanView plan,Palette palette) {
-        for(var direction:Direction.Plane.HORIZONTAL) {
-            var lower=plan.roadAt(road.x()-direction.getStepX(),road.z()-direction.getStepZ());
-            if(lower!=null&&lower.deckY()==road.deckY()-1)
-                return (road.bridge()?Blocks.OAK_STAIRS:Blocks.COBBLESTONE_STAIRS).defaultBlockState().setValue(StairBlock.FACING,direction);
+        if(road.stairFacing()>=0) {
+            var directions=new Direction[]{Direction.EAST,Direction.SOUTH,Direction.WEST,Direction.NORTH};
+            return (road.kind()!=RoadPlan.Kind.GROUND?Blocks.OAK_STAIRS:Blocks.COBBLESTONE_STAIRS).defaultBlockState()
+                    .setValue(StairBlock.FACING,directions[road.stairFacing()]);
         }
-        return road.bridge()?palette.bridge():road.shoulder()?Blocks.COARSE_DIRT.defaultBlockState():palette.surface();
+        for(var direction:Direction.Plane.HORIZONTAL) {
+            var lower=plan.roadAtHeight(road.x()-direction.getStepX(),road.deckY()-1,road.z()-direction.getStepZ());
+            if(lower!=null&&lower.deckY()==road.deckY()-1)
+                return (road.kind()!=RoadPlan.Kind.GROUND?Blocks.OAK_STAIRS:Blocks.COBBLESTONE_STAIRS).defaultBlockState().setValue(StairBlock.FACING,direction);
+        }
+        return road.kind()!=RoadPlan.Kind.GROUND?palette.bridge():road.shoulder()?Blocks.COARSE_DIRT.defaultBlockState():palette.surface();
     }
     private static BlockState state(RoadPlan.Column road,int y,Palette palette) {
         if(y>road.deckY())return Blocks.AIR.defaultBlockState();
-        if(road.bridge())return palette.bridge();
+        if(road.kind()!=RoadPlan.Kind.GROUND)return palette.bridge();
         return y==road.deckY()?(road.shoulder()?Blocks.COARSE_DIRT.defaultBlockState():palette.surface()):palette.foundation();
     }
     /** Conservative horizontal exclusion also protects structure foundations and underground pieces. */
     public static boolean intersects(AdventurePlanView plan,BoundingBox box,int margin) {
-        for(int cx=(box.minX()-margin)>>4;cx<=(box.maxX()+margin)>>4;cx++)for(int cz=(box.minZ()-margin)>>4;cz<=(box.maxZ()+margin)>>4;cz++)
+        for(int cx=(box.minX()-margin)>>4;cx<=(box.maxX()+margin)>>4;cx++)for(int cz=(box.minZ()-margin)>>4;cz<=(box.maxZ()+margin)>>4;cz++) {
             for(var road:plan.roadsInChunk(cx,cz))if(road.x()>=box.minX()-margin&&road.x()<=box.maxX()+margin
                     &&road.z()>=box.minZ()-margin&&road.z()<=box.maxZ()+margin)return true;
+            for(var support:plan.roadSupportsInChunk(cx,cz))if(support.maxX()>=box.minX()-margin&&support.minX()<=box.maxX()+margin
+                    &&support.maxZ()>=box.minZ()-margin&&support.minZ()<=box.maxZ()+margin)return true;
+        }
         return false;
     }
 }

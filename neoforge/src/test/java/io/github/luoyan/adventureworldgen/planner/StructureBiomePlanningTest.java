@@ -30,6 +30,22 @@ class StructureBiomePlanningTest {
           """);
     }
 
+    @Test void anUnavailableSharedIntersectionSplitsBackToOriginalCarrierChoices() {
+        var c=new AdventureWorldConfigParser().parse("""
+            {"world":{"radius":128},"spawn":{"biome":"test:plain"},"biomes":{"filler":["test:plain"],
+             "required":[{"id":"test:blocked","adventure_level":4,"area":{"min":1024,"max":4096}}]},
+             "structures":[{"id":"test:keep","adventure_level":4,"count":{"min":1,"max":1},
+              "allowed_biomes":{"id":["test:blocked","test:alternative"],"area":{"min":1024,"max":4096}}}]}
+            """);
+        var result=new JointPlanner(PlannerProfile.V2).plan(7331,c,FLAT,catalog(c),(level,x,z)->true,
+                (id,x,z)->!id.value().equals("test:blocked"));
+        var structure=result.structures().getFirst();
+        assertTrue(result.patches().stream().anyMatch(p->p.biomeId().value().equals("test:alternative")&&p.contains(structure.anchorX(),structure.anchorZ())));
+        var relaxed=new ArrayList<MinimumAreaPolicy.Relaxation>();
+        MinimumAreaPolicy.checkAchievedAreas(c,result.patches(),p->p.area(),relaxed::add);
+        assertEquals(1,relaxed.size());assertEquals("patch/required/0",relaxed.getFirst().patchId());
+    }
+
     private static StructurePlanningCatalog catalog(AdventureWorldConfig config) {
         return StructurePlanningCatalog.fromIds(config.structures().stream()
                 .map(AdventureWorldConfig.StructureSettings::id).toList());

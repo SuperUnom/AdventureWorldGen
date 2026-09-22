@@ -1365,9 +1365,151 @@
         "enabled": true,
         "required": true
       }
+    },
+    {
+      "id": "minecraft:village_savanna",
+      "adventure_level": 3,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:savanna"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:village_snowy",
+      "adventure_level": 3,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:snowy_plains"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:pillager_outpost",
+      "adventure_level": 4,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:plains"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:jungle_pyramid",
+      "adventure_level": 4,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:jungle",
+          "minecraft:bamboo_jungle"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:swamp_hut",
+      "adventure_level": 2,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:swamp"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "minecraft:mansion",
+      "adventure_level": 6,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:dark_forest"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
+    },
+    {
+      "id": "adventureworldgen:mountain_lookout",
+      "adventure_level": 5,
+      "count": {
+        "min": 1,
+        "max": 1
+      },
+      "allowed_biomes": {
+        "id": [
+          "minecraft:stony_peaks"
+        ]
+      },
+      "spacing": {
+        "min": 320
+      },
+      "road": {
+        "enabled": true,
+        "required": true
+      }
     }
   ],
   "roads": {
+    "maximum_grade": 1.0,
     "enabled": true
   }
 }

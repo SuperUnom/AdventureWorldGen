@@ -37,6 +37,10 @@ public final class RoadRegressionGameTests {
     public static void reportedCrossingAndSpawnBumpSeedPlansAndReplays(GameTestHelper helper) throws Exception {
         verify(helper,1619297343839528281L);
     }
+    @GameTest(templateNamespace="testcompanion_planning", template="empty", timeoutTicks=4800)
+    public static void reportedSmallLoopSeedConnectsSnowVillageAndMountainLookout(GameTestHelper helper) throws Exception {
+        verify(helper,-458016819960925968L);
+    }
     private record Instance(PlannedStructurePlacement placement,StructurePlanningInfo info) {}
     private static void verify(GameTestHelper helper,long seed) throws Exception {
         var level=helper.getLevel();var server=level.getServer();var registries=level.registryAccess();
@@ -46,7 +50,7 @@ public final class RoadRegressionGameTests {
         }
         var id=ResourceLocation.fromNamespaceAndPath("testcompanion","road_regression_"+Long.toUnsignedString(seed));
         var loaded=new LoadedProfile(new ContentId(id.toString()),config,CanonicalConfigJson.write(config),"regression",
-                StructureRoadInformation.load(server.getResourceManager(),config));
+                StructureRoadInformation.load(config,ignored->null));
         var managed=config.structures().stream().map(s->ResourceLocation.parse(s.id().value())).collect(java.util.stream.Collectors.toSet());
         var execution=StructureExecutionCatalog.load(managed,registries,server.getResourceManager(),server.getStructureManager());
         loaded=StructureFootprintResources.resolve(loaded,registries,server.getStructureManager(),execution);
@@ -65,6 +69,14 @@ public final class RoadRegressionGameTests {
             } catch(java.io.IOException failure) {throw new java.io.UncheckedIOException(failure);}
             return result;
         });
+        for(String requiredId:List.of("minecraft:village_snowy","adventureworldgen:mountain_lookout")) {
+            var placement=plan.plannedStructures().stream().filter(p->p.structureId().value().equals(requiredId)).findFirst().orElseThrow();
+            helper.assertTrue(plan.roads().nodes().stream().anyMatch(n->n.required()&&n.id().equals("structure/"+placement.instanceId())),"missing required road: "+requiredId);
+            if(requiredId.equals("adventureworldgen:mountain_lookout")) {
+                helper.assertTrue(plan.biomeAt(placement.anchorX(),64,placement.anchorZ()).value().equals("minecraft:stony_peaks"),"lookout must be in peak terrain");
+                System.out.println("MOUNTAIN_LOOKOUT seed="+seed+" anchor="+placement.anchorX()+","+placement.anchorZ()+" surface="+plan.terrainAt(placement.anchorX()+.5,placement.anchorZ()+.5).groundSurface());
+            }
+        }
         var spawn=plan.spawnPosition();
         int sx=(int)Math.floor(spawn.x()),sz=(int)Math.floor(spawn.z());
         helper.assertTrue(plan.roadAt(sx,sz).deckY()==(int)Math.floor(plan.terrainAt(sx+.5,sz+.5).groundSurface())-1,

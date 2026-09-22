@@ -18,5 +18,9 @@
   "adventureworldgen.planning.validation": "验证",
   "adventureworldgen.planning.structures": "必要结构放置",
   "adventureworldgen.planning.humidity": "建立湿度场",
-  "adventureworldgen.planning.roads": "规划道路"
+  "adventureworldgen.planning.roads": "规划道路",
+  "adventureworldgen.planning.paused": "道路计算已暂停，进度已保留",
+  "adventureworldgen.planning.capacity": "道路容量已满，请调整规模后重新规划",
+  "adventureworldgen.planning.continue": "继续下一批计算（回车）",
+  "adventureworldgen.planning.cancel": "取消本次规划"
 }

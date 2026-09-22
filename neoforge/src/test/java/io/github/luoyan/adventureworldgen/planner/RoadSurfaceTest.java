@@ -35,4 +35,14 @@ class RoadSurfaceTest {
         var again=RoadConstruction.build(path,settings,terrain,List.of(),existing,0,0,63);
         assertTrue(again.valid(),again.failure());assertEquals(first.columns(),again.columns());
     }
+    @Test void gradeEnvelopeAtEarthworkBoundaryToleratesFloatingPointRoundoff() {
+        var settings=RoadPlannerTest.settings("").config().roads();
+        RoadConstruction.Sampler terrain=(x,z)->RoadPlannerTest.land(x<1?121:127+Math.floor(.35*Math.min(Math.floor(x),20)));
+        var result=RoadConstruction.build(List.of(new Vec2(.5,.5),new Vec2(20.5,.5)),settings,terrain,List.of(),Map.of(),-100,-100,120);
+        assertTrue(result.valid(),result.failure());
+        for(var c:result.columns()) {
+            var ground=(int)Math.floor(terrain.sample(c.x()+.5,c.z()+.5).groundSurface())-1;
+            assertTrue(Math.abs(c.deckY()-ground)<=settings.maximumEarthwork());
+        }
+    }
 }

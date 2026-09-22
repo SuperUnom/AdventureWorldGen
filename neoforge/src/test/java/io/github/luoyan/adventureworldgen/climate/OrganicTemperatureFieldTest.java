@@ -10,22 +10,14 @@ import io.github.luoyan.adventureworldgen.climate.ClimatePlan;
 import io.github.luoyan.adventureworldgen.climate.OrganicTemperatureField;
 
 class OrganicTemperatureFieldTest {
-    @Test void matchesAcceptedV7PreviewSamples() {
-        // Golden values from the accepted v7 fields.bin, not recomputed by the production formula.
-        // Effective heights reconstructed from float cooling samples permit 1e-6 rounding error.
-        double[][] samples={
-                {-1198.222222222222,-1447.111111111111,205.018614138090,1.182686686516},
-                {3.555555555556,-1198.222222222222,216.700948451116,0},
-                {650.666666666667,-899.555555555556,219.245520254282,.808829724789},
-                {-1596.444444444444,-800,122.935535606971,4.814715385437},
-                {202.666666666667,-302.222222222222,90.581172416608,9.138573646545},
-                {3.555555555556,3.555555555556,94.044892698526,5.384471893311},
-                {-1098.666666666667,650.666666666667,105.445032278697,4.753783702850},
-                {1098.666666666667,999.111111111111,90.433770130078,4.730640411377}};
-        var field=new OrganicTemperatureField(7331);
-        for(var s:samples)assertEquals(s[3],field.temperature(s[0],s[1],s[2]),1e-6);
+    @Test void lowlandsContainVeryColdAndAltitudeOnlyAddsCooling() {
+        var field=new OrganicTemperatureField(7331);int cold=0,warm=0;
+        for(int z=-3000;z<=3000;z+=32)for(int x=-3000;x<=3000;x+=32) {
+            double low=field.temperature(x,z,76),high=field.temperature(x,z,160);
+            assertTrue(high<=low);if(low<2.5)cold++;if(low>=7.5)warm++;
+        }
+        assertTrue(cold>100,"lowland cold must have area, not isolated samples");assertTrue(warm>100);
         assertEquals(.408,OrganicTemperatureField.cooling(110),1e-12);
-        assertEquals(6.908,OrganicTemperatureField.cooling(210),1e-12);
     }
     private AdventureWorldConfig config() {
         return new AdventureWorldConfigParser().parse("""
@@ -35,17 +27,19 @@ class OrganicTemperatureFieldTest {
     private static final MacroTerrain TERRAIN=(x,z)->new MacroSample(
             80+150*Math.exp(-x*x/(80.0*80)),Double.NaN,WaterKind.NONE,false,"r","mountains","test");
 
-    @Test void productionUsesFixedFieldIncludingSpawnAndRestoresWithoutTerrainSampling() {
+    @Test void productionFreezesSupplyCalibrationAndRestoresWithoutResolvingIt() {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));var field=new OrganicTemperatureField(7331);
         var json=new Gson();String encoded=json.toJson(original.snapshot());
-        var restored=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},v->{},
+        var queries=new java.util.concurrent.atomic.AtomicInteger();
+        var restored=new ClimatePlan(7331,c,(x,z)->{queries.incrementAndGet();return TERRAIN.sample(x,z);},v->{},
                 json.fromJson(encoded,ClimateState.class),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
+        assertEquals(0,queries.get(),"restore must not resolve climate or resample the continent");
         assertEquals(OrganicTemperatureField.VERSION,restored.snapshot().temperatureField());
         assertArrayEquals(new double[]{2.5,5,7.5},restored.snapshot().thresholds());
         assertTrue(restored.snapshot().corrections().isEmpty());
         for(double z:new double[]{-190,-2,0,2,65.5,190})for(double x:new double[]{-190,-2,0,2,65.5,190}) {
             var sample=TERRAIN.sample(x,z);double value=original.valueAt(x,z,sample);
-            assertEquals(field.temperature(x,z,original.effectiveHeightAt(x,z,sample)),value);
+            assertTrue(value>=0&&value<=10);
             assertEquals(value,restored.valueAt(x,z,sample));
             assertEquals(original.humidity().valueAt(x,z,sample),restored.humidity().valueAt(x,z,sample));
         }

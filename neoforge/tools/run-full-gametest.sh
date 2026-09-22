@@ -40,9 +40,9 @@ GAMETEST_GROUPS=(
   "default:10"
   "performance:6"
   "capacity:1"
-  "planning:6"
+  "planning:7"
   "structure:5"
-  "roads:3"
+  "roads:4"
 )
 
 selected=()

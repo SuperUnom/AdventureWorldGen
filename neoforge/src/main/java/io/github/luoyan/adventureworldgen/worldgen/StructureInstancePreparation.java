@@ -5,10 +5,12 @@ import io.github.luoyan.adventureworldgen.plan.*;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.runtime.StructurePreparation;
 import io.github.luoyan.adventureworldgen.worldgen.structure.TemplateStructure;
+import io.github.luoyan.adventureworldgen.worldgen.structure.JigsawParameters;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.LevelHeightAccessor;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 import net.minecraft.world.level.levelgen.structure.Structure;
@@ -55,6 +57,10 @@ public final class StructureInstancePreparation implements StructurePreparation 
             candidates.sort(Comparator.comparingDouble((PlannedStructurePlacement p)->Math.hypot(p.anchorX()-original.anchorX(),p.anchorZ()-original.anchorZ()))
                     .thenComparingInt(PlannedStructurePlacement::anchorX).thenComparingInt(PlannedStructurePlacement::anchorZ));
             StructureStart accepted=null; PlannedStructurePlacement selected=null; int attempts=0;
+            // Java execution ignores the macro position within a chunk. Do not spend the
+            // native-call budget rediscovering the same invalid start at four 8-block offsets.
+            boolean chunkOrigin=!(structure instanceof TemplateStructure)&&!(structure instanceof JigsawParameters);
+            var attemptedChunks=new HashSet<ChunkPos>();
             for(var candidate:candidates) {
                 int x=candidate.anchorX(),z=candidate.anchorZ();
                 if(Math.hypot(x,z)>config.world().radius()||carriers.stream().noneMatch(p->p.contains(x,z)))continue;
@@ -62,7 +68,9 @@ public final class StructureInstancePreparation implements StructurePreparation 
                 if(sample.wet()||sample.hazardous()||!allowed.contains(view.biomeAt(x,64,z))||!spacing(candidate,placements,settings.spacing()))continue;
                 if(placements.stream().anyMatch(p->!p.instanceId().equals(candidate.instanceId())&&p.structureId().equals(candidate.structureId())
                         &&PlannedStructureBridge.owner(p).equals(PlannedStructureBridge.owner(candidate))))continue;
-                if(attempts++>=MAX_ATTEMPTS)break;
+                if(chunkOrigin&&!attemptedChunks.add(PlannedStructureBridge.owner(candidate)))continue;
+                if(attempts>=MAX_ATTEMPTS)break;
+                attempts++;
                 var context=new Structure.GenerationContext(registries,generator,generator.getBiomeSource(),random,
                         templates,view.seed(),PlannedStructureBridge.owner(candidate),height,structure.biomes()::contains);
                 var start=PlannedStructureBridge.generateStart(structure,context,candidate,execution.terrain(id));

@@ -14,22 +14,49 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
 /** One coarse candidate catalog and lazily cached exact quart samples for a frozen terrain. */
 public final class PlacementIndex {
     public record Point(int x, int z) { public long cell() { return CellMask.key(x,z); } }
-    private final MacroTerrain terrain;
+    private final PlanningAtlas terrain;
     private final JointPlanner.LevelConstraint levels;
     private final JointPlanner.BiomeConstraint adapters;
     private final AdventureWorldConfig config;
     // Packed x/z keys collide heavily under Long.hashCode() (x XOR z).
     // Primitive maps mix the full key and avoid boxed tree nodes on the million-cell grid.
-    private final Long2ObjectOpenHashMap<MacroSample> samples = new Long2ObjectOpenHashMap<>();
-    private final Map<ContentId, Long2ByteOpenHashMap> compatibility = new HashMap<>();
+
+    private final Map<ContentId, io.github.luoyan.adventureworldgen.spatial.TiledBitField> compatibility = new HashMap<>();
     private final Map<Integer, List<Point>> candidates = new HashMap<>();
     private final List<Point> land = new ArrayList<>();
     private final Map<List<ContentId>,Long> terrainCapacity=new HashMap<>();
-    private final Map<Integer,List<Point>> finerLand = new HashMap<>();
-    private final Long2ObjectOpenHashMap<MacroSample> exactSamples=new Long2ObjectOpenHashMap<>();
+
+
     private final Map<Integer,Long2ByteOpenHashMap> accepted=new HashMap<>();
     private final Map<Integer,it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap> penalties=new HashMap<>();
     private long queries;
+    private final Map<ContentId,io.github.luoyan.adventureworldgen.spatial.TiledBitField> environment=new HashMap<>();
+    final SupplyRegionGraph supply=new SupplyRegionGraph();
+    private io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules environmentRules;
+    public void prepareEnvironments(List<ContentId> biomes,io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules rules,
+                                    io.github.luoyan.adventureworldgen.plan.PlanningExecution execution) {
+        environmentRules=rules;var ids=biomes.stream().distinct().sorted().toList();
+        // Third-party adapters have no concurrency contract; evaluate them in stable order first.
+        var admitted=new ArrayList<java.util.BitSet>();
+        for(var id:ids){var bits=new java.util.BitSet(land.size());for(int i=0;i<land.size();i++) {
+            var p=land.get(i);if(allows(id,p.x,p.z))bits.set(i);
+        }admitted.add(bits);}
+        record Prepared(io.github.luoyan.adventureworldgen.spatial.TiledBitField field,List<Long> legal) {}
+        var prepared=execution.map(ids.size(),Math.max(1,land.size()*24L),i->{
+            var field=new io.github.luoyan.adventureworldgen.spatial.TiledBitField();var legal=new ArrayList<Long>();
+            for(int j=0;j<land.size();j++) {
+                var p=land.get(j);boolean valid=admitted.get(i).get(j)&&rules.allows(ids.get(i),p.x,p.z,sample(p.x,p.z));
+                field.get(p.x,p.z,()->valid);if(valid)legal.add(p.cell());
+            }
+            return new Prepared(field,legal);
+        });
+        for(int i=0;i<ids.size();i++){environment.put(ids.get(i),prepared.get(i).field);supply.add(ids.get(i),prepared.get(i).legal);}
+    }
+    boolean environmentAllows(ContentId id,int x,int z) {
+        return environment.computeIfAbsent(id,ignored->new io.github.luoyan.adventureworldgen.spatial.TiledBitField())
+                .get(x,z,()->allows(id,x,z)&&environmentRules.allows(id,x,z,sample(x,z)));
+    }
+    boolean hasEnvironment(){return environmentRules!=null;}
 
     public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
                           JointPlanner.BiomeConstraint adapters, PlannerProfile profile) {
@@ -43,7 +70,7 @@ public final class PlacementIndex {
     public PlacementIndex(AdventureWorldConfig config, MacroTerrain terrain, JointPlanner.LevelConstraint levels,
                           JointPlanner.BiomeConstraint adapters, PlannerProfile profile,
                           java.util.function.DoubleConsumer progress) {
-        this.config = config; this.terrain = terrain; this.levels = levels; this.adapters = adapters;
+        this.config = config; this.terrain = terrain instanceof PlanningAtlas atlas ? atlas : new PlanningAtlas(terrain, profile.maximumWorkingMemoryBytes()/4); this.levels = levels; this.adapters = adapters;
         int extent = (int) StrictMath.ceil(config.world().radius() / 16);
         long nodes = (2L * extent + 1) * (2L * extent + 1);
         if (nodes > profile.maximumCostNodes()) throw new PlanningFailure(PlanningFailure.Code.RESOURCE_LIMIT, FailureStage.PLACEMENT_INDEX, "candidate grid exceeds node budget",
@@ -56,35 +83,17 @@ public final class PlacementIndex {
             if (sample.waterKind() == WaterKind.NONE && !sample.hazardous()) land.add(new Point(x,z));
         }
     }
-    public MacroSample sampleAt(double x,double z) {
-        if(x!=(int)x||z!=(int)z)return terrain.sample(x,z);
-        int ix=(int)x,iz=(int)z;
-        if(Math.floorMod(ix,4)==2&&Math.floorMod(iz,4)==2)return sample(ix-2,iz-2);
-        long key=((long)ix<<32)^(iz&0xffffffffL);
-        return exactSamples.computeIfAbsent(key,ignored->terrain.sample(x,z));
-    }
+    public MacroSample sampleAt(double x,double z) { return terrain.sample(x,z); }
     public MacroSample sample(int x, int z) {
-        long cell = CellMask.key(x,z);
-        MacroSample result = samples.get(cell);
-        if (result == null) {
-            queries++;
-            result = terrain.sample(CellMask.x(cell) + 2, CellMask.z(cell) + 2);
-            samples.put(cell, result);
-        }
-        return result;
+        return terrain.sample(Math.floorDiv(x,4)*4+2,Math.floorDiv(z,4)*4+2);
     }
     public boolean allows(ContentId biome, int x, int z) {
-        var cache = compatibility.computeIfAbsent(biome, ignored -> new Long2ByteOpenHashMap());
-        long cell = CellMask.key(x,z);
-        byte result = cache.get(cell);
-        if (result == 0) {
-            MacroSample s = sample(x,z);
-            boolean allowed = s.waterKind() == WaterKind.NONE && !s.hazardous()
-                    && config.biomes().allows(biome,s) && adapters.accepts(biome,CellMask.x(cell)+2,CellMask.z(cell)+2);
-            result = (byte) (allowed ? 1 : 2);
-            cache.put(cell, result);
-        }
-        return result == 1;
+        var cache = compatibility.computeIfAbsent(biome, ignored -> new io.github.luoyan.adventureworldgen.spatial.TiledBitField());
+        return cache.get(x,z,()-> {
+            MacroSample s=sample(x,z);
+            return !s.wet()&&!s.hazardous()&&config.biomes().allows(biome,s)
+                    &&adapters.accepts(biome,Math.floorDiv(x,4)*4+2,Math.floorDiv(z,4)*4+2);
+        });
     }
     /** Coarse frozen legal terrain supply; independent of temperature and adventure preference. */
     public long terrainCapacity(List<ContentId> biomes) {
@@ -95,22 +104,29 @@ public final class PlacementIndex {
     public List<Point> candidates(int level) {
         return candidates.computeIfAbsent(level, ignored -> land.stream().filter(p -> levels.mightAccept(level,p.x,p.z)).toList());
     }
-    public List<Point> candidates(int level,int step) {
+    /** Fine candidates are streamed tile by tile: no whole-continent fine object catalog. */
+    public Iterable<Point> candidates(int level,int step) {
         if(step==16)return candidates(level);
         if(step!=8&&step!=4)throw new IllegalArgumentException("unsupported candidate spacing");
-        // Finer fallback deliberately bypasses the coarse cost filter: a coarse graph can miss a narrow route.
-        return finerLand.computeIfAbsent(step,ignored -> {
-            List<Point> points=new ArrayList<>(); int extent=(int)StrictMath.ceil(config.world().radius()/step);
-            long visits=0;
-            for(int gz=-extent;gz<=extent;gz++)for(int gx=-extent;gx<=extent;gx++) {
-                int x=gx*step,z=gz*step;
-                if(StrictMath.hypot(x,z)>config.world().radius())continue;
-                if(++visits>2_000_000)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.CANDIDATE_REFINEMENT,
-                        "fine candidate catalog exceeded cell budget",Map.of("spacing",step,"visits",visits));
-                var s=sample(x,z); if(s.waterKind()==WaterKind.NONE&&!s.hazardous())points.add(new Point(x,z));
+        return () -> new Iterator<>() {
+            final int low=Math.floorDiv(-(int)Math.ceil(config.world().radius()),256);
+            final int high=Math.floorDiv((int)Math.ceil(config.world().radius()),256);
+            int tx=low,tz=low,lx=0,lz=0;
+            Point next=advance();
+            private Point advance() {
+                while(tz<=high) {
+                    io.github.luoyan.adventureworldgen.plan.PlanningExecution.checkCancelled();
+                    int x=tx*256+lx,z=tz*256+lz;
+                    lx+=step;if(lx>=256){lx=0;lz+=step;if(lz>=256){lz=0;tx++;if(tx>high){tx=low;tz++;}}}
+                    if(Math.hypot(x,z)>config.world().radius())continue;
+                    var s=sample(x,z);
+                    if(!s.wet()&&!s.hazardous())return new Point(x,z);
+                }
+                return null;
             }
-            return List.copyOf(points);
-        });
+            public boolean hasNext(){return next!=null;}
+            public Point next(){if(next==null)throw new NoSuchElementException();Point value=next;next=advance();return value;}
+        };
     }
     public boolean accepts(int level, Point p) {
         var cache=accepted.computeIfAbsent(level,ignored->new Long2ByteOpenHashMap());
@@ -122,5 +138,5 @@ public final class PlacementIndex {
         var cache=penalties.computeIfAbsent(level,ignored->new it.unimi.dsi.fastutil.longs.Long2DoubleOpenHashMap());
         return cache.computeIfAbsent(p.cell(),ignored->levels.penalty(level,p.x,p.z));
     }
-    public long queries() { return queries; }
+    public long queries() { return terrain.sampleCount(); }
 }

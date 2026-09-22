@@ -29,7 +29,9 @@ public final class RoadPreview {
                     (x,z)->x>180&&x<260&&Math.abs(z)<32?new MacroSample(64,Double.NaN,WaterKind.NONE,true,"obstacle","plains","test"):land(64)};
             for(int i=0;i<terrains.length;i++) {
                 var road=new RoadPlanner(472,config,terrains[i]).plan(new AdventurePlanView.SpawnPosition(.5,64,.5,0),List.of(patch),List.of(),StructurePlanningCatalog.fromIds(List.of()),(x,z)->patch.biomeId());
-                panels.add(new Panel(titles[i],terrains[i],road,-24,-62.1923076923,528,124.3846153846));
+                double minZ=Math.min(-62.1923076923,road.columns().stream().mapToInt(RoadPlan.Column::z).min().orElse(0)-12);
+                double maxZ=Math.max(62.1923076923,road.columns().stream().mapToInt(RoadPlan.Column::z).max().orElse(0)+12);
+                panels.add(new Panel(titles[i],terrains[i],road,-24,minZ,528,maxZ-minZ));
                 System.out.println(titles[i]+": routes="+road.routes().size()+", length="+road.routes().stream().mapToDouble(RoadPlan.Route::length).sum()+", columns="+road.columns().size()+", samples="+road.operations());
             }
         } else if(args.length==3) {

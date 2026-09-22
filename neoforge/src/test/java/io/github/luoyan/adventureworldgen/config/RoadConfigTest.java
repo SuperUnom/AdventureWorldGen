@@ -75,16 +75,20 @@ class RoadConfigTest {
             assertNotEquals(before,PlanIdentity.hash(1,new LoadedProfile(id,changed,CanonicalConfigJson.write(changed),"test"),adapters,PlannerProfile.V2),kind+"."+flag);
         }
     }
-    @Test void bundledVillagesAreGeneratedAndRequiredRoadDestinations() throws Exception {
+    @Test void bundledSurfaceStructuresAreRequiredRoadDestinationsWithDefaultAccess() throws Exception {
         try(var reader=new java.io.InputStreamReader(getClass().getResourceAsStream("/data/adventureworldgen/adventureworldgen/profiles/default.json"),java.nio.charset.StandardCharsets.UTF_8)) {
-            var config=new AdventureWorldConfigParser().parse(reader);assertTrue(config.roads().enabled());assertEquals(3,config.structures().size());
-            for(var village:config.structures()) {
-                assertEquals(1,village.count().min());assertEquals(1,village.count().max());assertTrue(village.road().enabled());assertTrue(village.road().required());
-                try(var access=getClass().getResourceAsStream("/data/minecraft/adventureworldgen/structure_planning/"+village.id().value().split(":")[1]+".json")) {
-                    assertNotNull(access);var json=JsonParser.parseString(new String(access.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8)).getAsJsonObject().getAsJsonObject("road_access");
-                    assertDoesNotThrow(()->new StructurePlanningInfo.RoadAccess(json.get("margin").getAsInt()));
-                }
+            var config=new AdventureWorldConfigParser().parse(reader);
+            assertTrue(config.roads().enabled());
+            assertTrue(config.structures().stream().anyMatch(s->!s.id().value().startsWith("minecraft:village_")),"default roads must also visit surface landmarks");
+            var ids=config.structures().stream().map(s->s.id().value()).toList();
+            assertTrue(ids.contains("minecraft:village_snowy"));
+            assertTrue(ids.contains("adventureworldgen:mountain_lookout"));
+            var catalog=StructurePlanningJson.load(config,ignored->null);
+            for(var structure:config.structures()) {
+                assertTrue(structure.count().min()>0);assertTrue(structure.road().enabled());assertTrue(structure.road().required());
+                assertEquals(StructurePlanningInfo.RoadAccess.DEFAULT,catalog.find(structure.id()).orElseThrow().roadAccess());
             }
+            assertEquals(config,new AdventureWorldConfigParser().parse(CanonicalConfigJson.write(config)));
         }
     }
 }

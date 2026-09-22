@@ -71,7 +71,7 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 | capacity | 容量回归和受限配置 |
 | planning | 新世界生产规划、冻结结果和完整约束 |
 | structure | 真实区块中三类结构、重载续接、地形策略、候选接管与资源身份 |
-| roads | 道路跨区块顺序、地物写入保护、短桥水体和玩家修改保留 |
+| roads | 道路与多层栈道跨区块顺序、支撑和净空、地物写入保护、短桥水体和玩家修改保留 |
 
 [run-full-gametest.sh](../../neoforge/tools/run-full-gametest.sh) 顺序运行全部组，使用独立目录并核对发现、执行和通过清单：
 
@@ -98,6 +98,11 @@ JUnit 报告生成在 `build/reports/tests/test/index.html`，机器可读结果
 
 <a id="ready"></a>
 ## READY 对照
+
+道路预算变化需覆盖 `RoadWorkBudgetTest`、`RoadContinuationTest` 与 `RoadPlannerTest`：
+多目的地额度独立、不同批次几何一致、容量不越限和取消；`RoadGrowthBudgetTest` 补充嵌套施工及延后重试不能重置硬预算。
+显式手动控制器另测暂停现场与续算 token；生产批次不能突破累计算法预算。客户端行走与栈道外观仍需单独检查。
+
 
 纯数据往返运行 persistence 和 runtime 测试；`PlanningBaselineTest` 检查规范字节、恢复后重编码与采样字段。
 GameTest 中需要 fresh planning 的组必须使用全新目录，恢复对照必须复用同一目录、seed 与配置。

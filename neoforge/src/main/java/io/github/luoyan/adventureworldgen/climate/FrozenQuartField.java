@@ -29,7 +29,7 @@ final class FrozenQuartField {
      * coordinates outside the frozen extent, are answered exactly and are never stored.
      */
     boolean cacheable(double x,double z) {
-        return Math.abs(x)<=extent && Math.abs(z)<=extent
+        return x==Math.rint(x)&&z==Math.rint(z)&&Math.abs(x)<=extent && Math.abs(z)<=extent
                 && Math.floorMod((long) x - CENTER_OFFSET, QUART)==0
                 && Math.floorMod((long) z - CENTER_OFFSET, QUART)==0;
     }

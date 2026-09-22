@@ -17,7 +17,21 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
 public final class RequirementExpander {
     public static final int MAX_MERGED_LEVEL_SPAN = 2;
 
-    public ExpandedRequirements expandMinimum(AdventureWorldConfig config) {
+    public ExpandedRequirements expandMinimum(AdventureWorldConfig config) {return expand(config,true);}
+    public ExpandedRequirements expandUnmerged(AdventureWorldConfig config) {return expand(config,false);}
+    /** Recover quota roles from stable source IDs after a spatially incompatible group was split. */
+    public List<PatchDemand> demandsForLayout(AdventureWorldConfig config,List<io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch> patches) {
+        var ids=patches.stream().map(io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch::patchId).collect(java.util.stream.Collectors.toSet());
+        var sources=expandUnmerged(config).patches();var result=new ArrayList<PatchDemand>();
+        for(var group:expandMinimum(config).patches()) {
+            boolean split=group.members().stream().anyMatch(m->!m.patchId().equals(group.patchId())&&ids.contains(m.patchId()));
+            if(split)for(var source:sources) {
+                if(group.members().stream().anyMatch(m->m.patchId().equals(source.patchId())))result.add(source);
+            } else result.add(group);
+        }
+        return List.copyOf(result);
+    }
+    private ExpandedRequirements expand(AdventureWorldConfig config,boolean mergeSources) {
         Objects.requireNonNull(config, "config");
         List<PatchDemand> patches = new ArrayList<>();
         for (var required : config.biomes().required()) {
@@ -61,7 +75,7 @@ public final class RequirementExpander {
         // Grouping uses level order, but diagnostics retain source order when nothing merges.
         Map<String, Integer> sourceOrder = new java.util.HashMap<>();
         for (int i = 0; i < patches.size(); i++) sourceOrder.put(patches.get(i).patchId(), i);
-        var merged = new ArrayList<>(merge(patches));
+        var merged = new ArrayList<>(mergeSources?merge(patches):patches);
         merged.sort(Comparator.comparingInt(group -> group.members().stream()
                 .mapToInt(member -> sourceOrder.get(member.patchId())).min().orElseThrow()));
         return new ExpandedRequirements(merged, instances);

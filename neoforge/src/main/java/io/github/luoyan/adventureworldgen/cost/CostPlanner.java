@@ -20,11 +20,16 @@ public final class CostPlanner {
     /** Entry cap for the exact-cost memo, charged at {@link CostRefinement#EXACT_ENTRY_BYTES}. */
     private static final int MAXIMUM_EXACT_COST_ENTRIES = 1_000_000;
     private final PlannerProfile profile;
+    private io.github.luoyan.adventureworldgen.plan.PlanningExecution execution=io.github.luoyan.adventureworldgen.plan.PlanningExecution.SERIAL;
     private final long refinementByteBudget;
     private final int maximumExactCostEntries;
 
     public CostPlanner(PlannerProfile profile) {
         this(profile, REFINEMENT_BYTE_BUDGET, MAXIMUM_EXACT_COST_ENTRIES);
+    }
+
+    public CostPlanner(PlannerProfile profile,io.github.luoyan.adventureworldgen.plan.PlanningExecution execution) {
+        this(profile);this.execution=execution;
     }
 
     /**
@@ -90,11 +95,15 @@ public final class CostPlanner {
             return x == ix && z == iz ? samples.get(ix,iz,query) : terrain.sample(x,z);
         };
         byte[] allowed = new byte[Math.toIntExact(nodes)];
-        for (int gx = -extentInt; gx <= extentInt; gx++) for (int gz = -extentInt; gz <= extentInt; gz++) {
-            var sample = cachedTerrain.sample(gx * (double) spacing, gz * (double) spacing);
-            allowed[bounds.index(new Node(gx, gz))] = (byte) (sample.waterKind() != WaterKind.OCEAN
-                    && sample.waterKind() != WaterKind.LAVA && !sample.hazardous() ? 1 : 0);
-        }
+        execution.map(extentInt*2+1,Math.max(1,(extentInt*2L+1)*192),row->{
+            int gz=row-extentInt;
+            for(int gx=-extentInt;gx<=extentInt;gx++) {
+                var sample=cachedTerrain.sample(gx*(double)spacing,gz*(double)spacing);
+                allowed[bounds.index(new Node(gx,gz))]=(byte)(sample.waterKind()!=WaterKind.OCEAN
+                        &&sample.waterKind()!=WaterKind.LAVA&&!sample.hazardous()?1:0);
+            }
+            return row;
+        });
         progress.accept(0.15);
         java.util.function.Predicate<Node> predicate = node -> allowed[bounds.index(node)] != 0;
         BoundaryIntersector coastBoundaries = (x0, z0, x1, z1) -> {

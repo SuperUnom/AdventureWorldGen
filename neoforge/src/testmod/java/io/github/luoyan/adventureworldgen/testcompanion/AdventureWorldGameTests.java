@@ -6,6 +6,12 @@ import io.github.luoyan.adventureworldgen.worldgen.ProfileReloadListener;
 import io.github.luoyan.adventureworldgen.runtime.GeneratedAdventurePlan;
 import io.github.luoyan.adventureworldgen.runtime.RuntimePlanner;
 import io.github.luoyan.adventureworldgen.worldgen.MinecraftAdapters;
+import io.github.luoyan.adventureworldgen.worldgen.StructureExecutionCatalog;
+import io.github.luoyan.adventureworldgen.worldgen.StructureExecutionIdentity;
+import io.github.luoyan.adventureworldgen.worldgen.StructureFootprintResources;
+import io.github.luoyan.adventureworldgen.worldgen.StructureInstancePreparation;
+import io.github.luoyan.adventureworldgen.runtime.PlanIdentity;
+import io.github.luoyan.adventureworldgen.plan.PlannerProfile;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
@@ -210,6 +216,16 @@ public final class AdventureWorldGameTests {
         return result;
     }
 
+    private static GeneratedAdventurePlan planNativeProfile(GameTestHelper helper,long seed,LoadedProfile loaded,java.nio.file.Path directory) {
+        var server=helper.getLevel().getServer();var registries=server.registryAccess();
+        var managed=loaded.config().structures().stream().map(s->ResourceLocation.parse(s.id().value())).collect(java.util.stream.Collectors.toSet());
+        var execution=StructureExecutionCatalog.load(managed,registries,server.getResourceManager(),server.getStructureManager());
+        loaded=StructureFootprintResources.resolve(loaded,registries,server.getStructureManager(),execution);
+        var identity=StructureExecutionIdentity.hash(server,execution,PlanIdentity.hash(seed,loaded,MinecraftAdapters.builtIn(),PlannerProfile.V2));
+        var preparation=new StructureInstancePreparation(registries,server.getStructureManager(),execution,loaded.config(),ResourceLocation.parse(loaded.id().value()));
+        return RuntimePlanner.plan(seed,loaded,directory,MinecraftAdapters.builtIn(),identity,preparation::prepare);
+    }
+
     @GameTest(templateNamespace = "minecraft", template = EMPTY, timeoutTicks = 2400)
     public static void crashSeedPlansEveryRequiredBiome(GameTestHelper helper) {
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(
@@ -218,10 +234,10 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "crash-seed-r11",
                     io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
-            var generated = RuntimePlanner.plan(4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"), MinecraftAdapters.builtIn());
+            var generated = planNativeProfile(helper,4126649097427443736L, loaded, java.nio.file.Path.of("crash-seed-r11"));
             assertTerrainBiomes(helper, generated, config);
             helper.assertTrue(!generated.roads().routes().isEmpty(), "production roads are empty for this seed");
-            var reloaded=RuntimePlanner.plan(4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"),MinecraftAdapters.builtIn());
+            var reloaded=planNativeProfile(helper,4126649097427443736L,loaded,java.nio.file.Path.of("crash-seed-r11"));
             helper.assertTrue(generated.roads().equals(reloaded.roads()), "READY changed frozen roads");
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
@@ -247,7 +263,7 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "capacity-seed-r12",
                     io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
-            var generated = RuntimePlanner.plan(1, loaded, java.nio.file.Path.of("capacity-seed-r12"), MinecraftAdapters.builtIn());
+            var generated = planNativeProfile(helper,1, loaded, java.nio.file.Path.of("capacity-seed-r12"));
             assertTerrainBiomes(helper, generated, config);
             helper.assertTrue(Math.abs(java.util.Arrays.stream(generated.climate().actualRatios()).sum()-1)<1e-9, "climate land ratios do not sum to one");
             helper.assertTrue(generated.biomePatches().stream().filter(p -> p.mask()!=null).allMatch(p -> p.contains(p.anchorX(),p.anchorZ())), "frozen ownership lost a required anchor");
@@ -268,9 +284,9 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "production-profile-test",
                     io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
-            var generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of(directory), MinecraftAdapters.builtIn());
+            var generated = planNativeProfile(helper,seed, loaded, java.nio.file.Path.of(directory));
             assertTerrainBiomes(helper, generated, config);
-            var reloaded=RuntimePlanner.plan(seed,loaded,java.nio.file.Path.of(directory),MinecraftAdapters.builtIn());
+            var reloaded=planNativeProfile(helper,seed,loaded,java.nio.file.Path.of(directory));
             var progress=io.github.luoyan.adventureworldgen.runtime.PlanningProgress.current();
             helper.assertTrue(progress.status()==io.github.luoyan.adventureworldgen.runtime.PlanningProgress.Status.READY
                     && progress.stage()==PlanningStage.CACHE,
@@ -299,7 +315,7 @@ public final class AdventureWorldGameTests {
             String canonical = io.github.luoyan.adventureworldgen.config.CanonicalConfigJson.write(config);
             var loaded = new LoadedProfile(ProfileReloadListener.DEFAULT_ID, config, canonical, "reported-river-seed",
                     io.github.luoyan.adventureworldgen.worldgen.StructureRoadInformation.load(helper.getLevel().getServer().getResourceManager(), config));
-            generated = RuntimePlanner.plan(seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"), MinecraftAdapters.builtIn());
+            generated = planNativeProfile(helper,seed, loaded, java.nio.file.Path.of("reported-river-seed-r7"));
             assertTerrainBiomes(helper, generated, config);
         } catch (java.io.IOException failure) { throw new AssertionError(failure); }
         var id = ResourceLocation.fromNamespaceAndPath("adventureworldgen", "river_regression");

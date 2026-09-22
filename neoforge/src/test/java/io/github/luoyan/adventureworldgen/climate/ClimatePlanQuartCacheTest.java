@@ -75,11 +75,21 @@ class ClimatePlanQuartCacheTest {
                     forward.valueAt(x, 2, TERRAIN.sample(x, 2)), 0.0, "x=" + x);
 
         var backward = plan(7331);
-        for (int x = -254; x <= 254; x += QUART) backward.valueAt(x, 2, TERRAIN.sample(x + 200, 2));
+        for (int x = 254; x >= -254; x -= QUART) backward.valueAt(x, 2, TERRAIN.sample(x, 2));
         for (int x = -254; x <= 254; x += QUART)
             assertEquals(forward.valueAt(x, 2, TERRAIN.sample(x, 2)),
                     backward.valueAt(x, 2, TERRAIN.sample(x, 2)), 0.0,
-                    "two plans that saw the same cells in the same order must agree");
+                    "different query order and first sample must agree");
+    }
+
+    @Test void fractionalCoordinatesNeverPoisonTemperatureOrHumidityCentres() {
+        var polluted=plan(7331);var clean=plan(7331);
+        for(int x:new int[]{-254,-2,2,254}) {
+            polluted.valueAt(x+.1,2,TERRAIN.sample(x+300,2));
+            polluted.humidity().valueAt(x+.1,2,TERRAIN.sample(x+300,2));
+            assertEquals(clean.valueAt(x,2,TERRAIN.sample(x,2)),polluted.valueAt(x,2,TERRAIN.sample(x+300,2)));
+            assertEquals(clean.humidity().valueAt(x,2,TERRAIN.sample(x,2)),polluted.humidity().valueAt(x,2,TERRAIN.sample(x+300,2)));
+        }
     }
 
     @Test

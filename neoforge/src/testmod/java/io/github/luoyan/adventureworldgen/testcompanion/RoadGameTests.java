@@ -83,6 +83,43 @@ public final class RoadGameTests {
         }
         helper.succeed();
     }
+    @GameTest(templateNamespace="testcompanion_roads",template="empty",timeoutTicks=1800)
+    public static void layeredBoardwalksPreserveAirAndChunkOrder(GameTestHelper helper) throws Exception {
+        var forward=new Fixture(helper,"layered_forward",false,true);
+        var reverse=new Fixture(helper,"layered_reverse",false,true);
+        Map<String,String> expected;
+        try(var world=forward.open()) {
+            expected=complete(helper,world.level,forward.plan,false);
+            helper.assertTrue(forward.plan.roadsAt(15,0).size()==2,"fixture lost its stacked decks");
+            helper.assertTrue(world.level.getBlockState(new BlockPos(15,208,0)).isAir(),"boardwalk filled its lower natural space");
+            helper.assertTrue(world.level.getBlockState(new BlockPos(13,214,0)).is(Blocks.OAK_LOG),"cross-chunk support missing");
+        }
+        try(var world=reverse.open()) {
+            helper.assertTrue(expected.equals(complete(helper,world.level,reverse.plan,true)),"layered deck depends on chunk order");
+            helper.assertTrue(world.level.getBlockState(new BlockPos(13,214,0)).is(Blocks.OAK_LOG),"reverse support missing");
+        }
+        RuntimePlanRegistry.release(new ContentId(forward.profile.toString()),forward.plan);
+        RuntimePlanRegistry.release(new ContentId(reverse.profile.toString()),reverse.plan);
+        helper.succeed();
+    }
+    private static RoadPlan layeredRoad() {
+        var path=new ArrayList<int[]>();
+        for(int x=15;x<=31;x++)path.add(new int[]{x,0});
+        for(int z=1;z<=16;z++)path.add(new int[]{31,z});
+        for(int x=30;x>=15;x--)path.add(new int[]{x,16});
+        for(int z=15;z>=0;z--)path.add(new int[]{15,z});
+        var columns=new ArrayList<RoadPlan.Column>();var geometry=new ArrayList<RoadPlan.Point3>();
+        for(int i=0;i<path.size();i++) {
+            int x=path.get(i)[0],z=path.get(i)[1],y=200+Math.min(i,16);
+            columns.add(new RoadPlan.Column(x,z,y,y-1,y+3,true,false,RoadPlan.Kind.BOARDWALK,i>0&&i<=16?0:-1));
+            geometry.add(new RoadPlan.Point3(x+.5,y,z+.5));
+        }
+        columns.sort(RoadPlan.COLUMN_ORDER);
+        return new RoadPlan(List.of(new RoadPlan.Node("spawn",15,0,true,200,RoadPlan.NodeKind.DESTINATION),
+                new RoadPlan.Node("upper",15,0,true,216,RoadPlan.NodeKind.DESTINATION)),
+                List.of(new RoadPlan.Route("loop","spawn","upper",geometry.stream().map(v->new Vec2(v.x(),v.z())).toList(),64,geometry,RoadPlan.Kind.BOARDWALK)),
+                columns,List.of(),List.of(),0,List.of(new RoadPlan.Support(13,214,0,15,214,0,RoadPlan.SupportKind.BEAM)));
+    }
     private static Map<String,String> complete(GameTestHelper helper,ServerLevel level,GeneratedAdventurePlan plan,boolean reverse) {
         var chunks=plan.roads().columns().stream().map(c->new net.minecraft.world.level.ChunkPos(c.x()>>4,c.z()>>4)).distinct()
                 .sorted(Comparator.comparingInt((net.minecraft.world.level.ChunkPos p)->p.x).thenComparingInt(p->p.z)).toList();
@@ -92,17 +129,18 @@ public final class RoadGameTests {
         for(var c:plan.roads().columns()) {
             var chunk=level.getChunk(c.x()>>4,c.z()>>4,ChunkStatus.FEATURES);var pos=new BlockPos(c.x(),c.deckY(),c.z());
             helper.assertTrue(chunk.getBlockState(pos).blocksMotion(),"missing road deck at "+pos);
-            helper.assertTrue(generator.getBaseHeight(c.x(),c.z(),Heightmap.Types.WORLD_SURFACE_WG,level,level.getChunkSource().randomState())==c.deckY()+1,"road base height mismatch");
+            helper.assertTrue(generator.getBaseHeight(c.x(),c.z(),Heightmap.Types.WORLD_SURFACE_WG,level,level.getChunkSource().randomState())==plan.roadAt(c.x(),c.z()).deckY()+1,"road base height mismatch");
             helper.assertTrue(generator.getBaseColumn(c.x(),c.z(),level,level.getChunkSource().randomState()).getBlock(c.deckY()).equals(chunk.getBlockState(pos)),"road base column mismatch");
             for(int y=c.deckY()+1;y<=c.deckY()+3;y++)helper.assertTrue(chunk.getBlockState(new BlockPos(c.x(),y,c.z())).isAir(),"road headroom obstructed");
-            result.put(c.x()+","+c.z(),chunk.getBlockState(pos).toString());
+            result.put(c.x()+","+c.deckY()+","+c.z(),chunk.getBlockState(pos).toString());
         }
         return result;
     }
     private static final class Fixture {
         final GameTestHelper helper;final Path directory;final ResourceLocation profile;final GeneratedAdventurePlan plan;
         Fixture(GameTestHelper helper,String name) throws Exception {this(helper,name,false);}
-        Fixture(GameTestHelper helper,String name,boolean river) throws Exception {
+        Fixture(GameTestHelper helper,String name,boolean river) throws Exception {this(helper,name,river,false);}
+        Fixture(GameTestHelper helper,String name,boolean river,boolean layered) throws Exception {
             this.helper=helper;directory=Files.createTempDirectory(helper.getLevel().getServer().getWorldPath(LevelResource.ROOT),"roads-"+name+"-");
             profile=ResourceLocation.fromNamespaceAndPath("testcompanion_roads",name+"_"+directory.getFileName());
             var templates=new StringJoiner(",");
@@ -121,7 +159,11 @@ public final class RoadGameTests {
                     List.of(new PlannedBiomePatch("forest",new ContentId("minecraft:forest"),1,110,-2,118,6)),List.of(),
                     PlanDiagnostics.basic(4,channels.size(),channels.size()*2L,PlanVersions.TERRAIN),null);
             var codec=new PlanV2Codec();var id=new ContentId(profile.toString());
-            plan=GeneratedAdventurePlan.restore(config,codec.decode(codec.encode(id,"roads-fixture",original.snapshot()),id,"roads-fixture"));
+            var snapshot=original.snapshot();
+            if(layered)snapshot=new io.github.luoyan.adventureworldgen.persistence.PlanSnapshot(snapshot.seed(),snapshot.diagnostics(),snapshot.spawn(),
+                    snapshot.coastline(),snapshot.riverNetwork(),snapshot.seaSurface(),snapshot.landBand(),snapshot.seaBand(),snapshot.terrainVersion(),
+                    snapshot.recipeSettings(),snapshot.recipeRegions(),snapshot.biomePatches(),snapshot.structures(),snapshot.erosion(),snapshot.capacities(),snapshot.biomeLayout(),layeredRoad());
+            plan=GeneratedAdventurePlan.restore(config,codec.decode(codec.encode(id,"roads-fixture",snapshot),id,"roads-fixture"));
             RuntimePlanRegistry.start(id,()->plan).join();
         }
         OpenWorld open() throws Exception { return openWorld(helper,directory,profile,plan); }
@@ -135,11 +177,15 @@ public final class RoadGameTests {
             // production start entry with an enabled manager and real registries/chunks instead.
             var manager=new net.minecraft.world.level.StructureManager(world.level,
                     new net.minecraft.world.level.levelgen.WorldOptions(plan.seed(),true,false),null);
+            var random=net.minecraft.world.level.levelgen.RandomState.create(net.minecraft.world.level.levelgen.NoiseGeneratorSettings.dummy(),
+                    world.level.registryAccess().lookupOrThrow(Registries.NOISE),plan.seed());
+            var structureState=world.level.getChunkSource().getGenerator().createState(
+                    world.level.registryAccess().lookupOrThrow(Registries.STRUCTURE_SET),random,plan.seed());
             for(var placement:plan.structures()) {
                 var owner=PlannedStructureBridge.owner(placement);
                 var chunk=world.level.getChunk(owner.x,owner.z,ChunkStatus.STRUCTURE_STARTS);
                 world.level.getChunkSource().getGenerator().createStructures(world.level.registryAccess(),
-                        world.level.getChunkSource().getGeneratorState(),manager,chunk,world.level.getServer().getStructureManager());
+                        structureState,manager,chunk,world.level.getServer().getStructureManager());
                 var structure=world.level.registryAccess().registryOrThrow(Registries.STRUCTURE).get(ResourceLocation.parse(placement.structureId().value()));
                 var start=chunk.getStartForStructure(structure);
                 helper.assertTrue(start!=null&&start.isValid(),"village failed native start generation: "+placement.instanceId()+", status="+chunk.getPersistedStatus()+", starts="+chunk.getAllStarts());

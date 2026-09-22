@@ -14,20 +14,7 @@ import java.util.Comparator;
 import java.util.List;
 import io.github.luoyan.adventureworldgen.biome.BiomeEnvironmentRules;
 
-/**
- * Demand and supply statistics for the accepted temperature field.
- *
- * <p>Diagnostic only. None of these values feeds back into the temperature field, the humidity
- * field, admission, scoring, or any search decision: the demand ratios and supply accounting exist
- * so the achieved climate mix can be compared with the author's intent, and they are persisted with
- * the layout for that reason. Keeping the computation in one named place makes that independence
- * explicit and lets the statistics be verified on their own.
- *
- * <p>Wire format: {@link ClimateSupply} is serialized reflectively as part of the plan-v3 layout
- * state, so its component names and order are part of the persisted format and must not be changed
- * casually. {@code ClimateState} deliberately keeps flat {@code ratios} / {@code actual} /
- * {@code supply} components rather than nesting this object, because that is the existing wire shape.
- */
+/** Converts author demands to pure climate targets and records accepted joint supply. */
 public final class ClimateDiagnostics implements ClimateStatistics {
     private final AdventureWorldConfig config;
     private final int step;
@@ -35,6 +22,26 @@ public final class ClimateDiagnostics implements ClimateStatistics {
     public ClimateDiagnostics(AdventureWorldConfig config, int step) {
         this.config = config;
         this.step = step;
+    }
+
+    @Override public List<io.github.luoyan.adventureworldgen.plan.ClimateTarget> targets(List<ClimateField.Site> sites) {
+        var result=new ArrayList<io.github.luoyan.adventureworldgen.plan.ClimateTarget>();
+        for(var demand:new RequirementExpander().expandMinimum(config).patches()) {
+            var options=new ArrayList<io.github.luoyan.adventureworldgen.plan.ClimateTarget.Option>();
+            for(var id:demand.allowedBiomes()) {
+                var rule=config.biomes().terrainRules().get(id);var eligible=new java.util.BitSet(sites.size());
+                for(int i=0;i<sites.size();i++)if(config.biomes().allows(id,sites.get(i).sample()))eligible.set(i);
+                int temperatures=0,humidities=0;
+                for(var t:config.temperaturePreferences(id).keySet())temperatures|=1<<t.ordinal();
+                if(rule==null||rule.humidities().isEmpty())humidities=7;
+                else for(var h:rule.humidities().keySet())humidities|=1<<h.ordinal();
+                boolean lowlandCold=(temperatures&1)!=0&&(rule==null||rule.minHeight()==null||rule.minHeight()<110)
+                        &&(rule==null||!rule.allowedTerrain().equals(java.util.Set.of("mountains")));
+                options.add(new io.github.luoyan.adventureworldgen.plan.ClimateTarget.Option(eligible,temperatures,humidities,lowlandCold));
+            }
+            result.add(new io.github.luoyan.adventureworldgen.plan.ClimateTarget(demand.patchId(),demand.area().target(),demand.requiresSeed(),options));
+        }
+        return List.copyOf(result);
     }
 
     /** Author demand spread across temperature bands and normalized to sum to one. */
@@ -75,7 +82,21 @@ public final class ClimateDiagnostics implements ClimateStatistics {
         for (var d : new RequirementExpander().expandMinimum(config).patches()) {
             ContentId id = preferredBiome(sites, field, d);
             long legal = sites.stream().filter(s -> config.biomes().allows(id, s.sample())).count() * step * step;
-            supply.add(new ClimateSupply(id.value(), d.area().target(), legal, climateArea(sites, field, id)));
+            long joint=0,lowland=0,cold=0;
+            var rule=config.biomes().terrainRules().get(id);
+            for(var site:sites) {
+                var sample=site.sample();if(!config.biomes().allows(id,sample))continue;
+                boolean low=sample.groundSurface()<=110&&!sample.terrainTemplate().equals("mountains");
+                if(low)lowland+=step*step;
+                int band=field.band(site.x(),site.z(),sample),moisture=field.humidityBand(site.x(),site.z(),sample);
+                if(!config.temperaturePreferences(id).containsKey(TemperatureType.values()[band]))continue;
+                if(moisture>=0&&rule!=null&&!rule.humidities().isEmpty()
+                        &&!rule.humidities().containsKey(AdventureWorldConfig.HumidityType.values()[moisture]))continue;
+                joint+=step*step;if(low&&band==0)cold+=step*step;
+            }
+            String diagnosis=legal==0?"NO_LEGAL_TERRAIN":joint==0?"NO_JOINT_SUPPLY":joint<d.area().min()?"BELOW_REQUESTED_MINIMUM":"AVAILABLE";
+            if(config.temperaturePreferences(id).containsKey(TemperatureType.VERY_COLD)&&lowland==0)diagnosis+=";NO_LEGAL_LOWLAND";
+            supply.add(new ClimateSupply(id.value(),d.area().target(),legal,climateArea(sites,field,id),joint,lowland,cold,diagnosis));
         }
         return List.copyOf(supply);
     }

@@ -1,0 +1,25 @@
+{
+  "type": "adventureworldgen:template",
+  "biomes": [
+    "minecraft:stony_peaks"
+  ],
+  "spawn_overrides": {},
+  "step": "surface_structures",
+  "terrain_adaptation": "none",
+  "template": "adventureworldgen:mountain_lookout",
+  "processors": "minecraft:empty",
+  "support": {
+    "min_x": 0,
+    "min_z": 0,
+    "max_x": 6,
+    "max_z": 6,
+    "surface": 1
+  },
+  "heightmap": "WORLD_SURFACE_WG",
+  "height_offset": 0,
+  "rotation": "none",
+  "foundation": {
+    "mode": "flatten",
+    "margin": 4
+  }
+}

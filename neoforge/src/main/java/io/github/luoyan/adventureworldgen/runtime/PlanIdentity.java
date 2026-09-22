@@ -25,7 +25,7 @@ import io.github.luoyan.adventureworldgen.plan.PlanVersions;
  */
 public final class PlanIdentity {
     /** Internal cache key revision; the public planner remains v2 while the payload format follows PlannerProfile. */
-    public static final String IMPLEMENTATION_REVISION = "planner-v2-impl-2026-09-21-smooth-junction-roads-r42";
+    public static final String IMPLEMENTATION_REVISION = "planner-v3-impl-2026-09-22-curved-shortcuts-r48";
 
     private PlanIdentity() {}
 
@@ -39,7 +39,7 @@ public final class PlanIdentity {
         return hash(seed, loaded, adapters, profile, "declared");
     }
     public static String hash(long seed, LoadedProfile loaded, AdapterRegistry adapters, PlannerProfile profile, String structureInputs) {
-        String input = loaded.canonicalJson() + "\nseed=" + seed + "\nalgorithm=" + profile.algorithmVersion()
+        String input = loaded.canonicalJson() + "\nplanning_policy="+new com.google.gson.Gson().toJson(io.github.luoyan.adventureworldgen.plan.PlanningPolicy.CURRENT) + "\nseed=" + seed + "\nalgorithm=" + profile.algorithmVersion()
                 + "\nstructure_inputs=" + structureInputs
                 + "\nstructure_planning=" + loaded.structurePlanning().canonicalIdentity()
                 + "\nimplementation=" + IMPLEMENTATION_REVISION

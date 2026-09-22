@@ -5,7 +5,7 @@ import java.util.function.DoubleBinaryOperator;
 
 /** Accepted preview v7: immutable, world-aligned climate, independent of biome demand. */
 public final class OrganicTemperatureField implements DoubleBinaryOperator {
-    public static final String VERSION="organic-temperature-v7";
+    public static final String VERSION="organic-temperature-v8";
     public static final double SCALE=450, BEND=450, WARP_SCALE=1150;
     private final GradientNoise warpX,warpZ,detailX,detailZ,climate,secondary;
     private final double bend;
@@ -36,6 +36,6 @@ public final class OrganicTemperatureField implements DoubleBinaryOperator {
         return .012*rise+(.065-.012)*Math.max(0,rise+76-110);
     }
     public double temperature(double x,double z,double effectiveHeight) {
-        return Math.clamp(5+.6*(applyAsDouble(x,z)-5)+2.0-cooling(effectiveHeight),0,10);
+        return Math.clamp(applyAsDouble(x,z)-cooling(effectiveHeight),0,10);
     }
 }

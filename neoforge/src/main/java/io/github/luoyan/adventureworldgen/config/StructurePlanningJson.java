@@ -38,7 +38,7 @@ public final class StructurePlanningJson {
                         footprint=new BoundsXZ(-radius,-radius,radius,radius);
                         access=new StructurePlanningInfo.RoadAccess(distance-radius);
                     } else {
-                        if(!Set.of("margin","connector_length","entrances").containsAll(road.keySet())||!road.has("margin"))
+                        if(!Set.of("margin","connector_length","entrances").containsAll(road.keySet()))
                             throw new IllegalArgumentException("invalid road access fields in "+id);
                         var entrances=new ArrayList<StructurePlanningInfo.AccessPoint>();
                         if(road.has("entrances"))for(var element:road.getAsJsonArray("entrances")) {
@@ -51,7 +51,9 @@ public final class StructurePlanningJson {
                             entrances.add(new StructurePlanningInfo.AccessPoint(integer(point,"x"),integer(point,"z"),
                                     StructurePlanningInfo.Facing.valueOf(facing.getAsString().toUpperCase(Locale.ROOT))));
                         }
-                        access=new StructurePlanningInfo.RoadAccess(integer(road,"margin"),road.has("connector_length")?integer(road,"connector_length"):16,entrances);
+                        var defaults=StructurePlanningInfo.RoadAccess.DEFAULT;
+                        access=new StructurePlanningInfo.RoadAccess(road.has("margin")?integer(road,"margin"):defaults.margin(),
+                                road.has("connector_length")?integer(road,"connector_length"):defaults.connectorLength(),entrances);
                     }
                 }
                 result.add(new StructurePlanningInfo(id,footprint,access));

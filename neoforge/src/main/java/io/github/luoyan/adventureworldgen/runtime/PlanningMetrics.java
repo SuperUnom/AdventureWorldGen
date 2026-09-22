@@ -32,6 +32,10 @@ final class PlanningMetrics {
     private final Map<String,Long> millis=new LinkedHashMap<>();
     private long previous=System.nanoTime(), observedHeap;
     private final com.google.gson.JsonArray adventure=new com.google.gson.JsonArray();
+    private final com.google.gson.JsonArray relaxations=new com.google.gson.JsonArray();
+    void relaxation(io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.Relaxation value) {
+        relaxations.add(new com.google.gson.Gson().toJsonTree(value));
+    }
     void adventure(java.util.List<PlannedBiomePatch> patches,
                    io.github.luoyan.adventureworldgen.cost.CostPlanner.Result costs,double radius) {
         for(var patch:patches) {
@@ -68,8 +72,21 @@ final class PlanningMetrics {
         json.add("temperature_actual_ratios",gson.toJsonTree(plan.climate().actualRatios()));
         json.add("temperature_land_supply",gson.toJsonTree(plan.climate().supply()));
         json.addProperty("filler_seeds",plan.fillerSeedCount());
+        json.add("area_relaxations",relaxations);
+        json.add("operations",gson.toJsonTree(plan.snapshot().diagnostics()));
+        json.addProperty("road_operations",plan.roads().operations());
+        json.addProperty("road_columns",plan.roads().columns().size());
         json.add("adventure_preferences",adventure);
         Path file=world.resolve("adventureworldgen/planning-metrics.json");
         Files.createDirectories(file.getParent()); Files.writeString(file,json.toString()+"\n");
+    }
+    void writeFailure(Path world,long seed,String stage,Throwable failure) throws IOException {
+        record("unfinished_"+stage.toLowerCase(java.util.Locale.ROOT));
+        var json=new com.google.gson.JsonObject();json.addProperty("seed",seed);json.addProperty("failed_stage",stage);
+        var stages=new com.google.gson.JsonObject();millis.forEach(stages::addProperty);json.add("stage_ms",stages);
+        json.addProperty("observed_heap_bytes",observedHeap);json.addProperty("failure",failure.toString());
+        json.add("area_relaxations",relaxations);
+        var file=world.resolve("adventureworldgen/planning-failure.json");Files.createDirectories(file.getParent());
+        Files.writeString(file,json+"\n");
     }
 }

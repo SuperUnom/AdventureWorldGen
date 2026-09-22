@@ -55,7 +55,7 @@ flowchart TD
     hydrology --> api & noise & plan & spatial & terrain
     terrain --> api & noise & plan & spatial
     compat --> plan
-    api --> plan
+    api --> plan & spatial
     noise --> spatial
     plan --> spatial
 ```
@@ -70,7 +70,7 @@ flowchart TD
 | 配置怎样进入游戏 | [ProfileReloadListener](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/ProfileReloadListener.java) | [生命周期](pipeline.md#reload) |
 | 世界什么时候开始规划 | [AdventureEvents](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/AdventureEvents.java) | [运行时](../systems/runtime-worldgen.md) |
 | 哪一步构造什么 | [RuntimePlanner](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/runtime/RuntimePlanner.java) | [首次规划](pipeline.md#initial) |
-| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划 v5](../reference/plan-v2.md) |
+| 游戏查询什么 | [AdventurePlanView](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/api/AdventurePlanView.java) | [冻结计划](../reference/plan-v2.md) |
 | 如何写入区块 | [AdventureChunkGenerator](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/worldgen/AdventureChunkGenerator.java) | [区块执行](../systems/runtime-worldgen.md#chunk) |
 
 ## 能力范围

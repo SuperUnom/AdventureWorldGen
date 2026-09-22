@@ -71,6 +71,9 @@ Biome adapter 不负责表层 palette、植被或材料；这些仍由 Minecraft
 }
 ```
 
+发布资源中的 `adventureworldgen:mountain_lookout` 使用同一模板执行路径，是限定在裸岩山峰群系的石制观景亭；
+默认 profile 将其作为必须接路的高山目的地。
+
 其中 example 只是作者命名空间示例，不是模组内置结构。对应模板资源是 `data/example/structure/hall.nbt`。
 然后在 profile 的 structures 中声明 `example:hall` 的需求；[profile 参考](profile.md) 定义数量和承载群系字段。
 

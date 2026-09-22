@@ -78,7 +78,7 @@ class HumidityPlanTest {
         assertEquals(0,riverBeaches,"river banks must not become beach biomes");
         assertTrue(riverOther>0);
         assertTrue(oceanBeaches>0&&oceanOther>0,"coast should contain both beach and other biomes");
-        assertEquals(0,snowBeaches,"the accepted field does not create a snow band on this flat warm shore");
+        assertTrue(snowBeaches>0,"lowland cold now permits snowy coast segments");
         assertFalse(rules.allows(BEACH,0,400,land(66)),"beaches cannot spread inland");
         assertFalse(h.isShore(638,400,land(100)),"cliffs cannot become beaches");
         assertFalse(h.isShore(274,400,TERRAIN.sample(274,400)),"the river bed remains water");
@@ -103,7 +103,9 @@ class HumidityPlanTest {
     }
     @Test void humidityAndFillerReloadWithoutResamplingTerrain() {
         var c=config();var original=new ClimatePlan(7331,c,TERRAIN,new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
-        var frozen=new ClimatePlan(7331,c,(x,z)->{throw new AssertionError("reload sampled terrain");},ignored->{},original.snapshot(),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
+        var queries=new java.util.concurrent.atomic.AtomicInteger();
+        var frozen=new ClimatePlan(7331,c,(x,z)->{queries.incrementAndGet();return TERRAIN.sample(x,z);},ignored->{},original.snapshot(),new io.github.luoyan.adventureworldgen.planner.ClimateDiagnostics(c,ClimatePlan.STEP));
+        assertEquals(0,queries.get(),"restore must not rebuild climate samples");
         var filler=new FillerLayout(PlannerProfile.V2,7331,c,TERRAIN,List.of(),new BiomeEnvironmentRules(c,original));
         var restored=new FillerLayout(PlannerProfile.V2,7331,c,(x,z)->{throw new AssertionError("reload grew filler");},List.of(),new BiomeEnvironmentRules(c,frozen),filler.snapshot());
         assertArrayEquals(original.humidity().actualRatios(),frozen.humidity().actualRatios());

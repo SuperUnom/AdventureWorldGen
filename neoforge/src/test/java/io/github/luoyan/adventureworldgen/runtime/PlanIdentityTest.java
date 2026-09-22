@@ -52,7 +52,9 @@ class PlanIdentityTest {
     void implementationRevisionContributesToPlanIdentity() {
         var loaded = profile("{\"canonical\":1}");
         var adapters = registry("v1");
-        String expectedInput = loaded.canonicalJson() + "\nseed=7\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
+        String expectedInput = loaded.canonicalJson() + "\nplanning_policy="
+                + new com.google.gson.Gson().toJson(io.github.luoyan.adventureworldgen.plan.PlanningPolicy.CURRENT)
+                + "\nseed=7\nalgorithm=" + PlannerProfile.V2.algorithmVersion()
                 + "\nstructure_inputs=declared"
                 + "\nstructure_planning=" + loaded.structurePlanning().canonicalIdentity()
                 + "\nimplementation=" + PlanIdentity.IMPLEMENTATION_REVISION

@@ -156,7 +156,7 @@ public final class FillerLayout {
     private void flood() {
         while(!frontier.isEmpty()) {
             Edge edge=frontier.remove();int i=edge.cell;
-            if(++visited>labels.length*32L)throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FILLER,"frontier budget exhausted");
+            if((++visited&2047)==0)io.github.luoyan.adventureworldgen.plan.PlanningExecution.checkCancelled();
             if(labels[i]!=-1)continue;
             Seed seed=seeds.get(edge.seed);ContentId id=pool.get(seed.biome);
             if(!allows(id,i))continue;

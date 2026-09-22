@@ -17,35 +17,48 @@ public final class RoadPlanner {
     private final MacroTerrain terrain;
     private final double radius;
     private long operations;
-    private long edgeLimit=Long.MAX_VALUE;
-    private static final class EdgeBudget extends RuntimeException {
-        EdgeBudget() { super("bounded road edge search exhausted",null,false,false); }
-    }
+    private final RoadWorkBudget work;
     private final List<RoadPlan.Skipped> skipped=new ArrayList<>();
     private final List<RoadPlan.Reservation> reservations=new ArrayList<>();
-    private final Map<Long,RoadPlan.Column> columns=new TreeMap<>();
+    private final RoadNetwork network=new RoadNetwork();
     private final List<RoadPlan.Route> routes=new ArrayList<>();
-    private final Map<Long,MacroSample> samples=new HashMap<>();
+    private final Map<String,Double> travel=new HashMap<>();
+    private final Map<String,String> failures=new HashMap<>();
+    private final Map<String,List<String>> attempts=new TreeMap<>();
+    public Map<String,Map<String,Long>> workReport(){return work.report();}
+    public Map<String,List<String>> attemptReport(){var copy=new TreeMap<String,List<String>>();attempts.forEach((id,reasons)->copy.put(id,List.copyOf(reasons)));return Collections.unmodifiableMap(copy);}
+    private void rejected(String target,String reason){failures.put(target,reason);var list=attempts.computeIfAbsent(target,ignored->new ArrayList<>());if(list.size()<24)list.add(reason);}
+    private record SamplePoint(double x,double z) {}
+    private final Map<SamplePoint,MacroSample> samples=new LinkedHashMap<>(1024,.75f,true);
     private int spawnX,spawnZ,spawnDeck;
     private final Map<String,List<Access>> accessCandidates=new TreeMap<>();
     private final Set<String> lockedAccess=new HashSet<>();
-    private static final int MAX_ACCESS_PAIRS=16;
-    private static final long PAIR_OPERATIONS=750_000, ACCESS_OPERATIONS=150_000;
 
     public RoadPlanner(long seed,AdventureWorldConfig config,MacroTerrain terrain) {
+        this(seed,config,terrain,RoadWorkControl.AUTOMATIC);
+    }
+    public RoadPlanner(long seed,AdventureWorldConfig config,MacroTerrain terrain,RoadWorkControl control) {
+        this(seed,config,terrain,control,PlanningExecution.SERIAL);
+    }
+    public RoadPlanner(long seed,AdventureWorldConfig config,MacroTerrain terrain,RoadWorkControl control,PlanningExecution execution) {
+        Objects.requireNonNull(execution);Objects.requireNonNull(control);
         this.seed=seed;this.config=config;this.settings=config.roads();this.terrain=terrain;this.radius=config.world().radius();
+        this.work=new RoadWorkBudget(settings.maximumOperations(),control);
+    }
+    private void replaySamples(long count) {
+        // Cache hits consume the same logical work: cache size cannot change the finite search domain.
+        for(long i=0;i<count;i++){work.operation();operations++;}
     }
     private MacroSample sample(double x,double z) {
-        if(operations>=edgeLimit)throw new EdgeBudget();
-        if(++operations>settings.maximumOperations())throw failure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,"road operation budget exhausted", "operations",operations);
-        // Cache integer column centres only, with a fixed capacity. Operation accounting is outside
-        // the cache, so hitting/evicting a sample cannot change termination or geometry.
-        int ix=(int)Math.floor(x),iz=(int)Math.floor(z);
-        if(x!=ix+.5||z!=iz+.5)return terrain.sample(x,z);
-        long key=RoadPlan.key(ix,iz);var value=samples.get(key);
+        work.operation();
+        operations++;
+        // Exact coordinates include the off-grid shoulders of diagonal edges. Heading states
+        // revisit those samples heavily; quantizing them would change terrain and is forbidden.
+        var key=new SamplePoint(x,z);var value=samples.get(key);
         if(value!=null)return value;
         value=terrain.sample(x,z);
-        if(samples.size()<100_000)samples.put(key,value);
+        samples.put(key,value);
+        if(samples.size()>100_000)samples.remove(samples.keySet().iterator().next());
         return value;
     }
     public RoadPlan plan(AdventurePlanView.SpawnPosition spawn,List<PlannedBiomePatch> patches,
@@ -63,19 +76,22 @@ public final class RoadPlanner {
             biomeConnections.merge(request.id(), request.road().required(), (a,b) -> a || b);
         for(var entry:biomeConnections.entrySet()) {
             ContentId biome=entry.getKey();boolean required=entry.getValue();
-            String id="biome/"+biome.value();Vec2 found=null;
-            var candidates=patches.stream().filter(p->p.biomeId().equals(biome)).sorted(Comparator.comparing(PlannedBiomePatch::patchId)).toList();
-            double nearest=Double.POSITIVE_INFINITY;
-            for(var p:candidates) {
-                int stride=Math.max(16,(int)Math.ceil(Math.sqrt((double)(p.maxXExclusive()-p.minX())*(p.maxZExclusive()-p.minZ()))/128));
-                for(int z=p.minZ()+2;z<p.maxZExclusive();z+=stride)for(int x=p.minX()+2;x<p.maxXExclusive();x+=stride) {
-                    double distance=StrictMath.hypot(x-spawnX,z-spawnZ);
-                    if(distance<64||distance>=nearest||!p.contains(x,z))continue;
-                    if(validPoint(x,z)&&biomeAt.apply(x,z).equals(biome)){found=new Vec2(x,z);nearest=distance;}
+            String id="biome/"+biome.value();work.task("connection/"+id);
+            try {
+                Vec2 found=null;
+                var candidates=patches.stream().filter(p->p.biomeId().equals(biome)).sorted(Comparator.comparing(PlannedBiomePatch::patchId)).toList();
+                double nearest=Double.POSITIVE_INFINITY;
+                for(var p:candidates) {
+                    int stride=Math.max(16,(int)Math.ceil(Math.sqrt((double)(p.maxXExclusive()-p.minX())*(p.maxZExclusive()-p.minZ()))/128));
+                    for(int z=p.minZ()+2;z<p.maxZExclusive();z+=stride)for(int x=p.minX()+2;x<p.maxXExclusive();x+=stride) {
+                        work.visit();double distance=StrictMath.hypot(x-spawnX,z-spawnZ);
+                        if(distance<64||distance>=nearest||!p.contains(x,z))continue;
+                        if(validPoint(x,z)&&biomeAt.apply(x,z).equals(biome)){found=new Vec2(x,z);nearest=distance;}
+                    }
                 }
-            }
-            if(found==null)missing(id,required,"NO_VALID_BIOME_WAYPOINT");
-            else add(nodes,new RoadPlan.Node(id,(int)found.x(),(int)found.z(),required));
+                if(found==null)missing(id,required,"NO_VALID_BIOME_WAYPOINT");
+                else add(nodes,new RoadPlan.Node(id,(int)found.x(),(int)found.z(),required));
+            } catch(RoadWorkBudget.Limit limit){missing(id,required,limit.getMessage());}
         }
         for(var requested:config.structures()) {
             if (!requested.road().enabled()) continue;
@@ -83,95 +99,278 @@ public final class RoadPlanner {
             var matches=structures.stream().filter(p->p.structureId().equals(requested.id())).sorted(Comparator.comparing(PlannedStructurePlacement::instanceId)).toList();
             if(matches.isEmpty()) {missing("structure/"+requested.id(),requested.road().required(),"MISSING_ACCESS_CONTRACT_OR_INSTANCE");continue;}
             for(var p:matches) {
-                var info=catalog.find(p).orElse(null);
-                if(info==null||info.roadAccess()==null||(info.footprint()==null&&info.templateFootprint()==null)) {
-                    missing("structure/"+p.instanceId(),requested.road().required(),"MISSING_ACCESS_CONTRACT_OR_INSTANCE");continue;
-                }
-                String id="structure/"+p.instanceId();
-                var points=RoadAccessCandidates.generate(info,seed,p,settings.width())
-                        .stream().filter(v->validPoint((int)Math.floor(v.endpoint().x()),(int)Math.floor(v.endpoint().z()))).toList();
-                if(points.isEmpty())missing(id,requested.road().required(),"NO_VALID_APPROACH");
-                else {
-                    var first=points.stream().min(Comparator.comparingDouble(v->StrictMath.hypot(v.endpoint().x()-spawnX,v.endpoint().z()-spawnZ))).orElseThrow();
-                    int before=nodes.size();
-                    add(nodes,new RoadPlan.Node(id,(int)Math.floor(first.endpoint().x()),(int)Math.floor(first.endpoint().z()),requested.road().required()));
-                    if(nodes.size()>before) {
-                        accessCandidates.put(id,points);
+                work.task("connection/structure/"+p.instanceId());
+                try {
+                    var info=catalog.find(p).orElse(null);
+                    if(info==null||info.roadAccess()==null||(info.footprint()==null&&info.templateFootprint()==null)) {
+                        missing("structure/"+p.instanceId(),requested.road().required(),"MISSING_ACCESS_CONTRACT_OR_INSTANCE");continue;
                     }
-                  }
+                    String id="structure/"+p.instanceId();
+                    var points=RoadAccessCandidates.generate(info,seed,p,settings.width())
+                            .stream().filter(v->validPoint((int)Math.floor(v.endpoint().x()),(int)Math.floor(v.endpoint().z()))).toList();
+                    if(points.isEmpty())missing(id,requested.road().required(),"NO_VALID_APPROACH");
+                    else {
+                        var first=points.stream().min(Comparator.comparingDouble(v->StrictMath.hypot(v.endpoint().x()-spawnX,v.endpoint().z()-spawnZ))).orElseThrow();
+                        add(nodes,new RoadPlan.Node(id,(int)Math.floor(first.endpoint().x()),(int)Math.floor(first.endpoint().z()),requested.road().required()));
+                        if(nodes.stream().anyMatch(node->node.id().equals(id))) {
+                            accessCandidates.put(id,points);
+                        }
+                      }
+                } catch(RoadWorkBudget.Limit limit){missing("structure/"+p.instanceId(),requested.road().required(),limit.getMessage());}
             }
         }
         nodes.subList(1,nodes.size()).sort(Comparator.comparing(RoadPlan.Node::id));
-        int n=nodes.size();var parent=new int[n];for(int i=0;i<n;i++)parent[i]=i;
-        var search=new RoadSearch(settings,this::sample,reservations,radius);
-        var attempted=new HashSet<Long>();var failures=new TreeMap<String,String>();var candidates=new ArrayList<Candidate>();
-        // Sparse nearest-neighbour graph, followed by bounded component repair. Search costs
-        // rank alternatives for each outward connection; full construction may still reject an edge.
-        var initialPairs=new TreeSet<Long>();
-        for(int i=0;i<n;i++) {
-            final int origin=i;
-            var nearest=new ArrayList<Integer>();for(int j=0;j<n;j++)if(j!=i)nearest.add(j);
-            nearest.sort(Comparator.comparingDouble((Integer j)->distance(nodes.get(origin),nodes.get(j))).thenComparingInt(Integer::intValue));
-            for(int j:nearest.subList(0,Math.min(3,nearest.size())))initialPairs.add(pair(i,j));
-            if(nodes.get(i).required())nearest.stream().filter(j->nodes.get(j).required()).limit(3).forEach(j->initialPairs.add(pair(origin,j)));
-        }
-        // Repair the required backbone before optional destinations can spend the remaining search allowance.
-        var orderedPairs=initialPairs.stream().sorted(Comparator.comparingDouble((Long key)->
-                distance(nodes.get((int)(key>>32)),nodes.get((int)(long)key))).thenComparingLong(Long::longValue)).toList();
-        for(int phase=0;phase<2;phase++) {
-            // Grow outwards from spawn and lock each entrance before evaluating its next edge.
-            // Evaluating every pair first wastes the budget on opposite sides that cannot be joined.
-            for(int pass=0;pass<n;pass++) {
-                int count=routes.size();
-                for(long pair:orderedPairs) {
-                    int a=(int)(pair>>32),b=(int)pair;
-                    if((nodes.get(a).required()&&nodes.get(b).required())!=(phase==0))continue;
-                    boolean fromConnected=root(parent,a)==root(parent,0),toConnected=root(parent,b)==root(parent,0);
-                    if(fromConnected==toConnected)continue;
-                    var extra=new ArrayList<Candidate>();
-                    evaluate(a,b,nodes,search,attempted,extra,failures);
-                    candidates.addAll(extra);
-                    commitCandidates(extra,nodes,parent,search,attempted,false,Double.POSITIVE_INFINITY);
+        var pending=new ArrayList<>(nodes.subList(1,nodes.size()));nodes.subList(1,nodes.size()).clear();
+        travel.put("spawn",0.);
+        var search=new RoadSearch(settings,this::sample,reservations,radius,work,this::replaySamples);
+        for(boolean required:new boolean[]{true,false}) {
+            var selected=new ArrayList<>(pending.stream().filter(n->n.required()==required).toList());
+            for(int pass=0;pass<2&&!selected.isEmpty();pass++) {
+                var deferred=new ArrayList<RoadPlan.Node>();
+                while(!selected.isEmpty()) {
+                    // Re-rank against the current connected component, with a stable tie break.
+                    selected.sort(Comparator.comparingDouble((RoadPlan.Node n)->nodes.stream().mapToDouble(p->distance(n,p)).min().orElseThrow())
+                            .thenComparing(RoadPlan.Node::id));
+                    var target=selected.removeFirst();work.task("connection/"+target.id());
+                    try {if(!connect(target,nodes,search))deferred.add(target);}
+                    catch(RoadWorkBudget.Limit limit){failures.put(target.id(),limit.getMessage());deferred.add(target);}
                 }
-                if(routes.size()==count)break;
+                selected=deferred;
             }
-            repair(nodes,parent,search,attempted,candidates,failures,phase==0);
+            for(var target:selected)missing(target.id(),target.required(),failures.getOrDefault(target.id(),"NO_ROUTE_IN_TEMPLATE_DOMAIN"));
         }
-        // Only the spawn component is published. Disconnected optional islands are diagnostics,
-        // never a visually plausible but inaccessible second road network.
-        for(int i=1;i<n;i++)if(root(parent,i)!=root(parent,0))missing(nodes.get(i).id(),nodes.get(i).required(),failures.getOrDefault(nodes.get(i).id(),"DISCONNECTED_SEARCH_DOMAIN"));
-        var connected=new HashSet<String>();for(int i=0;i<n;i++)if(root(parent,i)==root(parent,0))connected.add(nodes.get(i).id());
-        var kept=routes.stream().filter(r->connected.contains(r.from())&&connected.contains(r.to())).toList();
-        if(kept.size()!=routes.size()) {
-            routes.clear();routes.addAll(kept);columns.clear();
-            for(var r:routes) {var built=construct(r.points());if(!built.valid())throw failure(PlanningFailure.Code.EXECUTION_FAILED,"road component reconstruction failed","route",r.id());for(var c:built.columns())columns.put(RoadPlan.key(c.x(),c.z()),c);}
-        }
-        for(long key:orderedPairs) {
-            int a=(int)(key>>32),b=(int)key;
-            if(connected.contains(nodes.get(a).id())&&connected.contains(nodes.get(b).id())
-                    &&routes.stream().noneMatch(r->r.from().equals(nodes.get(a).id())&&r.to().equals(nodes.get(b).id())))
-                evaluate(a,b,nodes,search,attempted,candidates,failures);
-        }
-        double treeLength=routes.stream().mapToDouble(RoadPlan.Route::length).sum();
-        commitCandidates(candidates.stream().filter(c->connected.contains(nodes.get(c.a()).id())&&connected.contains(nodes.get(c.b()).id())).toList(),nodes,parent,search,attempted,true,treeLength*settings.loopBudgetFraction());
-        validateConnected(nodes.stream().filter(node->connected.contains(node.id())).toList());
-        return new RoadPlan(nodes,routes,List.copyOf(columns.values()),reservations,skipped,operations);
+        addLoops(nodes,search);
+        // Publication has its own bounded output-size pass, never another geometry search.
+        work.task("publication");
+        try {return RoadTopology.freeze(nodes,routes,network.columns(),reservations,skipped,operations,network.supports(),settings.maximumNodes(),work);}
+        catch(RoadWorkBudget.Limit limit){throw failure(PlanningFailure.Code.RESOURCE_LIMIT,"road publication budget exhausted","reason",limit.getMessage());}
     }
-    private void repair(List<RoadPlan.Node> nodes,int[] parent,RoadSearch search,Set<Long> attempted,
-                        List<Candidate> candidates,Map<String,String> failures,boolean requiredOnly) {
-        int n=nodes.size();
-        for(int attempt=0;attempt<n*3;attempt++) {
-            boolean[] needed=new boolean[n];
-            for(int i=0;i<n;i++)if(nodes.get(i).required()&&root(parent,i)!=root(parent,0))needed[root(parent,i)]=true;
-            int a=-1,b=-1;double nearest=Double.POSITIVE_INFINITY;
-            for(int i=0;i<n;i++)for(int j=i+1;j<n;j++)if(root(parent,i)!=root(parent,j)&&!attempted.contains(pair(i,j))) {
-                if(requiredOnly&&!needed[root(parent,i)]&&!needed[root(parent,j)])continue;
-                double d=distance(nodes.get(i),nodes.get(j));if(d<nearest){nearest=d;a=i;b=j;}
-            }
-            if(a<0)break;
-            var extra=new ArrayList<Candidate>();evaluate(a,b,nodes,search,attempted,extra,failures);
-            candidates.addAll(extra);commitCandidates(extra,nodes,parent,search,attempted,false,Double.POSITIVE_INFINITY);
+    private record Source(String id,Access access,int y,double distance) {}
+    private record Pair(Source source,Access target,double score) {}
+    private List<Source> sources(RoadPlan.Node target,List<RoadPlan.Node> nodes) {
+        var choices=new ArrayList<Source>();var destination=point(target);
+        for(var node:nodes) {
+            var access=accessPoints(node).getFirst();var c=network.at(access.endpoint(),node.y());
+            int y=c==null?spawnDeck:c.deckY();
+            choices.add(new Source(node.id(),access,y,travel.getOrDefault(node.id(),0.)));
         }
+        for(var segment:network.nearby(destination,work)) {
+            var a=segment.a();var b=segment.b();double dx=b.x()-a.x(),dz=b.z()-a.z(),length2=dx*dx+dz*dz;
+            if(length2<1e-8)continue;
+            double projection=Math.clamp(((destination.x()-a.x())*dx+(destination.z()-a.z())*dz)/length2,0,1);
+            for(double shift:new double[]{0,-16,16}) {
+                work.visit();double t=Math.clamp(projection+shift/Math.sqrt(length2),0,1);
+                var p=new Vec2(Math.floor(a.x()+dx*t)+.5,Math.floor(a.z()+dz*t)+.5);var cell=network.at(p,Integer.MIN_VALUE);
+                if(cell==null||cell.shoulder()||cell.kind()!=RoadPlan.Kind.GROUND)continue;
+                if(nodes.stream().anyMatch(n->RoadShape.distance(point(n),p)<8))continue;
+                String id="attachment/"+cell.x()+"/"+cell.deckY()+"/"+cell.z();
+                choices.add(new Source(id,Access.point(p),cell.deckY(),segment.startDistance()+Math.sqrt(length2)*t));
+            }
+        }
+        choices.sort(Comparator.comparingDouble((Source p)->RoadShape.distance(p.access.approach(),destination)
+                        +PlanningPolicy.CURRENT.roadTravelWeight()*p.distance).thenComparing(Source::id));
+        var result=new ArrayList<Source>();
+        for(var choice:choices) {
+            if(result.stream().anyMatch(s->RoadShape.distance(s.access.endpoint(),choice.access.endpoint())<16))continue;
+            result.add(choice);if(result.size()>=work.policy().attachments())break;
+        }
+        return result;
+    }
+    private boolean connect(RoadPlan.Node target,List<RoadPlan.Node> nodes,RoadSearch search) {
+        // A waypoint already on a connected ground deck needs an explicit node, not a zero-length road.
+        var covered=network.at(point(target),Integer.MIN_VALUE);
+        if(!accessCandidates.containsKey(target.id())&&covered!=null&&!covered.shoulder()&&covered.kind()==RoadPlan.Kind.GROUND) {
+            if(nodes.size()>=settings.maximumNodes()){failures.put(target.id(),"RESOURCE_LIMIT_NODES");return false;}
+            var source=sources(target,nodes).getFirst();nodes.add(target);travel.put(target.id(),source.distance+RoadShape.distance(source.access.endpoint(),point(target)));return true;
+        }
+        var pairs=new ArrayList<Pair>();
+        for(var source:sources(target,nodes))for(var access:accessPoints(target)) {
+            if(!Double.isFinite(search.edge(source.access.endpoint(),source.access.approach(),true))
+                    ||!Double.isFinite(search.edge(access.endpoint(),access.approach(),true)))continue;
+            double score=search.estimate(List.of(source.access.approach(),access.approach()));
+            // A blocked direct path can still be repaired; retain it behind cheap legal sketches.
+            if(!Double.isFinite(score))score=1_000_000+RoadShape.distance(source.access.approach(),access.approach());
+            pairs.add(new Pair(source,access,score+PlanningPolicy.CURRENT.roadTravelWeight()*source.distance));
+        }
+        pairs.sort(Comparator.comparingDouble(Pair::score).thenComparing(p->p.source.id)
+                .thenComparingDouble(p->p.target.endpoint().x()).thenComparingDouble(p->p.target.endpoint().z()));
+        // Entrance alternatives share exactly the same candidate and validation ledger.
+        var chosen=new ArrayList<Pair>();var directions=new HashSet<String>();
+        for(var pair:pairs) {
+            var endpoint=pair.target.endpoint();var approach=pair.target.approach();
+            String direction=Math.signum(approach.x()-endpoint.x())+"/"+Math.signum(approach.z()-endpoint.z());
+            if(directions.add(direction))chosen.add(pair);
+            if(chosen.size()>=work.policy().attachments())break;
+        }
+        for(var pair:pairs)if(chosen.size()<work.policy().attachments()&&!chosen.contains(pair))chosen.add(pair);
+        for(var pair:chosen) {
+            var raw=dense(List.of(pair.source.access.approach(),pair.target.approach()));
+            if(raw.isEmpty())continue;
+            var path=withConnectors(raw,pair.source.access,pair.target);
+            if(!work.candidate(RoadShape.length(path))){failures.put(target.id(),"RESOURCE_LIMIT_CANDIDATES_OR_LENGTH");return false;}
+            if(!Double.isFinite(search.estimate(path))||!search.groundEnvelope(path))continue;
+            var shaped=withConnectors(RoadShape.shape(raw,seed,pair.source.id+"/"+target.id(),settings,search::dryLegal),pair.source.access,pair.target);
+            if(work.validations()>=2)continue;
+            if(ground(target,nodes,pair,shaped,search,false))return true;
+        }
+        if(!chosen.isEmpty()) {
+            var pair=chosen.getFirst();
+            for(var sketch:search.detours(pair.source.access.approach(),pair.target.approach())) {
+                var sampled=dense(sketch);if(sampled.size()<2)continue;
+                var raw=withConnectors(sampled,pair.source.access,pair.target);
+                if(!work.candidate(RoadShape.length(raw)))break;
+                if(!Double.isFinite(search.estimate(raw))||!search.groundEnvelope(raw))continue;
+                // Keep a validation available for a coarse terrain corridor if this template fails.
+                if(work.validations()>=work.policy().validations()-1)break;
+                var shaped=withConnectors(RoadShape.shape(dense(sketch),seed,pair.source.id+"/"+target.id(),settings,search::dryLegal),pair.source.access,pair.target);
+                if(ground(target,nodes,pair,shaped,search,false))return true;
+            }
+        }
+        // Large height differences use the hillside templates before spending the coarse search.
+        for(var pair:chosen) {
+            int ty=(int)Math.floor(sample(pair.target.endpoint().x(),pair.target.endpoint().z()).groundSurface())-1;
+            if(Math.abs(ty-pair.source.y)<=settings.maximumEarthwork()*2
+                    ||Math.abs(ty-pair.source.y)/Math.max(1,RoadShape.distance(pair.source.access.endpoint(),pair.target.endpoint()))<PlanningPolicy.CURRENT.preferredGrade()*.75)continue;
+            if(boardwalk(target,nodes,pair,ty))return true;
+            if(work.candidates()>=work.policy().candidates())return false;
+        }
+        for(var pair:chosen) {
+            var found=search.find(pair.source.access.approach(),pair.target.approach(),false);
+            if(!found.valid()){rejected(target.id(),found.failure()+" from "+pair.source.access.approach()+" to "+pair.target.approach());continue;}
+            var path=withConnectors(dense(found.points()),pair.source.access,pair.target);
+            if(!work.candidate(RoadShape.length(path))){failures.put(target.id(),"RESOURCE_LIMIT_CANDIDATES_OR_LENGTH");return false;}
+            // Round only within verified dry corridors, then validate the whole resulting raster.
+            path=withConnectors(RoadShape.shape(found.points(),seed,pair.source.id+"/"+target.id(),settings,search::dryLegal),pair.source.access,pair.target);
+            if(ground(target,nodes,pair,path,search,true))return true;
+        }
+        return false;
+    }
+    private List<Vec2> dense(List<Vec2> path) {
+        if(RoadShape.length(path)>work.policy().routeLength())return List.of();
+        var result=new ArrayList<Vec2>();result.add(path.getFirst());
+        for(int i=1;i<path.size();i++) {
+            var a=path.get(i-1);var b=path.get(i);int count=Math.max(1,(int)Math.ceil(RoadShape.distance(a,b)/8));
+            for(int k=1;k<=count;k++){work.visit();double t=k/(double)count;result.add(new Vec2(a.x()+(b.x()-a.x())*t,a.z()+(b.z()-a.z())*t));}
+        }
+        return result;
+    }
+    private boolean ground(RoadPlan.Node target,List<RoadPlan.Node> nodes,Pair pair,List<Vec2> path,RoadSearch search,boolean repairAllowed) {
+        return ground(target,nodes,pair,path,search,repairAllowed,work.policy().routeLength());
+    }
+    private boolean ground(RoadPlan.Node target,List<RoadPlan.Node> nodes,Pair pair,List<Vec2> path,RoadSearch search,boolean repairAllowed,double maximumLength) {
+        for(int attempt=0;attempt<=work.policy().repairs();attempt++) {
+            if(nodes.stream().noneMatch(n->n.id().equals(target.id()))) {
+                // Preserve the target's immutable outward connector. Required branches need
+                // only their final connection to the existing component, not an incidental loop.
+                int last=path.size()-(pair.target.endpoint().equals(pair.target.approach())?1:2);
+                var rejoin=network.lastGroundContact(path,last,Math.max(1,settings.width()/2),work);
+                if(rejoin!=null) {
+                    var c=rejoin.column();var p=rejoin.path().getFirst();
+                    String id=nodes.stream().filter(n->n.x()==c.x()&&n.z()==c.z()&&(n.y()==Integer.MIN_VALUE||n.y()==c.deckY()))
+                            .map(RoadPlan.Node::id).findFirst().orElse("attachment/"+c.x()+"/"+c.deckY()+"/"+c.z());
+                    double distance=network.distance(new Vec2(spawnX+.5,spawnZ+.5),spawnDeck,p,c.deckY(),work);
+                    pair=new Pair(new Source(id,Access.point(p),c.deckY(),distance),pair.target,pair.score);
+                    path=rejoin.path();
+                }
+            }
+            if(RoadShape.length(path)>maximumLength)return false;
+            if(nodes.stream().anyMatch(n->n.id().equals(target.id()))&&network.hasUnhelpfulExcursion(path,work))return false;
+            if(!work.validation()){failures.put(target.id(),"RESOURCE_LIMIT_VALIDATIONS");return false;}
+            RoadConstruction.Result built;
+            try(var phase=work.phase("construction")) {
+                built=RoadConstruction.build(path,settings,this::sample,reservations,network.ground,spawnX,spawnZ,spawnDeck,work);
+            }
+            if(built.valid()) {
+                var reason=network.validate(built.columns(),List.of(),pair.source.access.endpoint(),pair.source.y,settings.maximumColumns(),work);
+                if(reason==null)return commit(target,nodes,pair,path,List.of(),built.columns(),List.of(),RoadPlan.Kind.GROUND);
+                failures.put(target.id(),reason);return false;
+            }
+            rejected(target.id(),built.failure()+" at "+built.failurePoint()+" to "+pair.target.endpoint());
+            if(!repairAllowed||built.failure().startsWith("RESOURCE_LIMIT"))return false;
+            if(work.validations()>=work.policy().validations())return false;
+            var repair=search.repair(path,built.failurePoint());if(!repair.valid())return false;
+            // The outward structure connector is immutable during local repairs.
+            if(!connectorIntact(repair.points(),pair.source.access,true)||!connectorIntact(repair.points(),pair.target,false))return false;
+            path=repair.points();
+        }
+        return false;
+    }
+    private static boolean connectorIntact(List<Vec2> path,Access access,boolean start) {
+        if(access.endpoint().equals(access.approach()))return true;
+        return start?path.getFirst().equals(access.endpoint())&&path.get(1).equals(access.approach())
+                :path.getLast().equals(access.endpoint())&&path.get(path.size()-2).equals(access.approach());
+    }
+    private boolean boardwalk(RoadPlan.Node target,List<RoadPlan.Node> nodes,Pair pair,int ty) {
+        // Boardwalk sampling uses the same ledger, including cache hits and support checks.
+        var planner=new BoardwalkPlanner(settings,terrain,reservations,radius,work);
+        try {
+            for(var sketch:planner.templates(pair.source.access.approach(),pair.target.approach(),pair.source.y,ty)) {
+                var path=withConnectors(sketch,pair.source.access,pair.target);
+                if(!work.candidate(RoadShape.length(path))){failures.put(target.id(),"RESOURCE_LIMIT_CANDIDATES_OR_LENGTH");return false;}
+                var geometry=planner.profile(path,pair.source.y,ty);if(geometry==null)continue;
+                if(!work.validation()){failures.put(target.id(),"RESOURCE_LIMIT_VALIDATIONS");return false;}
+                var built=planner.build(geometry,RoadShape.length(path));if(built==null){rejected(target.id(),planner.failureReason());continue;}
+                var reason=network.validate(built.columns(),built.supports(),pair.source.access.endpoint(),pair.source.y,settings.maximumColumns(),work);
+                if(reason!=null){failures.put(target.id(),reason);continue;}
+                return commit(target,nodes,pair,built.points().stream().map(p->new Vec2(p.x(),p.z())).toList(),built.points(),built.columns(),built.supports(),RoadPlan.Kind.BOARDWALK);
+            }
+        } finally {operations+=planner.operations();}
+        failures.putIfAbsent(target.id(),planner.failureReason());return false;
+    }
+    private boolean commit(RoadPlan.Node target,List<RoadPlan.Node> nodes,Pair pair,List<Vec2> path,List<RoadPlan.Point3> geometry,
+                           List<RoadPlan.Column> delta,List<RoadPlan.Support> supports,RoadPlan.Kind kind) {
+        boolean junction=nodes.stream().noneMatch(n->n.id().equals(pair.source.id));
+        boolean newTarget=nodes.stream().noneMatch(n->n.id().equals(target.id()));
+        if(nodes.size()+(junction?1:0)+(newTarget?1:0)>settings.maximumNodes()){failures.put(target.id(),"RESOURCE_LIMIT_NODES");return false;}
+        var end=pair.target.endpoint();
+        var endpoint=delta.stream().filter(c->c.x()==(int)Math.floor(end.x())&&c.z()==(int)Math.floor(end.z())).findFirst().orElse(null);
+        if(endpoint==null){failures.put(target.id(),"ENDPOINT_MISSING");return false;}
+        if(junction) {
+            var p=pair.source.access.endpoint();nodes.add(new RoadPlan.Node(pair.source.id,(int)Math.floor(p.x()),(int)Math.floor(p.z()),false,Integer.MIN_VALUE,RoadPlan.NodeKind.JUNCTION));
+            travel.put(pair.source.id,pair.source.distance);
+        }
+        if(newTarget)nodes.add(new RoadPlan.Node(target.id(),endpoint.x(),endpoint.z(),target.required(),kind==RoadPlan.Kind.GROUND?Integer.MIN_VALUE:endpoint.deckY(),target.kind()));
+        lockedAccess.add(target.id());
+        double length=RoadShape.length(path);travel.put(target.id(),pair.source.distance+length);
+        network.commit(delta,supports);network.route(path,pair.source.distance,work);
+        routes.add(new RoadPlan.Route(pair.source.id+"->"+target.id(),pair.source.id,target.id(),path,length,geometry,kind));
+        return true;
+    }
+    private void addLoops(List<RoadPlan.Node> nodes,RoadSearch search) {
+        if(settings.loopBudgetFraction()==0||routes.isEmpty())return;
+        double remaining=routes.stream().mapToDouble(RoadPlan.Route::length).sum()*settings.loopBudgetFraction();
+        var destinations=nodes.stream().filter(n->n.kind()==RoadPlan.NodeKind.DESTINATION).toList();
+        // At most one local shortcut attempt per destination; no new global route search.
+        for(var target:destinations) {
+            if(target.id().equals("spawn"))continue;
+            work.task("loop/"+target.id());
+            try {
+                var source=destinations.stream().filter(n->!n.id().equals(target.id()))
+                        .filter(n->routes.stream().noneMatch(r->r.from().equals(n.id())&&r.to().equals(target.id())||r.to().equals(n.id())&&r.from().equals(target.id())))
+                        .min(Comparator.comparingDouble((RoadPlan.Node n)->distance(n,target)).thenComparing(RoadPlan.Node::id)).orElse(null);
+                if(source==null)continue;
+                var from=accessPoints(source).getFirst();var to=accessPoints(target).getFirst();double length=RoadShape.distance(from.endpoint(),to.endpoint());
+                if(length>remaining)continue;
+                double previous=network.distance(from.endpoint(),source.y(),to.endpoint(),target.y(),work);
+                if(!worthwhileLoop(previous,length))continue;
+                var cell=network.at(from.endpoint(),source.y());if(cell==null)continue;
+                var pair=new Pair(new Source(source.id(),from,cell.deckY(),travel.get(source.id())),to,length);
+                var raw=dense(List.of(from.approach(),to.approach()));
+                if(raw.size()<2)continue;
+                var path=withConnectors(RoadShape.shape(raw,seed,source.id()+"/"+target.id(),settings,search::dryLegal),from,to);
+                double shapedLength=RoadShape.length(path);
+                if(shapedLength>remaining||!worthwhileLoop(previous,shapedLength))continue;
+                // Repairs also obey the remaining construction and travel-benefit budgets.
+                double maximumLength=Math.min(remaining,Math.min(Math.nextDown(previous/1.5),previous-PlanningPolicy.CURRENT.minimumLoopSaving()));
+                if(work.candidate(shapedLength)&&Double.isFinite(search.estimate(path))
+                        &&ground(target,nodes,pair,path,search,true,maximumLength))remaining-=RoadShape.length(routes.getLast().points());
+            } catch(RoadWorkBudget.Limit ignored) { /* Optional improvements never consume required work. */ }
+        }
+    }
+    static boolean worthwhileLoop(double previous,double added) {
+        var policy=PlanningPolicy.CURRENT;
+        return Double.isFinite(previous)&&previous>added*1.5
+                &&previous-added>=policy.minimumLoopSaving()&&previous+added>=policy.minimumLoopPerimeter();
     }
     private boolean validPoint(int x,int z) {
         if(Math.abs(x)>radius||Math.abs(z)>radius)return false;
@@ -180,68 +379,23 @@ public final class RoadPlanner {
         return true;
     }
     private void add(List<RoadPlan.Node> nodes,RoadPlan.Node node) {
-        if(nodes.size()>=settings.maximumNodes())throw failure(PlanningFailure.Code.RESOURCE_LIMIT,"road node limit","node",node.id());
         if(!validPoint(node.x(),node.z())){missing(node.id(),node.required(),"INVALID_ENDPOINT");return;}
         // Coincident destinations can share the root/endpoint; retain an explicit diagnostic.
         if(nodes.stream().anyMatch(n->n.x()==node.x()&&n.z()==node.z())) {skipped.add(new RoadPlan.Skipped(node.id(),"COINCIDENT_ENDPOINT"));return;}
+        if(nodes.size()>=settings.maximumNodes()) {
+            if(!node.required()) {skipped.add(new RoadPlan.Skipped(node.id(),"OPTIONAL_NODE_BUDGET"));return;}
+            var optional=nodes.stream().filter(n->!n.required()).reduce((a,b)->b);
+            if(optional.isPresent()) {
+                nodes.remove(optional.get());accessCandidates.remove(optional.get().id());
+                skipped.add(new RoadPlan.Skipped(optional.get().id(),"OPTIONAL_NODE_BUDGET"));
+            } else work.capacity(RoadWorkControl.Kind.NODES,nodes.size(),settings.maximumNodes());
+        }
         nodes.add(node);
     }
     private void missing(String id,boolean required,String reason) {
-        if(required)throw failure(reason.contains("BUDGET")?PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED:PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
+        if(required)throw failure(reason.startsWith("RESOURCE_LIMIT")?PlanningFailure.Code.RESOURCE_LIMIT:PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,
                 "required road destination cannot be connected","node",id+":"+reason);
         skipped.add(new RoadPlan.Skipped(id,reason));
-    }
-    private record Candidate(int a,int b,List<Vec2> points,double cost) {}
-    private void evaluate(int i,int j,List<RoadPlan.Node> nodes,RoadSearch search,Set<Long> attempted,List<Candidate> candidates,Map<String,String> failures) {
-        int a=Math.min(i,j),b=Math.max(i,j);if(!attempted.add(pair(a,b)))return;
-        record Pair(Access from,Access to) {}
-        var pairs=new ArrayList<Pair>();
-        for(var from:accessPoints(nodes.get(a)))for(var to:accessPoints(nodes.get(b)))pairs.add(new Pair(from,to));
-        pairs.sort(Comparator.comparingDouble((Pair p)->RoadShape.distance(p.from().approach(),p.to().approach()))
-                .thenComparingDouble(p->p.from().endpoint().x()).thenComparingDouble(p->p.from().endpoint().z())
-                .thenComparingDouble(p->p.to().endpoint().x()).thenComparingDouble(p->p.to().endpoint().z()));
-        // Reserve a quarter of the global sample allowance for rasterizing committed roads.
-        // A difficult optional pair must not consume every later pair's search budget.
-        edgeLimit=Math.min(settings.maximumOperations()*3/4,operations+PAIR_OPERATIONS);
-        long pairLimit=edgeLimit;
-        int before=candidates.size();
-        try {
-            // Probe cheap direct routes across the perimeter before an obstructed side spends A* budget.
-            for(boolean directOnly:new boolean[]{true,false}) {
-                if(!directOnly&&candidates.size()>before)break;
-                for(var pair:pairs.subList(0,Math.min(MAX_ACCESS_PAIRS,pairs.size()))) {
-                double lowerBound=RoadShape.distance(pair.from().approach(),pair.to().approach())
-                        +RoadShape.distance(pair.from().endpoint(),pair.from().approach())+RoadShape.distance(pair.to().endpoint(),pair.to().approach());
-                double best=candidates.subList(before,candidates.size()).stream().mapToDouble(Candidate::cost).min().orElse(Double.POSITIVE_INFINITY);
-                if(lowerBound>=best)continue;
-                if(operations>=pairLimit)throw new EdgeBudget();
-                edgeLimit=Math.min(pairLimit,operations+(pairs.size()==1?PAIR_OPERATIONS:ACCESS_OPERATIONS));
-                try { evaluateGeometry(a,b,pair.from(),pair.to(),nodes,search,candidates,failures,directOnly); }
-                catch(EdgeBudget exhausted) {failures.put(nodes.get(b).id(),"SEARCH_BUDGET_EXHAUSTED");}
-                }
-            }
-        }
-        catch(EdgeBudget exhausted) {
-            failures.put(nodes.get(a).id(),"SEARCH_BUDGET_EXHAUSTED");
-            failures.put(nodes.get(b).id(),"SEARCH_BUDGET_EXHAUSTED");
-        } finally {edgeLimit=Long.MAX_VALUE;}
-    }
-    private void evaluateGeometry(int a,int b,Access from,Access to,List<RoadPlan.Node> nodes,RoadSearch search,
-                                  List<Candidate> candidates,Map<String,String> failures,boolean directOnly) {
-        double localCost=search.edge(from.endpoint(),from.approach(),true)+search.edge(to.approach(),to.endpoint(),true);
-        if(!Double.isFinite(localCost)) {failures.put(nodes.get(b).id(),"LOCAL_CONNECTOR_BLOCKED");return;}
-        var result=directOnly?search.findDirect(from.approach(),to.approach()):search.find(from.approach(),to.approach(),false);
-        if(result.valid()) {
-            var shaped=withConnectors(RoadShape.shape(result.points(),seed,nodes.get(a).id()+"/"+nodes.get(b).id(),settings,search::dryLegal),from,to);
-            shaped=RoadJunctions.merge(shaped,routes,settings.maximumBendDetour());
-            var built=construct(shaped);
-            if(!built.valid()) {
-                shaped=RoadJunctions.merge(withConnectors(result.points(),from,to),routes,settings.maximumBendDetour());built=construct(shaped);
-
-            }
-            if(result.valid()&&built.valid()){candidates.add(new Candidate(a,b,shaped,result.cost()+localCost));return;}
-            failures.put(nodes.get(b).id(),built.failure());
-        } else failures.put(nodes.get(b).id(),result.failure());
     }
     private static List<Vec2> withConnectors(List<Vec2> macro,Access from,Access to) {
         var result=new ArrayList<Vec2>();
@@ -251,100 +405,11 @@ public final class RoadPlanner {
         return List.copyOf(result);
     }
 
-    private void commitCandidates(List<Candidate> candidates,List<RoadPlan.Node> nodes,int[] parent,RoadSearch search,Set<Long> attempted,boolean loops,double budget) {
-        double spent=0;
-        for(var c:candidates.stream().sorted(Comparator.comparingDouble(Candidate::cost).thenComparingInt(Candidate::a).thenComparingInt(Candidate::b).thenComparingDouble(c->c.points().getFirst().x()).thenComparingDouble(c->c.points().getFirst().z()).thenComparingDouble(c->c.points().getLast().x()).thenComparingDouble(c->c.points().getLast().z())).toList()) {
-            String from=nodes.get(c.a()).id(),to=nodes.get(c.b()).id(),id=from+"->"+to;
-            if(routes.stream().anyMatch(r->r.id().equals(id)))continue;
-            if(!loops&&root(parent,c.a())==root(parent,c.b()))continue;
-            var aligned=align(c,nodes,search);
-            if(aligned==null)continue;
-            var path=aligned.points();var built=aligned.built();
-            double length=RoadShape.length(path);
-            if(loops&&(spent+length>budget||networkDistance(nodes.get(c.a()),nodes.get(c.b()))<=length*1.5))continue;
-            lock(nodes,c.a(),path.getFirst(),attempted);
-            lock(nodes,c.b(),path.getLast(),attempted);
-            for(var cell:built.columns())columns.put(RoadPlan.key(cell.x(),cell.z()),cell);
-            routes.add(new RoadPlan.Route(id,from,to,path,length));
-            parent[root(parent,c.b())]=root(parent,c.a());spent+=length;
-        }
-    }
-    private record Aligned(List<Vec2> points,RoadConstruction.Result built) {}
-    private Aligned align(Candidate candidate,List<RoadPlan.Node> nodes,RoadSearch search) {
-        var from=nodes.get(candidate.a());var to=nodes.get(candidate.b());
-        var start=candidate.points().getFirst();var end=candidate.points().getLast();
-        if(compatible(from,start)&&compatible(to,end)) {
-            var path=RoadJunctions.merge(candidate.points(),routes,settings.maximumBendDetour());
-            var built=construct(path);return built.valid()?new Aligned(path,built):null;
-        }
-        // A locked entrance changes the path problem. Search to that entrance again rather than
-        // appending an axis-aligned rectangle after curve shaping.
-        Access source=accessPoints(from).stream().filter(p->p.endpoint().equals(compatible(from,start)?start:point(from))).findFirst().orElseThrow();
-        Access target=accessPoints(to).stream().filter(p->p.endpoint().equals(compatible(to,end)?end:point(to))).findFirst().orElseThrow();
-        edgeLimit=Math.min(settings.maximumOperations()*3/4,operations+PAIR_OPERATIONS);
-        try {
-            var replacement=new ArrayList<Candidate>();
-            var failures=new TreeMap<String,String>();
-            evaluateGeometry(candidate.a(),candidate.b(),source,target,nodes,search,replacement,failures,true);
-            if(replacement.isEmpty())evaluateGeometry(candidate.a(),candidate.b(),source,target,nodes,search,replacement,failures,false);
-            if(!replacement.isEmpty()) {
-                var path=replacement.getFirst().points();var built=construct(path);
-                if(built.valid())return new Aligned(path,built);
-            }
-        } catch(EdgeBudget exhausted) {
-            return null;
-        } finally {edgeLimit=Long.MAX_VALUE;}
-        return null;
-    }
     private List<Access> accessPoints(RoadPlan.Node node) {
         var values=accessCandidates.getOrDefault(node.id(),List.of(Access.point(point(node))));
         return lockedAccess.contains(node.id())?values.stream().filter(a->a.endpoint().equals(point(node))).toList():values;
     }
-    private boolean compatible(RoadPlan.Node node,Vec2 endpoint) {
-        return !accessCandidates.containsKey(node.id())||!lockedAccess.contains(node.id())||point(node).equals(endpoint);
-    }
-    private void lock(List<RoadPlan.Node> nodes,int index,Vec2 endpoint,Set<Long> attempted) {
-        var old=nodes.get(index);
-        if(!accessCandidates.containsKey(old.id())||!lockedAccess.add(old.id()))return;
-        nodes.set(index,new RoadPlan.Node(old.id(),(int)Math.floor(endpoint.x()),(int)Math.floor(endpoint.z()),old.required()));
-        // Reopen pairs evaluated with a now-invalid alternative endpoint, within the repair bound.
-        for(int i=0;i<nodes.size();i++)if(i!=index)attempted.remove(pair(index,i));
-    }
-    private RoadConstruction.Result construct(List<Vec2> path) {return RoadConstruction.build(path,settings,this::sample,reservations,columns,spawnX,spawnZ,spawnDeck);}
-    private double networkDistance(RoadPlan.Node from,RoadPlan.Node to) {
-        // Physical junctions shorten travel even when they are not destination nodes. Cardinal
-        // raster distance is a conservative travel estimate; the loop still needs a substantial gain.
-        long start=RoadPlan.key(from.x(),from.z()),end=RoadPlan.key(to.x(),to.z());
-        if(!columns.containsKey(start)||!columns.containsKey(end))return Double.POSITIVE_INFINITY;
-        var distance=new HashMap<Long,Integer>();var todo=new ArrayDeque<Long>();
-        distance.put(start,0);todo.add(start);
-        int[][] offsets={{1,0},{-1,0},{0,1},{0,-1}};
-        while(!todo.isEmpty()) {
-            long key=todo.remove();int steps=distance.get(key);if(key==end)return steps;
-            var c=columns.get(key);
-            for(var offset:offsets) {
-                long next=RoadPlan.key(c.x()+offset[0],c.z()+offset[1]);var neighbor=columns.get(next);
-                if(neighbor!=null&&Math.abs(neighbor.deckY()-c.deckY())<=1&&!distance.containsKey(next)) {
-                    distance.put(next,steps+1);todo.add(next);
-                }
-            }
-        }
-        return Double.POSITIVE_INFINITY;
-    }
-    private void validateConnected(List<RoadPlan.Node> nodes) {
-        if(routes.isEmpty())return;
-        long start=RoadPlan.key(spawnX,spawnZ);if(!columns.containsKey(start))throw failure(PlanningFailure.Code.EXECUTION_FAILED,"road missing spawn column","spawn",start);
-        var seen=new HashSet<Long>();var todo=new ArrayDeque<Long>();seen.add(start);todo.add(start);
-        int[][] offsets={{1,0},{-1,0},{0,1},{0,-1}};
-        while(!todo.isEmpty()) {
-            var c=columns.get(todo.remove());
-            for(var d:offsets){long key=RoadPlan.key(c.x()+d[0],c.z()+d[1]);var other=columns.get(key);if(other!=null&&Math.abs(other.deckY()-c.deckY())<=1&&seen.add(key))todo.add(key);}
-        }
-        for(var node:nodes)if(!seen.contains(RoadPlan.key(node.x(),node.z())))throw failure(PlanningFailure.Code.EXECUTION_FAILED,"quantized road is disconnected","node",node.id());
-    }
-    private static long pair(int a,int b){return ((long)Math.min(a,b)<<32)|Math.max(a,b);}
     private static Vec2 point(RoadPlan.Node node){return new Vec2(node.x()+.5,node.z()+.5);}
     private static double distance(RoadPlan.Node a,RoadPlan.Node b){return RoadShape.distance(point(a),point(b));}
-    private static int root(int[] parent,int i){while(parent[i]!=i)i=parent[i];return i;}
     private static PlanningFailure failure(PlanningFailure.Code code,String message,String key,Object value){return new PlanningFailure(code,FailureStage.ROADS,message,Map.of(key,value));}
 }

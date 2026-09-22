@@ -82,8 +82,8 @@ class DemandClimateTest {
             assertEquals(t==TemperatureType.VERY_COLD,
                 rules.prefersType(new ContentId("test:snow"),x+2,z+2,FLAT.sample(x,z)));
         }
-        // Fixed geography does not manufacture all four bands on a small, flat island.
-        assertFalse(types.contains(TemperatureType.VERY_COLD));
+        // The macro field now admits cold lowlands without relying on mountains.
+        assertTrue(types.contains(TemperatureType.VERY_COLD));
         assertArrayEquals(new double[]{2.5,5,7.5},climate.snapshot().thresholds());
         assertDoesNotThrow(()->parser.parse(CanonicalConfigJson.write(c).replace("\"very_cold\":1.0","\"very_cold\":1.0,\"cold\":1.0")));
     }

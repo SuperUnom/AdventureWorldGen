@@ -32,7 +32,7 @@ public record PlannerProfile(
 
     public static final PlannerProfile V2 = new PlannerProfile(
             "planner-v2",
-            "plan-v5",
+            "plan-v6",
             PlanVersions.HYDROLOGY,
             AreaGrid.CELL_SIDE,
             List.of(16, 8, 4),

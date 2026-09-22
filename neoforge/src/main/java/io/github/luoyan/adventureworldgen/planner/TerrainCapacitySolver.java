@@ -25,7 +25,7 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
 public final class TerrainCapacitySolver {
     private TerrainCapacitySolver() {}
 
-    private record Request(String id,List<ContentId> biomes,int level,long minimum,long target) {}
+    private record Request(String id,List<ContentId> biomes,int level,long minimum,long target,boolean required) {}
     private record Choice(Bin bin,ContentId biome,TerrainTemplate recipe,TerrainTemplate secondary,
                           Set<String> allowed,Double min,Double max,TerrainCapacityPlan.Fit fit,double score) {}
     private static final class Bin {
@@ -55,7 +55,7 @@ public final class TerrainCapacitySolver {
         var expanded=new RequirementExpander().expandMinimum(config);
         List<Request> requests=new ArrayList<>();
         for(var d:expanded.patches())requests.add(new Request(d.patchId(),d.allowedBiomes(),d.adventureLevel(),
-                d.area().inCells(4).min()*16,d.area().target()));
+                d.area().inCells(4).min()*16,d.area().target(),d.requiresSeed()));
         requests.sort(Comparator.comparingInt((Request r)->r.level==0?-1:
                 r.biomes.stream().flatMap(id->eligibleTemplates(config,id).stream()).distinct().toList().size()).thenComparing(Request::id));
         var central=geometry.regionKeyAt(0,0);
@@ -114,10 +114,11 @@ public final class TerrainCapacitySolver {
             if(round==0) {
                 Map<ContentId,Long> capacity=new HashMap<>();
                 for(var choice:choices)capacity.merge(choice.biome,choice.bin.area-choice.bin.used,Long::sum);
-                for(var choice:choices)if(capacity.get(choice.biome)>=remaining) {
+                for(var choice:choices)if(capacity.get(choice.biome)>=(request.required?16:remaining)) {
                     selected.put(request.id,choice.biome);break;
                 }
             }
+            if(!selected.containsKey(request.id)&&!choices.isEmpty())selected.put(request.id,choices.getFirst().biome);
             for(var choice:choices) {
                 if(!choice.biome.equals(selected.get(request.id)))continue;
                 var bin=choice.bin;
@@ -127,7 +128,7 @@ public final class TerrainCapacitySolver {
                 allocated.merge(request.id,amount,Long::sum);
                 if(remaining==0)break;
             }
-            if(round==0&&remaining>0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.TERRAIN_CAPACITY,
+            if(round==0&&request.required&&allocated.getOrDefault(request.id,0L)==0)throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.TERRAIN_CAPACITY,
                     "no allowed biome has sufficient template, height envelope and interior capacity",
                     Map.of("request",request.id,"biomes",request.biomes,"missing_area",remaining,
                             "interior_regions",bins.size(),"seed",seed));

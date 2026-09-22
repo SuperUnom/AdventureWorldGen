@@ -72,7 +72,8 @@ class GameTestInventoryTest {
             "RoadRegressionGameTests#reportedRoadBudgetSeedPlansAndReplays",
             "RoadRegressionGameTests#reportedTaigaDisconnectSeedPlansAndReplays",
             "RoadRegressionGameTests#reportedVillageDistanceSeedUsesInstanceBounds",
-            "RoadRegressionGameTests#reportedCrossingAndSpawnBumpSeedPlansAndReplays");
+            "RoadRegressionGameTests#reportedCrossingAndSpawnBumpSeedPlansAndReplays",
+            "RoadRegressionGameTests#reportedSmallLoopSeedConnectsSnowVillageAndMountainLookout");
 
     /** Namespace -> the group that enables it. */
     private static final Map<String, List<String>> GROUPS = new LinkedHashMap<>();
@@ -84,7 +85,8 @@ class GameTestInventoryTest {
         GROUPS.put("testcompanion_planning", PLANNING_GROUP);
         GROUPS.put("testcompanion_roads", List.of("RoadGameTests#frozenRoadsRespectChunkOrderAndPlayerEdits",
                 "RoadGameTests#neighbouringDecorationCannotOverwriteRoadOrHeadroom",
-                "RoadGameTests#shortBridgePreservesWaterAndItsApproaches"));
+                "RoadGameTests#shortBridgePreservesWaterAndItsApproaches",
+                "RoadGameTests#layeredBoardwalksPreserveAirAndChunkOrder"));
         GROUPS.put("testcompanion_structure", List.of(
                 "StructureExecutionGameTests#locateChecksNearestStartsOnlyAndConsumesReturnedReferences",
                 "StructureExecutionGameTests#realChunksGenerateInEitherOrderAndResumeAfterReload",
@@ -134,11 +136,11 @@ class GameTestInventoryTest {
         assertEquals(10, found.getOrDefault("testcompanion", List.of()).size(), "default group size");
         assertEquals(6, found.getOrDefault("testcompanion_performance", List.of()).size(), "performance group size");
         assertEquals(1, found.getOrDefault("testcompanion_capacity", List.of()).size(), "capacity group size");
-        assertEquals(6, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
+        assertEquals(7, found.getOrDefault("testcompanion_planning", List.of()).size(), "planning group size");
         assertEquals(5, found.getOrDefault("testcompanion_structure", List.of()).size(), "structure group size");
         int total = GROUPS.values().stream().mapToInt(List::size).sum();
-        assertEquals(3, found.getOrDefault("testcompanion_roads", List.of()).size(), "roads group size");
-        assertEquals(31, total, "the full acceptance entry covers every registered method exactly once");
+        assertEquals(4, found.getOrDefault("testcompanion_roads", List.of()).size(), "roads group size");
+        assertEquals(33, total, "the full acceptance entry covers every registered method exactly once");
     }
 
     private Map<String, List<String>> scanTestmodSources() throws IOException {

@@ -12,17 +12,31 @@ class StructurePlanningJsonTest {
             {"world":{"radius":512},"spawn":{"biome":"test:plains"},"biomes":{"filler":["test:plains"]},
              "structures":[{"id":"test:keep","adventure_level":1,"count":{"min":1,"max":1},"allowed_biomes":{"id":["test:plains"]}}]}
             """);
-        return StructurePlanningJson.load(config,id->new StringReader(json)).find(new ContentId("test:keep")).orElseThrow();
+        return StructurePlanningJson.load(config,id->json==null?null:new StringReader(json)).find(new ContentId("test:keep")).orElseThrow();
     }
     @Test void footprintIsIndependentAndLegacyEnvelopeIsExplicitlyConverted() throws Exception {
         var info=parse("""
             {"footprint":{"min_x":-10,"min_z":-20,"max_x":40,"max_z":50}}
             """);
-        assertNull(info.roadAccess());assertEquals(new BoundsXZ(-10,-20,40,50),info.footprint());
+        assertEquals(StructurePlanningInfo.RoadAccess.DEFAULT,info.roadAccess());assertEquals(new BoundsXZ(-10,-20,40,50),info.footprint());
         var legacy=parse("""
             {"road_access":{"exclusion_radius":32,"approach_distance":48}}
             """);
         assertEquals(new BoundsXZ(-32,-32,32,32),legacy.footprint());assertEquals(16,legacy.roadAccess().margin());
+    }
+    @Test void absentResourceAndPartialOverridesUseCanonicalDefaults() throws Exception {
+        var absent=parse(null);
+        assertNull(absent.footprint(),"missing resources must not invent structure dimensions");
+        assertEquals(StructurePlanningInfo.RoadAccess.DEFAULT,absent.roadAccess());
+        for(var json:java.util.List.of("{}","{\"road_access\":{}}",
+                "{\"road_access\":{\"margin\":4,\"connector_length\":16,\"entrances\":[]}}")) {
+            var explicit=parse(json);
+            assertEquals(absent,explicit);
+            assertEquals(StructurePlanningCatalog.of(java.util.List.of(absent)).canonicalIdentity(),
+                    StructurePlanningCatalog.of(java.util.List.of(explicit)).canonicalIdentity());
+        }
+        assertEquals(new StructurePlanningInfo.RoadAccess(4,24,java.util.List.of()),
+                parse("{\"road_access\":{\"connector_length\":24}}").roadAccess());
     }
     @Test void entrancesAreCanonicalAndFieldsRejectCoercion() throws Exception {
         String first="{\"margin\":4,\"entrances\":[{\"x\":40,\"z\":0,\"facing\":\"east\"},{\"x\":0,\"z\":-40,\"facing\":\"north\"}]}";

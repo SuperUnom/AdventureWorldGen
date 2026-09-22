@@ -18,10 +18,11 @@ import java.util.List;
  * Computing them in one call would move the later two before those assignments and quietly change
  * the published statistics.
  *
- * <p>Diagnostic only: none of these values feeds back into the field, admission, scoring or any
- * search decision.
+ * <p>Targets guide the finite macro-field calibration before allocation. Ratios and supply
+ * reported afterwards are diagnostics and never expand the legal admission sets.
  */
 public interface ClimateStatistics {
+    default List<io.github.luoyan.adventureworldgen.plan.ClimateTarget> targets(List<ClimateField.Site> sites) { return List.of(); }
     /** Author demand spread across temperature bands and normalized to sum to one. */
     double[] targetRatios(ClimateField field, List<ClimateField.Site> sites);
 

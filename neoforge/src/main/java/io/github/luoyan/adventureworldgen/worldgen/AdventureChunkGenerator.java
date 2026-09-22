@@ -115,8 +115,9 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         return result;
     }
     public boolean protectsRoad(BlockPos pos) {
-        var road=RuntimePlanRegistry.await(planKey()).roadAt(pos.getX(),pos.getZ());
-        return road!=null&&road.protects(pos.getY());
+        var plan=RuntimePlanRegistry.await(planKey());
+        return plan.roadsAt(pos.getX(),pos.getZ()).stream().anyMatch(road->road.protects(pos.getY()))
+                ||plan.roadSupportsInChunk(pos.getX()>>4,pos.getZ()>>4).stream().anyMatch(s->s.contains(pos.getX(),pos.getY(),pos.getZ()));
     }
     public AdventurePlanView roadPlanView() { return RuntimePlanRegistry.await(planKey()); }
 
@@ -276,7 +277,7 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 BiomeManager.obfuscateSeed(plan.seed()));
         state.surfaceSystem().buildSurface(state, biomes, registries.registryOrThrow(Registries.BIOME),
                 false, new WorldGenerationContext(this, chunk), chunk, surfaceNoise, surfaceRule);
-        if (!plan.roadsInChunk(chunk.getPos().x,chunk.getPos().z).isEmpty()) RoadWorldgen.surface(chunk,plan,roadPalette(plan));
+        if (!plan.roadsInChunk(chunk.getPos().x,chunk.getPos().z).isEmpty()||!plan.roadSupportsInChunk(chunk.getPos().x,chunk.getPos().z).isEmpty()) RoadWorldgen.surface(chunk,plan,roadPalette(plan));
         Heightmap.primeHeightmaps(chunk, EnumSet.of(Heightmap.Types.WORLD_SURFACE_WG,
                 Heightmap.Types.OCEAN_FLOOR_WG, Heightmap.Types.MOTION_BLOCKING,
                 Heightmap.Types.MOTION_BLOCKING_NO_LEAVES));
@@ -309,7 +310,11 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
         var plan = naturalView != null ? naturalView : (GeneratedAdventurePlan) RuntimePlanRegistry.await(planKey());
         MacroSample sample = plan.terrainAt(x + 0.5, z + 0.5);
         var road = naturalView == null ? plan.roadAt(x,z) : null;
-        if (road != null) return road.deckY()+1;
+        if(naturalView==null&&(road!=null||!plan.roadSupportsInChunk(x>>4,z>>4).isEmpty())) {
+            var column=getBaseColumn(x,z,level,randomState);
+            for(int y=MIN_Y+DEPTH-1;y>=MIN_Y;y--)if(type.isOpaque().test(column.getBlock(y)))return y+1;
+            return MIN_Y;
+        }
         int solidTop = clamp(plan.solidSurfaceAt(x, z, sample) - 1, MIN_Y, MIN_Y + DEPTH - 1);
         int waterTop = sample.wet() ? clamp((int) StrictMath.floor(sample.waterSurface()) - 1,
                 MIN_Y, MIN_Y + DEPTH - 1) : solidTop;
@@ -344,8 +349,10 @@ public final class AdventureChunkGenerator extends ChunkGenerator {
                 states[y - MIN_Y] = nativeOcean.getBlock(y);
         }
         var column = new NoiseColumn(MIN_Y, states);
-        var road = naturalView == null ? plan.roadAt(x,z) : null;
-        if(road!=null)RoadWorldgen.column(column,road,roadPalette(plan),plan);
+        if(naturalView==null) {
+            RoadWorldgen.supports(column,x,z,plan);
+            for(var road:plan.roadsAt(x,z))RoadWorldgen.column(column,road,roadPalette(plan),plan);
+        }
         return column;
     }
 

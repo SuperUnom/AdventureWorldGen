@@ -17,6 +17,7 @@ public final class HumidityPlan {
     public static final int STEP=32;
     private static final double REACH=512;
     private final AdventureWorldConfig config;
+    private final MacroTerrain terrain;
     private final ClimatePlan temperature;
     private final ValueNoise regional,detail,shore;
     private final int extent,width;
@@ -25,13 +26,14 @@ public final class HumidityPlan {
     private final double[] actual=new double[3];
     private final FrozenQuartField frozenValues;
     private final HumiditySupplyCorrection supplyCorrection;
+    private boolean accepted;
 
     public HumidityState snapshot() {
         return new HumidityState(extent,freshDistance.clone(),oceanDistance.clone(),freshLevel.clone(),oceanLevel.clone(),actual.clone(),weatherOffset);
     }
     public HumidityPlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,ClimatePlan temperature,
                         DoubleConsumer progress,HumidityState frozen) {
-        this.config=config;this.temperature=temperature;supplyCorrection=new HumiditySupplyCorrection(config);
+        this.config=config;this.terrain=terrain;this.temperature=temperature;supplyCorrection=new HumiditySupplyCorrection(config);
         double radius=config.world().radius();
         frozenValues=new FrozenQuartField(radius+128);
         regional=new ValueNoise(seed,"humidity/region",Math.max(160,radius*.35));
@@ -54,7 +56,7 @@ public final class HumidityPlan {
             for(double ratio:ratios)if(ratio<0||ratio>1)throw new IllegalArgumentException("invalid humidity ratio");
             if(Math.abs(Arrays.stream(ratios).sum()-1)>1e-6)throw new IllegalArgumentException("invalid humidity ratios");
             System.arraycopy(ratios,0,actual,0,3);
-            return;
+            accepted=true;return;
         }
         freshDistance=new double[(int)size];oceanDistance=new double[(int)size];
         freshLevel=new double[(int)size];oceanLevel=new double[(int)size];
@@ -127,7 +129,19 @@ public final class HumidityPlan {
     private double weather(double x,double z){return .36*regional.sample(x,z)+.13*detail.sample(x,z);}
     /** 0..1 moisture: broad weather, evaporation, elevation and nearby fresh/salt water. */
     public double valueAt(double x,double z,MacroSample s) {
-        return frozenValues.get(x,z,()->computeValue(x,z,s));
+        return accepted&&frozenValues.cacheable(x,z)?frozenValues.get(x,z,()->computeValue(x,z,terrain.sample(x,z))):computeValue(x,z,s);
+    }
+    double uncachedValueAt(double x,double z,MacroSample s) {return computeValue(x,z,s);}
+    void finishCalibration(MacroTerrain terrain) {
+        Arrays.fill(actual,0);int count=0;
+        for(int gz=0;gz<width;gz++)for(int gx=0;gx<width;gx++) {
+            int x=(gx-extent)*STEP+2,z=(gz-extent)*STEP+2;
+            if(Math.hypot(x,z)>config.world().radius())continue;
+            var sample=terrain.sample(x,z);if(sample.wet()||sample.hazardous())continue;
+            actual[typeAt(x,z,sample).ordinal()]++;count++;
+        }
+        if(count>0)for(int i=0;i<actual.length;i++)actual[i]/=count;
+        accepted=true;
     }
     private double computeValue(double x,double z,MacroSample s) {
         double natural=naturalValue(x,z,s);
@@ -147,7 +161,7 @@ public final class HumidityPlan {
         // Rivers overlay the land biome and do not redraw its climate boundary. This lets a
         // channel pass through an otherwise legal dry biome instead of becoming a wet stripe.
         value=Math.max(value,.64*Math.clamp(1-ocean/96,0,1));
-        value=Math.clamp(value,0,1);
+        value=Math.clamp(value+temperature.humidityAdjustment(x,z),0,1);
         return value;
     }
     public HumidityType typeAt(double x,double z,MacroSample s) {

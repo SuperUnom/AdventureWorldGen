@@ -14,7 +14,7 @@ public record RoadSettings(boolean enabled, int width, double maximumGrade, int 
     }
     public RoadSettings {
         if (width < 3 || width > 9 || width % 2 == 0 || !Double.isFinite(maximumGrade)
-                || maximumGrade <= 0 || maximumGrade > .5 || maximumEarthwork < 0 || maximumEarthwork > 8
+                || maximumGrade <= 0 || maximumGrade > 1.0 || maximumEarthwork < 0 || maximumEarthwork > 8
                 || maximumBridgeLength < 0 || maximumBridgeLength > 64 || clearance < 3 || clearance > 8
                 || !Double.isFinite(bendSpacing) || bendSpacing < 40 || bendSpacing > 320
                 || !Double.isFinite(bendAmplitude) || bendAmplitude < 0 || bendAmplitude > 32

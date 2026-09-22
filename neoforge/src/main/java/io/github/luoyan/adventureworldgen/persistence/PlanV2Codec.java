@@ -419,18 +419,18 @@ public final class PlanV2Codec {
     }
 
     private static io.github.luoyan.adventureworldgen.plan.RoadPlan readRoads(JsonElement raw) {
-        var root = exactRoadObject(raw, Set.of("nodes", "routes", "columns", "reservations", "skipped", "operations"));
+        var root = exactRoadObject(raw, Set.of("nodes", "routes", "columns", "reservations", "skipped", "operations", "supports"));
         integer(root, "operations");
         for (var node : array(root,"nodes")) {
-            var o=exactRoadObject(node,Set.of("id","x","z","required"));string(o,"id");roadInt(o,"x");roadInt(o,"z");bool(o,"required");
+            var o=exactRoadObject(node,Set.of("id","x","z","required","y","kind"));string(o,"id");roadInt(o,"x");roadInt(o,"z");roadInt(o,"y");string(o,"kind");bool(o,"required");
         }
         for (var route : array(root,"routes")) {
-            var o=exactRoadObject(route,Set.of("id","from","to","points","length"));string(o,"id");string(o,"from");string(o,"to");positive(o,"length");
+            var o=exactRoadObject(route,Set.of("id","from","to","points","length","geometry","kind"));string(o,"id");string(o,"from");string(o,"to");positive(o,"length");
             for(var point:array(o,"points")){var p=exactRoadObject(point,Set.of("x","z"));finite(p,"x");finite(p,"z");}
         }
         for(var column:array(root,"columns")) {
-            var o=exactRoadObject(column,Set.of("x","z","deckY","bottomY","clearTopY","bridge","shoulder"));
-            for(var key:List.of("x","z","deckY","bottomY","clearTopY"))roadInt(o,key);bool(o,"bridge");bool(o,"shoulder");
+            var o=exactRoadObject(column,Set.of("x","z","deckY","bottomY","clearTopY","bridge","shoulder","kind","stairFacing"));
+            for(var key:List.of("x","z","deckY","bottomY","clearTopY"))roadInt(o,key);bool(o,"bridge");bool(o,"shoulder");string(o,"kind");roadInt(o,"stairFacing");
         }
         for(var reservation:array(root,"reservations")) {
             var o=exactRoadObject(reservation,Set.of("instanceId","bounds"));string(o,"instanceId");
@@ -438,6 +438,14 @@ public final class PlanV2Codec {
             for(var key:List.of("minX","minZ","maxX","maxZ"))roadInt(bounds,key);
         }
         for(var skipped:array(root,"skipped")){var o=exactRoadObject(skipped,Set.of("id","reason"));string(o,"id");string(o,"reason");}
+        for(var support:array(root,"supports")) {
+            var o=exactRoadObject(support,Set.of("minX","minY","minZ","maxX","maxY","maxZ","kind"));
+            for(var k:List.of("minX","minY","minZ","maxX","maxY","maxZ"))roadInt(o,k);string(o,"kind");
+        }
+        for(var route:array(root,"routes")) {
+            var o=route.getAsJsonObject();string(o,"kind");
+            for(var point:array(o,"geometry")){var p=exactRoadObject(point,Set.of("x","y","z"));finite(p,"x");finite(p,"y");finite(p,"z");}
+        }
         return LAYOUT_JSON.fromJson(root,io.github.luoyan.adventureworldgen.plan.RoadPlan.class);
     }
     private static void roadInt(JsonObject value,String key) {Math.toIntExact(integer(value,key));}

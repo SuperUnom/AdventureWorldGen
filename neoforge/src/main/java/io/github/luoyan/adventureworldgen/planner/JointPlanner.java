@@ -8,6 +8,7 @@ import io.github.luoyan.adventureworldgen.plan.PlannedBiomePatch;
 import io.github.luoyan.adventureworldgen.plan.PlannedStructurePlacement;
 import io.github.luoyan.adventureworldgen.plan.StructurePlanningCatalog;
 import io.github.luoyan.adventureworldgen.plan.PlanningObserver;
+import io.github.luoyan.adventureworldgen.plan.PlanningExecution;
 import io.github.luoyan.adventureworldgen.plan.PlanningStage;
 
 import java.util.ArrayList;
@@ -28,11 +29,13 @@ import io.github.luoyan.adventureworldgen.plan.FailureStage;
 /** Stable bounded placement of the minimum legal patch/structure solution before optional optimization. */
 public final class JointPlanner {
     private final PlannerProfile profile;
+    private final PlanningExecution execution;
     private PlacementIndex placementIndex;
     private ClimatePlan climate;
     private BiomeEnvironmentRules rules;
 
-    public JointPlanner(PlannerProfile profile) { this.profile = profile; }
+    public JointPlanner(PlannerProfile profile) {this(profile,PlanningExecution.SERIAL);}
+    public JointPlanner(PlannerProfile profile,PlanningExecution execution) {this.profile=profile;this.execution=execution;}
 
     /** Frozen climate from the latest plan, reused immediately by runtime publication. */
     public ClimatePlan climate() { return java.util.Objects.requireNonNull(climate,"plan has not built climate"); }
@@ -84,6 +87,23 @@ public final class JointPlanner {
         climate=new ClimatePlan(seed,config,placementIndex::sampleAt,observer.within(PlanningStage.TEMPERATURE),observer,null,
                 new ClimateDiagnostics(config,ClimatePlan.STEP));
         rules=new BiomeEnvironmentRules(config,climate);
+        var ids=new ArrayList<ContentId>(config.biomes().filler());
+        demands.patches().forEach(d->ids.addAll(d.allowedBiomes()));
+        placementIndex.prepareEnvironments(ids,rules,execution);
+        var sources=new RequirementExpander().expandUnmerged(config);
+        var repaired=new ArrayList<RequirementExpander.PatchDemand>();
+        for(var demand:demands.patches()) {
+            if(demand.members().size()>1&&demand.allowedBiomes().stream().allMatch(id->placementIndex.supply.total(id)==0)) {
+                var memberIds=demand.members().stream().map(RequirementExpander.Member::patchId).collect(java.util.stream.Collectors.toSet());
+                repaired.addAll(sources.patches().stream().filter(d->memberIds.contains(d.patchId())).toList());
+            } else repaired.add(demand);
+        }
+        demands=new RequirementExpander.ExpandedRequirements(repaired,demands.structures());
+        carriers.clear();carrierLevels.clear();
+        for(var patch:demands.patches()) {
+            carrierLevels.put(patch.patchId(),new LevelSpan(patch.minimumLevel(),patch.maximumLevel()));
+            patch.structureInstances().forEach(instance->carriers.put(instance,patch.patchId()));
+        }
         checkpoint.accept("climate");
         observer.stage(PlanningStage.SEEDS);
         BiomeConstraint biomeConstraint = (biome,x,z)->placementIndex.allows(biome,x,z)&&rules.allows(biome,x,z,placementIndex.sample(x,z));
@@ -97,6 +117,12 @@ public final class JointPlanner {
             observer.within(stage).accept(value<.18?value/.18:(value-.18)/.82);
         });
         patches.addAll(assigned.patches());
+        demands=new RequirementExpander.ExpandedRequirements(new RequirementExpander().demandsForLayout(config,patches),demands.structures());
+        carriers.clear();carrierLevels.clear();
+        for(var patch:demands.patches()) {
+            carrierLevels.put(patch.patchId(),new LevelSpan(patch.minimumLevel(),patch.maximumLevel()));
+            for(var instance:patch.structureInstances())carriers.put(instance,patch.patchId());
+        }
         operations += assigned.operations();
         progress.accept(0.95);
         System.getLogger(JointPlanner.class.getName()).log(System.Logger.Level.INFO,
@@ -111,7 +137,11 @@ public final class JointPlanner {
                 .thenComparing(RequirementExpander.StructureDemand::instanceId));
         for(var demand:structureOrder) {
             var carrier=patches.stream().filter(p->p.patchId().equals(carriers.get(demand.instanceId()))).findFirst().orElseThrow();
-            placeInCarrier(seed,terrain,planningCatalog,levelConstraint,carrier,structures,demand,true);
+            if(!placeInCarrier(seed,terrain,planningCatalog,levelConstraint,carrier,structures,demand,false)
+                    &&!reuseCarrier(seed,config,terrain,planningCatalog,levelConstraint,patches,structures,demand,carriers,carrierLevels))
+                throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN,FailureStage.STRUCTURE_IN_BIOME,
+                        "required structure has no legal anchor in available compatible carriers",
+                        Map.of("instance_id",demand.instanceId(),"patch_id",carrier.patchId(),"area",carrier.area()));
             operations++;
             observer.within(PlanningStage.STRUCTURES)
                     .accept(structures.size()/(double)structureOrder.size());
@@ -151,7 +181,7 @@ public final class JointPlanner {
             RequirementExpander.StructureDemand demand, boolean required) {
         requirePlanningInfo(planningCatalog, demand);
         long salt=DeterministicRandom.seed(seed,profile.algorithmVersion(),"structure-in-biome",demand.instanceId(),0);
-        long visited=0, budget=Math.min(4096,profile.search().requiredCandidatePreparations());
+        long visited=0;
         var attempted=new HashSet<Long>();
         long[] cells = carrierCells(carrier);
         for(int step:new int[]{16,8,4}) {
@@ -170,19 +200,18 @@ public final class JointPlanner {
             for(var point:candidates) {
                 attempted.add(point.cell());int x=point.x(),z=point.z();
                 if(!spacingAllows(new Center(x,z),demand.structureId(),demand.spacing(),structures))continue;
-                if(++visited>budget)break;
+                visited++;
+                PlanningExecution.checkCancelled();
                 var sample=terrain.sample(x+.5,z+.5);
                 if(sample.wet()||sample.hazardous()||!carrier.contains(x,z))continue;
                 structures.add(new PlannedStructurePlacement(demand.instanceId(),demand.structureId(),x,z));
                 return true;
             }
-            if(visited>budget)break;
         }
         if (!required) return false;
-        throw new PlanningFailure(visited > budget ? PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED
-                : PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
+        throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.STRUCTURE_IN_BIOME,
                 "no legal structure anchor in its planned required biome",
-                Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"visited",visited,"budget",budget));
+                Map.of("instance_id",demand.instanceId(),"biome",carrier.biomeId(),"patch_id",carrier.patchId(),"area",carrier.area(),"visited",visited));
     }
 
     private record LevelSpan(int minimum, int maximum) {
@@ -277,16 +306,17 @@ public final class JointPlanner {
         long salt = DeterministicRandom.seed(seed,profile.algorithmVersion(),"indexed-structure","sequence/"+sequence,level);
         long visited=0;
         for(int step:new int[]{16,8,4}) {
-            var candidates = new ArrayList<>(placementIndex.candidates(level,step));
-            candidates.sort(java.util.Comparator.comparingDouble((PlacementIndex.Point p) ->
-                    4 * levelConstraint.penalty(level,p.x(),p.z())
-                            + (DeterministicRandom.mix(p.cell() ^ salt) >>> 11) * 0x1.0p-53));
-            for (var point : candidates) {
-                if(++visited>profile.search().requiredCandidatePreparations())throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.STRUCTURE_CANDIDATES,"indexed structure candidate budget exhausted",Map.of("visits",visited,"spacing",step));
-                Center candidate = new Center(point.x(),point.z());
-                if (!levelConstraint.accepts(level,point.x(),point.z())) continue;
-                if (compatible.test(point.x(),point.z())) return candidate;
+            Center best=null;double bestScore=Double.POSITIVE_INFINITY;long bestKey=Long.MAX_VALUE;
+            for (var point : placementIndex.candidates(level,step)) {
+                io.github.luoyan.adventureworldgen.plan.PlanningExecution.checkCancelled();visited++;
+                if (!levelConstraint.accepts(level,point.x(),point.z())||!compatible.test(point.x(),point.z()))continue;
+                double score=4*levelConstraint.penalty(level,point.x(),point.z())
+                        +(DeterministicRandom.mix(point.cell()^salt)>>>11)*0x1.0p-53;
+                if(score<bestScore||score==bestScore&&point.cell()<bestKey) {
+                    best=new Center(point.x(),point.z());bestScore=score;bestKey=point.cell();
+                }
             }
+            if(best!=null)return best;
         }
         throw new PlanningFailure(PlanningFailure.Code.NO_SOLUTION_IN_DOMAIN, FailureStage.JOINT_PLACEMENT,
                 "no compatible structure center in indexed domain",Map.of("level",level,"sequence",sequence,"candidates",visited));
@@ -397,8 +427,7 @@ public final class JointPlanner {
             fail("spawn is outside the reserved center domain", "spawn");
         var spawnTerrain = terrain.sample(spawn.x(), spawn.z());
         if (spawnTerrain.wet() || spawnTerrain.hazardous()) fail("spawn is not safe dry terrain", "spawn");
-        if (visits > profile.search().finalValidationVisits()) throw new PlanningFailure(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED, FailureStage.FINAL_VALIDATION, "independent validation budget exhausted",
-                Map.of("visits", visits, "budget", profile.search().finalValidationVisits()));
+        PlanningExecution.checkCancelled();
     }
 
     private static void fail(String message, String id) {

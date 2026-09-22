@@ -114,7 +114,11 @@ RegionTerrain → IslandMacroTerrain → ErodedTerrain
 先采样最终地形并形成局部与区域高度场，再叠加
 `OrganicTemperatureField` 的二维自然温度和多尺度高度降温。
 新计划使用固定的四档温度阈值；需求统计由 `ClimateStatistics` 注入，生产实现为 `ClimateDiagnostics`。
-统计不调整温度场、准入或搜索，改变需求不意味着温度会自动让出面积。
+自然宏观场本身覆盖四档；高度只追加降温，不再整体升温或压缩振幅，低地也可进入最冷档。
+planner 通过纯 `ClimateTarget` 提供温湿度、地形及高度联合目标。气候阶段在稳定顺序的有限场平移与温湿偏置中选择，
+出生附近使用平滑校准，优先避免必需需求零供给，再比较面积缺口及形状偏移。
+选择发生在群系分配之前，不改变允许集合；校准不保证任意需求都有足够供给。
+`ClimateSupply` 分别记录温度供给、温湿交集、合法低地和低地冷区；无合法低地明确记录原因，不能用雪山面积替代。
 
 [HumidityPlan](../../neoforge/src/main/java/io/github/luoyan/adventureworldgen/climate/HumidityPlan.java)
 准备水体距离状态；当前自然湿度公式使用天气、温度、海拔与海洋距离，不直接用淡水距离增强河岸湿度。
@@ -137,10 +141,6 @@ RegionTerrain → IslandMacroTerrain → ErodedTerrain
 规划与区块采样必须保持坐标语义；任意连续坐标不应被粗网格插值替代。
 `GeneratedAdventurePlan.terrainAt` 为精确方块中心查询设置缓存，其他位置交给连续函数。
 
-气候缓存目前存在需要特别审查的实现边界：
-`ClimatePlan.raw` 和 `HumidityPlan.valueAt` 的缓存计算闭包仍使用调用者传入的 sample，
-而 `FrozenQuartField` 仅按坐标索引；同一坐标首次传入不同高度可能形成不同缓存结果。
-其 `cacheable` 将坐标转为整数后判断中心，未先排除全部非整数坐标。
-[ClimatePlanQuartCacheTest](../../neoforge/src/test/java/io/github/luoyan/adventureworldgen/climate/ClimatePlanQuartCacheTest.java)
-主要复读同一缓存或使用相同首次顺序，不能据此证明任意 sample 和访问顺序都等价。
-调用者应传入与查询位置一致的最终地形样本；修改这一契约需补反例验证并检查计划输出变化。
+气候 quart 缓存只接收整数中心坐标，缓存计算重新读取该坐标的自然地形，避免首次传入的邻近样本决定整个单元。
+非整数与其他连续坐标保留原坐标计算。`ClimatePlanQuartCacheTest` 覆盖不同首次样本、正逆查询顺序、负坐标、
+非整数污染与冻结恢复；规划底图的缓存冷热检查见 `PlanningExecutionTest`。

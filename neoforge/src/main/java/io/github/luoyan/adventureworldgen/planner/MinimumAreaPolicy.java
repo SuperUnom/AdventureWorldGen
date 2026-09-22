@@ -31,7 +31,7 @@ public final class MinimumAreaPolicy {
     public static Set<String> protectedPatchIds(AdventureWorldConfig config, List<PlannedBiomePatch> patches,
                                                 ToLongFunction<PlannedBiomePatch> achievedArea) {
         Set<String> protectedIds = new LinkedHashSet<>();
-        for (var demand : new RequirementExpander().expandMinimum(config).patches())
+        for (var demand : new RequirementExpander().demandsForLayout(config,patches))
             for (var patch : patches)
                 if (patch.patchId().equals(demand.patchId())
                         && achievedArea.applyAsLong(patch) < Math.min(demand.area().min(), patch.area()))
@@ -52,7 +52,7 @@ public final class MinimumAreaPolicy {
      */
     public static void checkAchievedAreas(AdventureWorldConfig config, List<PlannedBiomePatch> patches,
                                           ToLongFunction<PlannedBiomePatch> effectiveArea, Consumer<Relaxation> sink) {
-        for (var demand : new RequirementExpander().expandMinimum(config).patches()) {
+        for (var demand : new RequirementExpander().demandsForLayout(config,patches)) {
             var patch = patches.stream().filter(candidate -> candidate.patchId().equals(demand.patchId()))
                     .findFirst().orElse(null);
             if (patch == null) {

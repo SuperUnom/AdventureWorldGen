@@ -8,6 +8,11 @@ import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RoadPlannerTest {
+    @Test void aBeneficialJunctionAppearsBetweenDestinations() {
+        var result=plan(settings(",\"loop_budget_fraction\":0",new Destination("a",240,-80,true),new Destination("b",240,80,true)),(x,z)->land(64));
+        assertTrue(result.nodes().stream().anyMatch(n->n.kind()==RoadPlan.NodeKind.JUNCTION&&n.x()>0&&n.x()<240));
+        assertEquals(result.columns().size(),result.columns().stream().map(c->RoadPlan.key(c.x(),c.z())).distinct().count());
+    }
     @Test void spawnAirClearanceDoesNotRaiseTheRoadAboveNaturalGround() {
         var fixture=settings("",new Destination("end",160,0,true));
         var plan=new RoadPlanner(472,fixture.config(),(x,z)->land(64.8)).plan(
@@ -52,7 +57,7 @@ class RoadPlannerTest {
 
     @Test void lockedEntrancesDoNotAppendLongRectangularSegmentsAfterShaping() {
         var road=structurePlan(true,(x,z)->land(64),new BoundsXZ(-80,-100,80,100));
-        assertEquals(2,road.routes().size());
+        assertTrue(road.routes().size()>=2);
         for(var route:road.routes())for(int i=1;i<route.points().size();i++) {
             var a=route.points().get(i-1);var b=route.points().get(i);
             assertFalse(RoadShape.distance(a,b)>80&&(a.x()==b.x()||a.z()==b.z()),"unshaped rectangle edge: "+a+" -> "+b);
@@ -106,19 +111,104 @@ class RoadPlannerTest {
         var road=plan(settings("",new Destination("end",128,0,true)),(x,z)->x>40&&x<88&&Math.abs(z)<20?new MacroSample(64,Double.NaN,WaterKind.NONE,true,"hazard","plains","test"):land(64));
         assertFalse(road.routes().isEmpty());assertTrue(road.columns().stream().noneMatch(c->c.x()>40&&c.x()<87&&Math.abs(c.z())<19));
     }
+    @Test void coarseCorridorFindsANarrowCrossingBeyondTheLocalRepairWindow() {
+        MacroTerrain terrain=(x,z)-> {
+            double half=z>280?8:32;
+            return Math.abs(x-200)<half?new MacroSample(54,63,WaterKind.RIVER,false,"river","plains","test"):land(64);
+        };
+        var road=plan(settings(",\"loop_budget_fraction\":0",new Destination("end",400,0,true)),terrain);
+        assertTrue(road.columns().stream().anyMatch(c->c.bridge()&&c.z()>280),"the route must use the narrow crossing");
+        assertTrue(road.columns().stream().filter(RoadPlan.Column::bridge).allMatch(c->c.z()>270),"a wide crossing must not pass final checks");
+    }
     @Test void aLoopIsAddedOnlyWhenItFitsTheLengthBudgetAndShortensTravel() {
         var road=plan(settings(",\"loop_budget_fraction\":0.5",new Destination("a",100,0,true),new Destination("b",100,100,true),new Destination("c",0,100,true)),(x,z)->land(64));
-        assertEquals(4,road.routes().size());assertTrue(road.columns().stream().anyMatch(RoadPlan.Column::shoulder));
+        var tree=plan(settings(",\"loop_budget_fraction\":0",new Destination("a",100,0,true),new Destination("b",100,100,true),new Destination("c",0,100,true)),(x,z)->land(64));
+        double treeLength=tree.routes().stream().mapToDouble(RoadPlan.Route::length).sum();
+        double totalLength=road.routes().stream().mapToDouble(RoadPlan.Route::length).sum();
+        assertTrue(totalLength>treeLength,"a useful shortcut should be added");
+        assertTrue(totalLength<=treeLength*1.5+1e-6,"shortcuts must share the tree length budget");
+        assertTrue(road.routes().size()>=road.nodes().size(),"the explicit split topology must contain a cycle");
+        assertTrue(road.columns().stream().anyMatch(RoadPlan.Column::shoulder));
+    }
+    @Test void longOptionalShortcutsGetTheSameGentleBendsAsTheBackbone() {
+        var destinations=new Destination[]{new Destination("a",400,0,true),new Destination("b",400,400,true),new Destination("c",0,400,true)};
+        var tree=plan(settings(",\"loop_budget_fraction\":0",destinations),(x,z)->land(64));
+        var fixture=settings(",\"loop_budget_fraction\":0.5",destinations);
+        var road=plan(fixture,(x,z)->land(64));
+        var originalIds=new HashSet<String>();tree.routes().forEach(r->originalIds.add(r.id().substring(0,r.id().lastIndexOf('/'))));
+        var shortcuts=road.routes().stream().filter(r->!originalIds.contains(r.id().substring(0,r.id().lastIndexOf('/'))))
+                .filter(r->RoadShape.distance(r.points().getFirst(),r.points().getLast())>200).toList();
+        assertFalse(shortcuts.isEmpty(),"fixture must add a long optional shortcut");
+        for(var route:shortcuts) {
+            var a=route.points().getFirst();var b=route.points().getLast();double length=RoadShape.distance(a,b);
+            double deviation=route.points().stream().mapToDouble(p->Math.abs((b.x()-a.x())*(p.z()-a.z())-(b.z()-a.z())*(p.x()-a.x()))/length).max().orElseThrow();
+            assertTrue(deviation>6,"optional road bypassed shaping: "+route.id());
+        }
+        double backbone=tree.routes().stream().mapToDouble(RoadPlan.Route::length).sum();
+        assertTrue(road.routes().stream().mapToDouble(RoadPlan.Route::length).sum()<=backbone*1.5+1e-6);
+        assertEquals(road,plan(fixture,(x,z)->land(64)),"shaping optional roads must stay deterministic");
     }
     @Test void targetOrderAndQueryCacheDoNotChangeRoads() {
         var a=new Destination("a",-160,0,true);var b=new Destination("b",0,160,true);
         assertEquals(plan(settings("",a,b),(x,z)->land(64)),plan(settings("",b,a),(x,z)->land(64)));
     }
-    @Test void searchBudgetIsExplicitAndCannotSilentlyDropARequiredDestination() {
-        var failure=assertThrows(PlanningFailure.class,()->plan(settings(",\"maximum_operations\":1",new Destination("end",160,0,true)),(x,z)->land(64)));
-        assertEquals(PlanningFailure.Code.SEARCH_BUDGET_EXHAUSTED,failure.code());assertEquals(FailureStage.ROADS,failure.failureStage());
+    @Test void toolsContinueOperationBatchesAutomatically() {
+        var result=plan(settings(",\"maximum_operations\":1",new Destination("end",160,0,true)),(x,z)->land(64));
+        assertFalse(result.routes().isEmpty());
     }
-    @Test void structuresRequireAnExplicitPureAccessContract() {
+    @Test void smallBatchesResumeTheSameGeometryAndNeverShareAConnectionAllowance() {
+        var destinations=new Destination[]{new Destination("a",-160,0,true),new Destination("b",0,160,true),new Destination("c",160,0,true)};
+        var expected=plan(settings(",\"loop_budget_fraction\":0",destinations),(x,z)->land(64));
+        var fixture=settings(",\"loop_budget_fraction\":0,\"maximum_operations\":100",destinations);
+        var pauses=new ArrayList<RoadWorkControl.Pause>();
+        var actual=new RoadPlanner(472,fixture.config(),(x,z)->land(64),p->{assertTrue(p.resumable());pauses.add(p);}).plan(
+                new AdventurePlanView.SpawnPosition(.5,64,.5,0),fixture.patches(),List.of(),StructurePlanningCatalog.fromIds(List.of()),
+                (x,z)->fixture.patches().stream().filter(p->p.contains(x,z)).map(PlannedBiomePatch::biomeId).findFirst().orElse(new ContentId("test:plains")));
+        // Batch size changes only progress delivery, including inside fixed-size probes.
+        assertEquals(expected.nodes(),actual.nodes());assertEquals(expected.routes(),actual.routes());
+        assertEquals(expected.columns(),actual.columns());assertEquals(expected.skipped(),actual.skipped());
+        assertEquals(expected.operations(),actual.operations());
+        assertTrue(pauses.stream().anyMatch(p->p.task().contains("construction")));
+        assertTrue(pauses.stream().filter(p->p.task().startsWith("connection/")).map(RoadWorkControl.Pause::task).distinct().count()>1);
+        assertTrue(actual.operations()>fixture.config().roads().maximumOperations());
+    }
+    @Test void addingDestinationsDoesNotSpendTheLaterConnectionsAllowance() {
+        var destinations=new Destination[12];
+        for(int i=0;i<destinations.length;i++) {
+            double angle=i*Math.PI*2/destinations.length;
+            destinations[i]=new Destination("point"+i,(int)(200*Math.cos(angle))/4*4,(int)(200*Math.sin(angle))/4*4,true);
+        }
+        var baseline=plan(settings(",\"loop_budget_fraction\":0",destinations),(x,z)->land(64));
+        long perTask=baseline.operations()/2;
+        var fixture=settings(",\"loop_budget_fraction\":0,\"maximum_operations\":"+perTask,destinations);
+        var result=new RoadPlanner(472,fixture.config(),(x,z)->land(64),p->fail("one destination spent another's allowance: "+p)).plan(
+                new AdventurePlanView.SpawnPosition(.5,64,.5,0),fixture.patches(),List.of(),StructurePlanningCatalog.fromIds(List.of()),
+                (x,z)->fixture.patches().stream().filter(p->p.contains(x,z)).map(PlannedBiomePatch::biomeId).findFirst().orElse(new ContentId("test:plains")));
+        assertEquals(baseline,result);assertTrue(result.operations()>perTask);
+    }
+    @Test void capacityLimitsFailWithoutPublishingOrDroppingRequiredNodes() {
+        var nodes=assertThrows(PlanningFailure.class,()->plan(settings(",\"maximum_nodes\":2",
+                new Destination("a",160,0,true),new Destination("b",0,160,true)),(x,z)->land(64)));
+        assertEquals(PlanningFailure.Code.RESOURCE_LIMIT,nodes.code());
+        var columns=assertThrows(PlanningFailure.class,()->plan(settings(",\"maximum_columns\":10",
+                new Destination("a",160,0,true)),(x,z)->land(64)));
+        assertEquals(PlanningFailure.Code.RESOURCE_LIMIT,columns.code());
+    }
+    @Test void aLaterWaypointOnTheExistingBackboneDoesNotCreateAZeroLengthRoute() {
+        var road=plan(settings(",\"loop_budget_fraction\":0,\"bend_amplitude\":0",
+                new Destination("far",400,0,true),new Destination("middle",200,0,false)),(x,z)->land(64));
+        assertTrue(road.nodes().stream().anyMatch(n->n.id().equals("biome/test:middle")));
+        assertTrue(road.routes().stream().allMatch(r->r.length()>0));
+        assertEquals(2,road.routes().size(),"the existing trunk is split at the waypoint");
+    }
+    @Test void optionalColumnCapacityCannotInvalidateAnAlreadyConnectedRequiredDestination() {
+        var road=plan(settings(",\"loop_budget_fraction\":0,\"maximum_columns\":1500",
+                new Destination("required",120,0,true),new Destination("optional",400,200,false)),(x,z)->land(64));
+        assertTrue(road.nodes().stream().anyMatch(n->n.id().equals("biome/test:required")));
+        assertTrue(road.skipped().stream().anyMatch(n->n.id().equals("biome/test:optional")));
+        assertTrue(road.columns().size()<=1500);
+    }
+    @Test void structuresUseDefaultAccessButStillRequireResolvedFootprints() {
         var config=new AdventureWorldConfigParser().parse("""
             {"world":{"radius":512},"spawn":{"biome":"test:plains"},"biomes":{"filler":["test:plains"]},"roads":{"enabled":true},
              "structures":[{"id":"test:keep","adventure_level":1,"count":{"min":1,"max":1},"allowed_biomes":{"id":["test:plains"]},"road":{"enabled":true,"required":true}}]}
@@ -127,7 +217,7 @@ class RoadPlannerTest {
         assertThrows(PlanningFailure.class,()->new RoadPlanner(1,config,(x,z)->land(64)).plan(
                 new AdventurePlanView.SpawnPosition(.5,64,.5,0),List.of(),List.of(placement),StructurePlanningCatalog.fromIds(List.of(placement.structureId())),(x,z)->new ContentId("test:plains")));
         var road=new RoadPlanner(1,config,(x,z)->land(64)).plan(new AdventurePlanView.SpawnPosition(.5,64,.5,0),List.of(),List.of(placement),
-                StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(placement.structureId(),new BoundsXZ(-24,-24,24,24),new StructurePlanningInfo.RoadAccess(24)))),(x,z)->new ContentId("test:plains"));
+                StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(placement.structureId(),new BoundsXZ(-24,-24,24,24),null))),(x,z)->new ContentId("test:plains"));
         assertFalse(road.routes().isEmpty());assertTrue(road.columns().stream().noneMatch(c->Math.abs(c.x()-200)<=24&&Math.abs(c.z())<=24));
     }
     @Test void spawnRemainsTheOnlyRootWithoutSelectedDestinations() {
@@ -207,7 +297,7 @@ class RoadPlannerTest {
         assertEquals(new io.github.luoyan.adventureworldgen.spatial.Vec2(11.5,-16.5),point.approach());
     }
 
-    @Test void optionalIslandCannotConsumeTheRequiredBackboneBudget() {
+    @Test void optionalIslandDoesNotInvalidateTheRequiredBackbone() {
         var raw=com.google.gson.JsonParser.parseString(CanonicalConfigJson.write(structureConfig(true))).getAsJsonObject();
         raw.getAsJsonObject("biomes").getAsJsonArray("required").get(0).getAsJsonObject().getAsJsonObject("road").addProperty("required",false);
         raw.getAsJsonObject("roads").addProperty("maximum_operations",250_000);
@@ -217,14 +307,14 @@ class RoadPlannerTest {
             double distance=StrictMath.hypot(x-400,z);
             return distance>=12&&distance<=30?new MacroSample(50,64,WaterKind.LAKE,false,"lake","plains","test"):land(64);
         };
-        var road=new RoadPlanner(1,config,terrain).plan(new AdventurePlanView.SpawnPosition(.5,64,.5,0),
+        var road=new RoadPlanner(1,config,terrain,p->assertTrue(p.resumable())).plan(new AdventurePlanView.SpawnPosition(.5,64,.5,0),
                 List.of(new PlannedBiomePatch("end",new ContentId("test:end"),1,398,-2,406,6)),
                 List.of(new PlannedStructurePlacement("keep/0",id,240,0)),
                 StructurePlanningCatalog.of(List.of(new StructurePlanningInfo(id,new BoundsXZ(-20,-20,20,20),new StructurePlanningInfo.RoadAccess(4)))),
                 (x,z)->new ContentId("test:end"));
         assertTrue(road.routes().stream().anyMatch(r->r.to().equals("structure/keep/0")||r.from().equals("structure/keep/0")));
         assertTrue(road.skipped().stream().anyMatch(r->r.id().equals("biome/test:end")));
-        assertTrue(road.operations()<=250_000);
+        assertTrue(road.operations()>0);
     }
 
 }

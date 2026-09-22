@@ -18,5 +18,9 @@
   "adventureworldgen.planning.validation": "Validation",
   "adventureworldgen.planning.structures": "Required structure placement",
   "adventureworldgen.planning.humidity": "Planning humidity",
-  "adventureworldgen.planning.roads": "Planning roads"
+  "adventureworldgen.planning.roads": "Planning roads",
+  "adventureworldgen.planning.paused": "Road planning paused; progress retained",
+  "adventureworldgen.planning.capacity": "Road capacity reached; reduce workload and restart",
+  "adventureworldgen.planning.continue": "Continue next batch (Enter)",
+  "adventureworldgen.planning.cancel": "Cancel planning"
 }

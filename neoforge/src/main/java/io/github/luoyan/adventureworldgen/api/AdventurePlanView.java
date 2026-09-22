@@ -13,6 +13,14 @@ public interface AdventurePlanView {
     SpawnPosition spawnPosition();
     default io.github.luoyan.adventureworldgen.plan.RoadPlan roads() { return io.github.luoyan.adventureworldgen.plan.RoadPlan.EMPTY; }
     default io.github.luoyan.adventureworldgen.plan.RoadPlan.Column roadAt(int x, int z) { return null; }
+    default List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsAt(int x,int z) {
+        var road=roadAt(x,z);return road==null?List.of():List.of(road);
+    }
+    default io.github.luoyan.adventureworldgen.plan.RoadPlan.Column roadAtHeight(int x,int y,int z) {
+        return roadsAt(x,z).stream().filter(c->Math.abs(c.deckY()-y)<=1)
+                .min(java.util.Comparator.comparingInt(c->Math.abs(c.deckY()-y))).orElse(null);
+    }
+    default List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Support> roadSupportsInChunk(int x,int z) {return List.of();}
     default List<io.github.luoyan.adventureworldgen.plan.RoadPlan.Column> roadsInChunk(int chunkX, int chunkZ) { return List.of(); }
 
     record SpawnPosition(double x, double y, double z, float yaw) {}

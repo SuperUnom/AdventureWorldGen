@@ -18,6 +18,8 @@ import io.github.luoyan.adventureworldgen.api.MacroSample;
 public interface ClimateField {
     /** Band ordinal of the accepted field at a coordinate, under that field's own thresholds. */
     int band(int x, int z, MacroSample sample);
+    /** Moisture ordinal, or -1 for temperature-only diagnostic fixtures. */
+    default int humidityBand(int x,int z,MacroSample sample){return -1;}
 
     /** One dry sampled site of the field: the same list the field was built from, same order. */
     record Site(int x, int z, MacroSample sample) {}

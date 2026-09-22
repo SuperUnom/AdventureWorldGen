@@ -29,6 +29,7 @@ public final class ClimatePlan implements ClimateField {
     private final String temperatureField;
     private final OrganicTemperatureField organic;
     private HumidityPlan humidity;
+    private io.github.luoyan.adventureworldgen.plan.ClimateCalibration calibration=io.github.luoyan.adventureworldgen.plan.ClimateCalibration.IDENTITY;
     private final ValueNoise regional, detail, warpX, warpZ, foothills;
     private final int heightExtent,heightWidth;
     private final double[] slopeHeight,regionalHeight;
@@ -47,7 +48,7 @@ public final class ClimatePlan implements ClimateField {
 
     public ClimateState snapshot() {
         return new ClimateState(heightExtent,slopeHeight.clone(),regionalHeight.clone(),angle,low,high,
-                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot(),temperatureField);
+                thresholds.clone(),snowBoundary,spawnType,ratios.clone(),actual.clone(),List.copyOf(corrections),List.copyOf(supply),humidity.snapshot(),temperatureField,calibration);
     }
     public ClimatePlan(long seed,AdventureWorldConfig config,MacroTerrain terrain,ClimateStatistics statistics) {
         this(seed,config,terrain,ignored->{},statistics);
@@ -94,6 +95,7 @@ public final class ClimatePlan implements ClimateField {
                     ||!Arrays.equals(frozen.thresholds(),new double[]{2.5,5,7.5})||!frozen.corrections().isEmpty()))
                 throw new IllegalArgumentException("organic temperature state must retain fixed thresholds and no corrections");
             slopeHeight=frozen.slopeHeight().clone();regionalHeight=frozen.regionalHeight().clone();
+            calibration=Objects.requireNonNull(frozen.calibration(),"missing climate calibration");
             angle=frozen.angle();low=frozen.low();high=frozen.high();snowBoundary=frozen.snowBoundary();spawnType=frozen.spawnType();
             System.arraycopy(frozen.thresholds(),0,thresholds,0,3);
             System.arraycopy(frozen.ratios(),0,ratios,0,4);System.arraycopy(frozen.actual(),0,actual,0,4);
@@ -125,15 +127,17 @@ public final class ClimatePlan implements ClimateField {
         System.arraycopy(demandStatistics.targetRatios(this,statisticsSites),0,ratios,0,4);
         // Kept in the serialized state for compatibility; temperature is configured, not a snow test.
         snowBoundary=false;
-        // Demand remains diagnostic. It does not reshape the accepted temperature field.
+        // Thresholds remain fixed; candidate calibration changes the continuous field only.
         angle=0;low=0;high=10;
         thresholds[0]=2.5;thresholds[1]=5;thresholds[2]=7.5;
         progress.accept(.8);
+        humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
+        selectCalibration(statisticsSites);
         this.frozen=true;
+        humidity.finishCalibration(terrain);
         System.arraycopy(demandStatistics.actualRatios(this,statisticsSites),0,actual,0,4);
         supply.addAll(demandStatistics.supply(this,statisticsSites));
         progress.accept(1);
-        humidity=new HumidityPlan(seed,config,terrain,this,observer.within(PlanningStage.HUMIDITY),null);
     }
     /**
      * The authoritative classification: the temperature type of the accepted field, under this
@@ -141,6 +145,7 @@ public final class ClimatePlan implements ClimateField {
      * reconstructs a band from a raw value.
      */
     @Override public int band(int x,int z,MacroSample sample){ return typeAt(x,z,sample).ordinal(); }
+    @Override public int humidityBand(int x,int z,MacroSample sample){return humidity.typeAt(x,z,sample).ordinal();}
 
     private static double[] blur(double[] source,int width,int radius) {
         double[] horizontal=new double[source.length],result=new double[source.length];
@@ -172,7 +177,8 @@ public final class ClimatePlan implements ClimateField {
         return .25*s.groundSurface()+.55*elevation(slopeHeight,x,z)+.20*elevation(regionalHeight,x,z);
     }
     private double base(double x,double z,MacroSample s) {
-        if(organic!=null)return organic.temperature(x,z,effectiveHeightAt(x,z,s));
+        if(organic!=null)return Math.clamp(organic.temperature(x+calibration.offsetX(),z+calibration.offsetZ(),effectiveHeightAt(x,z,s))
+                +calibration.temperatureBias()+calibration.spawnTemperatureDelta()*spawnInfluence(x,z),0,10);
         double wx=x+radius*.22*warpX.sample(x,z),wz=z+radius*.22*warpZ.sample(x,z);
         double slope=elevation(slopeHeight,x,z),mass=elevation(regionalHeight,x,z);
         // Terrain relief modulates broad noise: boundaries follow valleys and spurs without pixel noise.
@@ -195,7 +201,7 @@ public final class ClimatePlan implements ClimateField {
      * result: passing the sample of a different position used to seed the whole cell.
      */
     private double raw(double x,double z,MacroSample s) {
-        return frozen?frozenValues.get(x,z,()->computeRaw(x,z,s)):computeRaw(x,z,s);
+        return frozen&&frozenValues.cacheable(x,z)?frozenValues.get(x,z,()->computeRaw(x,z,terrain.sample(x,z))):computeRaw(x,z,s);
     }
     private double computeRaw(double x,double z,MacroSample s) {
         double value=base(x,z,s);
@@ -223,6 +229,58 @@ public final class ClimatePlan implements ClimateField {
         while(band<3&&v>=thresholds[band])band++;
         double from=band==0?low:thresholds[band-1],to=band==3?high:thresholds[band];
         return Math.clamp(2.5*(band+(v-from)/Math.max(.01,to-from)),0,10);
+    }
+    double spawnInfluence(double x,double z) {return Math.exp(-2*((x-2)*(x-2)+(z-2)*(z-2))/Math.pow(Math.max(32,core*3),2));}
+    double humidityAdjustment(double x,double z) {return calibration.humidityBias()+calibration.spawnHumidityDelta()*spawnInfluence(x,z);}
+    private void selectCalibration(List<ClimateField.Site> sites) {
+        var targets=demandStatistics.targets(sites);
+        if(targets.isEmpty())return;
+        var origin=terrain.sample(2,2);
+        var spawnRule=config.biomes().terrainRules().get(config.spawn().biome());
+        var chosen=calibration;double best=Double.POSITIVE_INFINITY;
+        double shift=radius*io.github.luoyan.adventureworldgen.plan.PlanningPolicy.CURRENT.climateTranslationFraction();
+        double[] offsets={0,-shift,shift};
+        for(double ox:offsets)for(double oz:offsets)for(double bias:io.github.luoyan.adventureworldgen.plan.PlanningPolicy.CURRENT.temperatureBiases())for(double moisture:io.github.luoyan.adventureworldgen.plan.PlanningPolicy.CURRENT.humidityBiases()) {
+            io.github.luoyan.adventureworldgen.plan.PlanningExecution.checkCancelled();
+            double rawSpawn=Math.clamp(organic.temperature(2+ox,2+oz,effectiveHeightAt(2,2,origin))+bias,0,10);
+            double spawnDelta=(spawnType.ordinal()+.5)*2.5-rawSpawn;
+            calibration=new io.github.luoyan.adventureworldgen.plan.ClimateCalibration(ox,oz,bias,moisture,spawnDelta,0);
+            double h=humidity.uncachedValueAt(2,2,origin),humidityDelta=0;
+            if(spawnRule!=null&&!spawnRule.humidities().isEmpty()) {
+                double[] centers={.19,.53,.84};
+                int type=h<.38?0:h<.68?1:2;
+                if(!spawnRule.humidities().containsKey(AdventureWorldConfig.HumidityType.values()[type])) {
+                    double nearest=Double.POSITIVE_INFINITY;
+                    for(var allowed:spawnRule.humidities().keySet())if(Math.abs(centers[allowed.ordinal()]-h)<nearest) {
+                        nearest=Math.abs(centers[allowed.ordinal()]-h);humidityDelta=centers[allowed.ordinal()]-h;
+                    }
+                }
+            }
+            calibration=new io.github.luoyan.adventureworldgen.plan.ClimateCalibration(ox,oz,bias,moisture,spawnDelta,humidityDelta);
+            int[] ts=new int[sites.size()],hs=new int[sites.size()];
+            for(int i=0;i<sites.size();i++) {
+                var site=sites.get(i);ts[i]=typeAt(site.x(),site.z(),site.sample()).ordinal();
+                double value=humidity.uncachedValueAt(site.x(),site.z(),site.sample());hs[i]=value<.38?0:value<.68?1:2;
+            }
+            double score=.00001*(Math.abs(ox)+Math.abs(oz))+.01*Math.abs(bias)+.02*Math.abs(moisture);
+            for(var target:targets) {
+                long count=0,cold=0,lowland=0;boolean needsCold=target.options().stream().anyMatch(o->o.lowlandCold());
+                for(int i=0;i<sites.size();i++) {
+                    var sample=sites.get(i).sample();boolean low=sample.groundSurface()<=110&&!sample.terrainTemplate().equals("mountains");
+                    boolean eligibleLow=false;
+                    for(var option:target.options())if(option.lowlandCold()&&option.terrainEligible(i)){eligibleLow=true;break;}
+                    if(low&&eligibleLow)lowland++;
+                    for(var option:target.options())if(option.permits(i,ts[i],hs[i])) {
+                        count++;if(low&&ts[i]==0)cold++;break;
+                    }
+                }
+                if(target.required()&&count==0)score+=1e9;
+                score+=Math.max(0,1-count*(double)STEP*STEP/Math.max(16,target.targetArea()));
+                if(needsCold&&lowland>0&&cold==0)score+=10;
+            }
+            if(score<best){best=score;chosen=calibration;}
+        }
+        calibration=chosen;
     }
     public HumidityPlan humidity(){return humidity;}
     public double[] targetRatios(){return ratios.clone();}

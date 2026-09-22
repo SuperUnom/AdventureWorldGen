@@ -36,11 +36,18 @@ public final class RuntimePlanner {
     public static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
             AdapterRegistry adapters, String structureInputs, StructurePreparation preparation) {
         var progress = PlanningProgress.begin(loaded.id().toString());
+        var metrics=new PlanningMetrics();
         try {
-            var result = plan(seed, loaded, worldDirectory, adapters, progress, structureInputs, preparation);
+            GeneratedAdventurePlan result;
+            try(var execution=io.github.luoyan.adventureworldgen.plan.PlanningExecution.defaults(PlannerProfile.V2.maximumWorkingMemoryBytes())) {
+                progress.onCancel(execution::cancel);
+                result = plan(seed, loaded, worldDirectory, adapters, progress, structureInputs, preparation,execution,metrics);
+            }
             progress.complete();
             return result;
         } catch (RuntimeException | Error failure) {
+            try {metrics.writeFailure(worldDirectory,seed,progress.snapshot().stage().name(),failure);}
+            catch(IOException unavailable){LOGGER.warn("Could not write failed planning diagnostics",unavailable);}
             progress.fail();
             throw failure;
         }
@@ -48,7 +55,8 @@ public final class RuntimePlanner {
 
     private static GeneratedAdventurePlan plan(long seed, LoadedProfile loaded, Path worldDirectory,
                                                AdapterRegistry adapters,
-                                               PlanningProgress.Run progress, String structureInputs, StructurePreparation preparation) {
+                                               PlanningProgress.Run progress, String structureInputs, StructurePreparation preparation,
+                                               io.github.luoyan.adventureworldgen.plan.PlanningExecution execution,PlanningMetrics metrics) {
         // The one place the production profile is chosen. Everything below receives it instead of
         // reaching for PlannerProfile.V2 on its own, so a re-versioned or re-budgeted profile
         // reaches every sub-stage and the recorded identity describes the run that actually ran.
@@ -68,7 +76,6 @@ public final class RuntimePlanner {
             throw new IllegalStateException("could not load AdventureWorldGen plan", failure);
         }
         long started = System.nanoTime();
-        var metrics=new PlanningMetrics();
         double radius = loaded.config().world().radius();
         double spawnRadius = StrictMath.min(256.0, radius / 10.0);
         double keep = spawnRadius + StrictMath.min(32.0, radius / 20.0);
@@ -98,10 +105,11 @@ public final class RuntimePlanner {
         // Planning queries keep the memoizing wrapper warm and the same stack is handed to the
         // plan; a READY reload composes this stack without the wrapper (accepted optimization).
         var planningTerrain = PlanTerrain.compose(terrainFoundation, erodedIsland, rivers).withMemoizedQueries();
-        var erodedTerrain = planningTerrain.terrain();
+        var erodedTerrain = new io.github.luoyan.adventureworldgen.api.PlanningAtlas(planningTerrain.terrain(),profile.maximumWorkingMemoryBytes()/4);
+        erodedTerrain.prepare(radius,execution);
         LOGGER.info("AdventureWorldGen building complete 16-block directed cost graph for {}", loaded.id());
         progress.stage(PlanningStage.COSTS);
-        var costs = new CostPlanner(profile).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
+        var costs = new CostPlanner(profile,execution).build(erodedTerrain, coast.coastline(), new Vec2(0.5, 0.5), progress.within(PlanningStage.COSTS));
         metrics.finish(PlanningMetrics.Stage.COST_GRAPH);
         // Names matter here: computedPairs counts canonical undirected pairs actually evaluated
         // (blocked ones included), while allocatedSlots is the reserved nodeCount*4 capacity. The
@@ -111,7 +119,7 @@ public final class RuntimePlanner {
                 loaded.id());
         LOGGER.info("AdventureWorldGen jointly planning biome patches and structures for {}", loaded.id());
         progress.stage(PlanningStage.PLACEMENT);
-        var jointPlanner = new JointPlanner(profile);
+        var jointPlanner = new JointPlanner(profile,execution);
         var structurePlanning = loaded.structurePlanning();
         var joint = jointPlanner.plan(seed, loaded.config(), erodedTerrain,
                 structurePlanning,
@@ -132,7 +140,7 @@ public final class RuntimePlanner {
                 new GeneratedAdventurePlan.PlanningInputs(planningTerrain,jointPlanner.climate(),structurePlanning), progress,
                 io.github.luoyan.adventureworldgen.plan.RoadPlan.EMPTY);
         var preparedStructures = preparation.prepare(natural, structurePlanning);
-        GeneratedAdventurePlan plan = natural.completeStructures(preparedStructures, progress);
+        GeneratedAdventurePlan plan = natural.completeStructures(preparedStructures, progress,progress.roadWork(worldDirectory),execution);
         metrics.finish(PlanningMetrics.Stage.FILLER_AND_TRANSITION);
         LOGGER.info("Frozen roads: {} routes, {} columns, {} operations", plan.roads().routes().size(), plan.roads().columns().size(), plan.roads().operations());
         for (var skipped : plan.roads().skipped()) LOGGER.warn("Road destination {}: {}", skipped.id(), skipped.reason());
@@ -140,6 +148,7 @@ public final class RuntimePlanner {
         // The policy compares request against achieved area; reporting and failure text stay here.
         io.github.luoyan.adventureworldgen.planner.MinimumAreaPolicy.checkAchievedAreas(loaded.config(),
                 plan.biomePatches(), plan::effectiveArea, relaxation -> {
+                    metrics.relaxation(relaxation);
                     if (relaxation.noLegalArea())
                         LOGGER.warn("Biome minimum relaxed: {} has no legal area; requested={}",
                                 relaxation.patchId(), relaxation.requested());

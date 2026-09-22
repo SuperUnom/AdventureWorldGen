@@ -14,12 +14,18 @@ import java.util.List;
 public record ClimateState(int extent, double[] slopeHeight, double[] regionalHeight, double angle,
                     double low, double high, double[] thresholds, boolean snowBoundary,
                     TemperatureType spawnType, double[] ratios, double[] actual,
-                    List<ClimateCorrection> corrections, List<ClimateSupply> supply, HumidityState humidity, String temperatureField) {
+                    List<ClimateCorrection> corrections, List<ClimateSupply> supply, HumidityState humidity, String temperatureField, ClimateCalibration calibration) {
+    public ClimateState(int extent,double[] slopeHeight,double[] regionalHeight,double angle,double low,double high,
+                 double[] thresholds,boolean snowBoundary,TemperatureType spawnType,double[] ratios,double[] actual,
+                 List<ClimateCorrection> corrections,List<ClimateSupply> supply,HumidityState humidity,String temperatureField) {
+        this(extent,slopeHeight,regionalHeight,angle,low,high,thresholds,snowBoundary,spawnType,ratios,actual,
+                corrections,supply,humidity,temperatureField,ClimateCalibration.IDENTITY);
+    }
     /** Source-compatible constructor for legacy plan states without an explicit temperature version. */
     public ClimateState(int extent,double[] slopeHeight,double[] regionalHeight,double angle,double low,double high,
                  double[] thresholds,boolean snowBoundary,TemperatureType spawnType,double[] ratios,double[] actual,
                  List<ClimateCorrection> corrections,List<ClimateSupply> supply,HumidityState humidity) {
         this(extent,slopeHeight,regionalHeight,angle,low,high,thresholds,snowBoundary,spawnType,ratios,actual,
-                corrections,supply,humidity,null);
+                corrections,supply,humidity,null,ClimateCalibration.IDENTITY);
     }
 }

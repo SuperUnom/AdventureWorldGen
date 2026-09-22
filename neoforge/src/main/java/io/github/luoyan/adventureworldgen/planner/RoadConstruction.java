@@ -9,7 +9,8 @@ import java.util.*;
 /** Full-width rasterization and a slope-constrained construction surface. No game objects. */
 final class RoadConstruction {
     interface Sampler { MacroSample sample(double x, double z); }
-    record Result(List<RoadPlan.Column> columns, String failure) {
+    record Result(List<RoadPlan.Column> columns, String failure,Vec2 failurePoint) {
+        Result(List<RoadPlan.Column> columns,String failure){this(columns,failure,null);}
         boolean valid() { return failure == null; }
     }
     private static final int[][] NEIGHBORS = {{1,0},{-1,0},{0,1},{0,-1}};
@@ -23,6 +24,24 @@ final class RoadConstruction {
     static Result build(List<Vec2> path, RoadSettings settings, Sampler sampler,
                         List<RoadPlan.Reservation> reservations, Map<Long,RoadPlan.Column> existing,
                         int spawnX, int spawnZ, int spawnDeck) {
+        return build(path,settings,sampler,reservations,existing,spawnX,spawnZ,spawnDeck,
+                new RoadWorkBudget(settings.maximumOperations(),io.github.luoyan.adventureworldgen.plan.RoadWorkControl.REPORT));
+    }
+    static Result build(List<Vec2> path, RoadSettings settings, Sampler sampler,
+                        List<RoadPlan.Reservation> reservations, Map<Long,RoadPlan.Column> existing,
+                        int spawnX, int spawnZ, int spawnDeck,RoadWorkBudget work) {
+        if(path.size()<2||RoadShape.length(path)<1e-8||RoadShape.length(path)>work.policy().routeLength())return fail("RESOURCE_LIMIT_ROUTE_LENGTH");
+        double wetRun=0;
+        for(int i=1;i<path.size();i++) {
+            var a=path.get(i-1);var b=path.get(i);double length=RoadShape.distance(a,b);
+            int count=Math.max(1,(int)Math.ceil(length));
+            for(int k=1;k<=count;k++) {
+                double t=k/(double)count,x=a.x()+(b.x()-a.x())*t,z=a.z()+(b.z()-a.z())*t;
+                var sample=sampler.sample(x,z);
+                wetRun=sample.wet()?wetRun+length/count:0;
+                if(wetRun>settings.maximumBridgeLength())return fail("BRIDGE_SPAN",x,z);
+            }
+        }
         var dense = new ArrayList<Vec2>(); dense.add(path.getFirst());
         for (int i=1;i<path.size();i++) {
             var a=path.get(i-1); var b=path.get(i); int steps=Math.max(1,(int)Math.ceil(RoadShape.distance(a,b)/4));
@@ -32,19 +51,18 @@ final class RoadConstruction {
         var cells = new TreeMap<Long, Cell>();
         double coreHalf = settings.width() / 2.0;
         double half = coreHalf + 1;
-        // Previously accepted routes are still tentative, not published frozen columns. Re-solve
-        // their shared elevation envelope with the new edge: pinning already-rounded Y values
-        // can make an otherwise feasible junction fail at the earthwork boundary.
-        for(var old:existing.values()) {
-            var sample=sampler.sample(old.x()+.5,old.z()+.5);
-            double ground=StrictMath.floor(sample.groundSurface())-1;
-            double lower=sample.wet()?StrictMath.ceil(sample.waterSurface())+2:ground-settings.maximumEarthwork();
-            double upper=sample.wet()?lower+settings.maximumEarthwork():ground+settings.maximumEarthwork();
-            boolean fixed=Math.abs(old.x()-spawnX)<=2&&Math.abs(old.z()-spawnZ)<=2;
-            double desired=Math.clamp(old.deckY(),lower,upper);
-            if(fixed){desired=spawnDeck;lower=spawnDeck;upper=spawnDeck;}
-            cells.put(RoadPlan.key(old.x(),old.z()),new Cell(old.x(),old.z(),sample,desired,lower,upper,
-                    old.shoulder()?half:0,fixed));
+        // Only endpoint windows may adjust existing ground. Their outer ring is pinned;
+        // all other overlaps are fixed, so adding a branch cannot propagate across the network.
+        int window=work.policy().junctionRadius();
+        var mutable=new HashSet<Long>();
+        for(var center:List.of(path.getFirst(),path.getLast())) {
+            int cx=(int)Math.floor(center.x()),cz=(int)Math.floor(center.z());
+            for(int dz=-window-1;dz<=window+1;dz++)for(int dx=-window-1;dx<=window+1;dx++) {
+                work.visit();long key=RoadPlan.key(cx+dx,cz+dz);var old=existing.get(key);if(old==null)continue;
+                if(Math.abs(dx)<window&&Math.abs(dz)<window&&old.kind()==RoadPlan.Kind.GROUND)mutable.add(key);
+                var sample=sampler.sample(old.x()+.5,old.z()+.5);
+                cells.put(key,oldCell(old,sample,mutable.contains(key),settings,spawnX,spawnZ,spawnDeck,half));
+            }
         }
         var pathCells=new HashSet<Long>();
         long addedColumns=0;
@@ -56,26 +74,35 @@ final class RoadConstruction {
             int minX=(int)Math.floor(Math.min(a.x(),b.x())-half), maxX=(int)Math.floor(Math.max(a.x(),b.x())+half);
             int minZ=(int)Math.floor(Math.min(a.z(),b.z())-half), maxZ=(int)Math.floor(Math.max(a.z(),b.z())+half);
             for(int x=minX;x<=maxX;x++) for(int z=minZ;z<=maxZ;z++) {
+                work.visit();
                 double t=Math.clamp(((x+.5-a.x())*dx+(z+.5-a.z())*dz)/length2,0,1);
                 double distance=StrictMath.hypot(x+.5-a.x()-t*dx,z+.5-a.z()-t*dz);
                 if(distance>half)continue;
                 long key=RoadPlan.key(x,z); pathCells.add(key); Cell prior=cells.get(key);
                 if(prior!=null && prior.distance<=distance)continue;
-                for(var r:reservations)if(r.bounds().contains(x+.5,z+.5,0))return fail("STRUCTURE_RESERVATION");
+                for(var r:reservations)if(r.bounds().contains(x+.5,z+.5,0))return fail("STRUCTURE_RESERVATION",x,z);
                 MacroSample sample=sampler.sample(x+.5,z+.5);
                 if(distance>coreHalf && sample.wet()){pathCells.remove(key);continue;}
-                if(sample.hazardous() || sample.wet() && sample.waterKind()!=WaterKind.RIVER)return fail("FORBIDDEN_TERRAIN");
+                if(sample.hazardous() || sample.wet() && sample.waterKind()!=WaterKind.RIVER)return fail("FORBIDDEN_TERRAIN",x,z);
                 double ground=StrictMath.floor(sample.groundSurface())-1;
                 double lower=sample.wet()?StrictMath.ceil(sample.waterSurface())+2:ground-settings.maximumEarthwork();
                 double upper=sample.wet()?lower+settings.maximumEarthwork():ground+settings.maximumEarthwork();
                 double desired=Math.clamp(ah+(bh-ah)*t,lower,upper);
                 boolean fixed=false;
                 var old=existing.get(key);
+                if(old!=null&&!mutable.contains(key)) {desired=old.deckY();lower=desired;upper=desired;fixed=true;}
                 if(Math.abs(x-spawnX)<=2 && Math.abs(z-spawnZ)<=2) { desired=spawnDeck; lower=desired; upper=desired; fixed=true; }
-                if(desired<lower || desired>upper || upper>=316 || lower< -61)return fail("HEIGHT_LIMIT");
+                if(desired<lower || desired>upper || upper>=316 || lower< -61)return fail("HEIGHT_LIMIT",x,z);
                 if(prior==null && old==null)addedColumns++;
+                if((long)existing.size()+addedColumns>settings.maximumColumns())return fail("RESOURCE_LIMIT_COLUMNS",x,z);
                 cells.put(key,new Cell(x,z,sample,desired,lower,upper,distance,fixed));
-                if((long)existing.size()+addedColumns>settings.maximumColumns())return fail("COLUMN_BUDGET");
+            }
+        }
+        // Pin neighbours just outside the new raster, including incidental middle crossings.
+        for(var cell:List.copyOf(cells.values()))for(var d:NEIGHBORS) {
+            long key=RoadPlan.key(cell.x+d[0],cell.z+d[1]);var old=existing.get(key);
+            if(old!=null&&!cells.containsKey(key)) {
+                work.visit();cells.put(key,oldCell(old,sampler.sample(old.x()+.5,old.z()+.5),false,settings,spawnX,spawnZ,spawnDeck,half));
             }
         }
         // A short rock/ridge must not seed a raised pyramid in the grade solver. Use a
@@ -85,6 +112,7 @@ final class RoadConstruction {
         // to their water clearance, and the earthwork bounds still limit cuts and fills.
         int[] neighborhood=new int[81];
         for(var c:cells.values()) {
+            work.visit();
             if(c.fixed||c.terrain.wet())continue;
             int count=0;
             for(int dx=-4;dx<=4;dx++)for(int dz=-4;dz<=4;dz++) {
@@ -103,42 +131,46 @@ final class RoadConstruction {
         var upperQueue=new PriorityQueue<Entry>(Comparator.comparingDouble(Entry::height).thenComparingLong(Entry::key));
         cells.forEach((key,c)->upperQueue.add(new Entry(key,c.upper)));
         while(!upperQueue.isEmpty()) {
-            var e=upperQueue.remove();var c=cells.get(e.key());if(e.height()!=c.upper)continue;
+            work.visit();var e=upperQueue.remove();var c=cells.get(e.key());if(e.height()!=c.upper)continue;
             for(var d:NEIGHBORS) {
                 long key=RoadPlan.key(c.x+d[0],c.z+d[1]);var n=cells.get(key);if(n==null)continue;
                 double maximum=c.upper+(c.fixed&&n.fixed?1.0:settings.maximumGrade());
                 if(n.upper<=maximum+1e-8)continue;
-                if(n.lower>maximum+1e-8)return fail("GRADE_OR_EARTHWORK");
-                n.upper=maximum;upperQueue.add(new Entry(key,maximum));
+                if(n.lower>maximum+1e-8)return fail("GRADE_OR_EARTHWORK",n.x+.5,n.z+.5);
+                // The feasibility comparison permits rounding error, but Math.clamp requires
+                // an ordered interval. Snap only that tolerated residue to the lower bound.
+                n.upper=Math.max(n.lower,maximum);upperQueue.add(new Entry(key,n.upper));
             }
         }
         cells.values().forEach(c->c.height=Math.clamp(c.height,c.lower,c.upper));
         var queue=new PriorityQueue<Entry>(Comparator.comparingDouble(Entry::height).reversed().thenComparingLong(Entry::key));
         cells.forEach((key,c)->queue.add(new Entry(key,c.height)));
         while(!queue.isEmpty()) {
-            var e=queue.remove(); var c=cells.get(e.key());
+            work.visit();var e=queue.remove(); var c=cells.get(e.key());
             if(e.height()!=c.height)continue;
             for(var d:NEIGHBORS) {
                 long key=RoadPlan.key(c.x+d[0],c.z+d[1]); var n=cells.get(key);
                 if(n==null) {
                     var old=existing.get(key);
-                    if(old!=null && Math.abs(StrictMath.floor(c.height)-old.deckY())>1)return fail("JUNCTION_HEIGHT");
+                    if(old!=null && Math.abs(StrictMath.floor(c.height)-old.deckY())>1)return fail("JUNCTION_HEIGHT",c.x+.5,c.z+.5);
                     continue;
                 }
                 double minimum=c.height-(c.fixed && n.fixed ? 1.0 : settings.maximumGrade());
                 if(n.height+1e-8>=minimum)continue;
-                if(minimum>n.upper+1e-8)return fail("GRADE_OR_EARTHWORK");
+                if(minimum>n.upper+1e-8)return fail("GRADE_OR_EARTHWORK",n.x+.5,n.z+.5);
                 n.height=minimum; queue.add(new Entry(key,minimum));
             }
         }
         var result=new ArrayList<RoadPlan.Column>();
         for(var c:cells.values()) {
+            work.visit();
+            if(!mutable.contains(RoadPlan.key(c.x,c.z))&&!pathCells.contains(RoadPlan.key(c.x,c.z)))continue;
             int deck=(int)StrictMath.floor(c.height+1e-8);
             int ground=(int)StrictMath.floor(c.terrain.groundSurface())-1;
             boolean bridge=c.terrain.wet();
             int bottom=bridge?deck-1:Math.min(ground,deck)-1;
             int clear=Math.max(deck+settings.clearance(),bridge?deck:ground);
-            if(bottom< -63 || clear>319)return fail("HEIGHT_LIMIT");
+            if(bottom< -63 || clear>319)return fail("HEIGHT_LIMIT",c.x+.5,c.z+.5);
             result.add(new RoadPlan.Column(c.x,c.z,deck,bottom,clear,bridge,c.distance>coreHalf));
         }
         // Four-neighbour block connectivity catches diagonal narrow gaps introduced by rasterizing.
@@ -147,12 +179,22 @@ final class RoadConstruction {
             long first=pathCells.stream().filter(cells::containsKey).min(Long::compare).orElseThrow();
             todo.add(first);seen.add(first);
             while(!todo.isEmpty()) {
-                Cell c=cells.get(todo.remove());
+                work.visit();Cell c=cells.get(todo.remove());
                 for(var d:NEIGHBORS) {long k=RoadPlan.key(c.x+d[0],c.z+d[1]); if(cells.containsKey(k)&&seen.add(k))todo.add(k);}
             }
             if(!seen.containsAll(pathCells))return fail("DISCONNECTED_RASTER");
         }
         return new Result(List.copyOf(result),null);
     }
+    private static Cell oldCell(RoadPlan.Column old,MacroSample sample,boolean mutable,RoadSettings settings,
+                                int spawnX,int spawnZ,int spawnDeck,double half) {
+        double ground=StrictMath.floor(sample.groundSurface())-1;
+        boolean spawn=Math.abs(old.x()-spawnX)<=2&&Math.abs(old.z()-spawnZ)<=2;
+        boolean fixed=!mutable||spawn;
+        double desired=spawn?spawnDeck:old.deckY();
+        double lower=fixed?desired:ground-settings.maximumEarthwork(),upper=fixed?desired:ground+settings.maximumEarthwork();
+        return new Cell(old.x(),old.z(),sample,Math.clamp(desired,lower,upper),lower,upper,old.shoulder()?half:0,fixed);
+    }
+    private static Result fail(String reason,double x,double z){return new Result(List.of(),reason,new Vec2(x,z));}
     private static Result fail(String reason) { return new Result(List.of(),reason); }
 }
